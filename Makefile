@@ -3,7 +3,7 @@ LMDB_ROOT ?= deps/mdb/libraries/liblmdb
 RUSTC ?= rustc
 RUSTDOC ?= rustdoc
 RUST_LIB_FLAGS = -L $(LMDB_ROOT)
-RUSTC_FLAGS = $(RUST_LIB_FLAGS)
+RUSTC_FLAGS = $(RUST_LIB_FLAGS) -g
 
 SRC = $(wildcard src/*.rs)
 CRATE_MAIN = src/lib.rs
