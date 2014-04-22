@@ -1,12 +1,18 @@
 #![allow(non_camel_case_types)]
 #![allow(dead_code)] // TODO: remove it once wrapper complete
 
-mod mdb {
+pub mod mdb {
+    use std;
+    use libc;
     use libc::{c_int, c_uint, size_t, c_char, c_void, c_uchar, c_ushort, off_t};
     use libc::types::os::common::posix01::pthread_t;
+    use std::result::Result;
+    use std::str;
+    use std::ptr;
 
-    use self::os::{mdb_mode_t, mdb_filehandle_t, pthread_key_t, pthread_mutex_t, MDB_PID_T};
+    use self::os::{pthread_key_t, pthread_mutex_t, MDB_PID_T};
     pub use self::consts::*;
+    pub use self::os::{mdb_mode_t, mdb_filehandle_t};
 
     pub mod consts {
         use libc::{c_int, c_uint};
@@ -154,7 +160,7 @@ mod mdb {
     type txnid_t = MDB_ID;
     type indx_t = u16;
 
-    type MDB_dbi = c_uint;
+    pub type MDB_dbi = c_uint;
     type MDB_ID = size_t;
     type MDB_IDL = *MDB_ID;
 
@@ -329,22 +335,22 @@ mod mdb {
         mt_dirty_room: c_uint
     }
 
-    struct MDB_stat {
-        ms_psize: c_uint,
-        ms_depth: c_uint,
-        ms_branch_pages: size_t,
-        ms_leaf_pages: size_t,
-        ms_overflow_pages: size_t,
-        ms_entries: size_t
+    pub struct MDB_stat {
+        pub ms_psize: c_uint,
+        pub ms_depth: c_uint,
+        pub ms_branch_pages: size_t,
+        pub ms_leaf_pages: size_t,
+        pub ms_overflow_pages: size_t,
+        pub ms_entries: size_t
     }
 
-    struct MDB_envinfo {
-        me_mapaddr: *c_void,
-        me_mapsize: size_t,
-        me_last_pgno: size_t,
-        me_last_txnid: size_t,
-        me_maxreaders: c_uint,
-        me_numreaders: c_uint
+    pub struct MDB_envinfo {
+        pub me_mapaddr: *c_void,
+        pub me_mapsize: size_t,
+        pub me_last_pgno: size_t,
+        pub me_last_txnid: size_t,
+        pub me_maxreaders: c_uint,
+        pub me_numreaders: c_uint
     }
 
     #[repr(C)]
@@ -397,8 +403,8 @@ mod mdb {
     #[link(name = "lmdb", kind = "static")]
     extern "C" {
         fn mdb_version(major: *c_int, minor: *c_int, patch: *c_int) -> *c_char;
-        fn mdb_stderror(err: c_int) -> *c_char;
-        fn mdb_env_create(env: **MDB_env) -> c_int;
+        fn mdb_strerror(err: c_int) -> *c_char;
+        fn mdb_env_create(env: **mut MDB_env) -> c_int;
         fn mdb_env_open(env: *MDB_env, path: *c_char, flags: c_uint, mode: mdb_mode_t) -> c_int;
         fn mdb_env_copy(env: *MDB_env, path: *c_char) -> c_int;
         fn mdb_env_copyfd(env: *MDB_env, fd: mdb_filehandle_t) -> c_int;
@@ -407,7 +413,7 @@ mod mdb {
         fn mdb_env_sync(env: *MDB_env, force: c_int) -> c_int;
         fn mdb_env_close(env: *MDB_env);
         fn mdb_env_set_flags(env: *MDB_env, flags: c_uint, onoff: c_int) -> c_int;
-        fn mdb_env_get_flags(env: *MDB_env, flags: c_uint) -> c_int;
+        fn mdb_env_get_flags(env: *MDB_env, flags: *c_uint) -> c_int;
         fn mdb_env_get_path(env: *MDB_env, path: **c_char) -> c_int;
         fn mdb_env_get_fd(env: *MDB_env, fd: *mdb_filehandle_t) -> c_int;
         fn mdb_env_set_mapsize(env: *MDB_env, size: size_t) -> c_int;
@@ -448,29 +454,244 @@ mod mdb {
         fn mdb_reader_check(env: *MDB_env, dead: *c_int) -> c_int;
     }
 
-    pub struct Environment {}
+    /// MDBError wraps information about LMDB error
+    pub struct MDBError {
+        pub code: c_int,
+        pub message: ~str
+    }
+
+    pub type MDBResult<T> = Result<T, MDBError>;
+
+    fn error_msg(code: c_int) -> ~str {
+        unsafe {
+            str::raw::from_c_str(mdb_strerror(code))
+        }
+    }
+
+    /// Environment
+    pub struct Environment {
+        env: *MDB_env,
+        path: Option<~Path>
+    }
 
     impl Environment {
-        /*
-        fn mdb_version(major: *c_int, minor: *c_int, patch: *c_int) -> *c_char;
-        fn mdb_stderror(err: c_int) -> *c_char;
-        fn mdb_env_create(env: **MDB_env) -> c_int;
-        fn mdb_env_open(env: *MDB_env, path: *c_char, flags: c_uint, mode: mdb_mode_t) -> c_int;
-        fn mdb_env_copy(env: *MDB_env, path: *c_char) -> c_int;
-        fn mdb_env_copyfd(env: *MDB_env, fd: mdb_filehandle_t) -> c_int;
-        fn mdb_env_stat(env: *MDB_env, stat: *MDB_stat) -> c_int;
-        fn mdb_env_info(env: *MDB_env, info: *MDB_envinfo) -> c_int;
-        fn mdb_env_sync(env: *MDB_env, force: c_int) -> c_int;
-        fn mdb_env_close(env: *MDB_env);
-        fn mdb_env_set_flags(env: *MDB_env, flags: c_uint, onoff: c_int) -> c_int;
-        fn mdb_env_get_flags(env: *MDB_env, flags: c_uint) -> c_int;
-        fn mdb_env_get_path(env: *MDB_env, path: **c_char) -> c_int;
-        fn mdb_env_get_fd(env: *MDB_env, fd: *mdb_filehandle_t) -> c_int;
-        fn mdb_env_set_mapsize(env: *MDB_env, size: size_t) -> c_int;
-        fn mdb_env_set_maxreaders(env: *MDB_env, readers: c_uint) -> c_int;
-        fn mdb_env_get_maxreaders(env: *MDB_env, readers: *c_uint) -> c_int;
-        fn mdb_env_set_maxdbs(env: *MDB_env, dbs: MDB_dbi) -> c_int;
-        fn mdb_env_get_maxkeysize(env: *MDB_env) -> c_int;
-        */
+        /// Initializes environment
+        pub fn new() -> MDBResult<Environment> {
+            let env: *MDB_env = ptr::RawPtr::null();
+            let res = unsafe {
+                let pEnv: **mut MDB_env = std::cast::transmute(&env);
+                mdb_env_create(pEnv)
+            };
+
+            match res {
+                MDB_SUCCESS => Ok(Environment {env: env, path: None}),
+                _ => Err(MDBError {code: res, message: error_msg(res)})
+            }
+
+        }
+
+        /// Opens database
+        ///
+        /// flags bitwise ORed flags for database, see [documentation](http://symas.com/mdb/doc/group__mdb.html#ga32a193c6bf4d7d5c5d579e71f22e9340)
+        ///
+        /// mode is expected to be permissions on UNIX like systems and is ignored on Windows
+        pub fn open(&mut self, path: &Path, flags: c_uint, mode: mdb_mode_t) -> MDBResult<()> {
+            let res = unsafe {
+                // There should be a directory before open
+                let temp_res = match (path.exists(), path.is_dir()) {
+                    (false, _) => {
+                        path.with_c_str(|c_path| {
+                            libc::mkdir(c_path, mode)
+                        })
+                    },
+                    (true, true) => MDB_SUCCESS,
+                    (true, false) => libc::EACCES,
+                };
+
+                match temp_res {
+                    MDB_SUCCESS => {
+                        path.with_c_str(|c_path| {
+                            mdb_env_open(self.env, c_path, flags, mode)
+                        })
+                    },
+                    _ => temp_res
+                }
+            };
+
+            match res {
+                MDB_SUCCESS => {
+                    self.path = Some(~path.clone());
+                    Ok(())
+                },
+                _ => Err(MDBError {code: res, message: error_msg(res) }) // FIXME: if it fails, environment should be immediately destroyed
+            }
+        }
+
+        fn env_mut_op<T>(&mut self, op_block: |s: &mut Environment| -> c_int, success_block: || -> T) -> MDBResult<T> {
+            let res = op_block(self);
+
+            match res {
+                MDB_SUCCESS => Ok(success_block()),
+                _ => Err(MDBError {code: res, message: error_msg(res) })
+            }
+        }
+
+        fn env_read_op<T>(&self, op_block: |s: &Environment| -> c_int, success_block: || -> T) -> MDBResult<T> {
+            let res = op_block(self);
+
+            match res {
+                MDB_SUCCESS => Ok(success_block()),
+                _ => Err(MDBError {code: res, message: error_msg(res) })
+            }
+        }
+
+        pub fn stat(&self) -> MDBResult<MDB_stat> {
+            let tmp: MDB_stat = unsafe { std::mem::init() };
+            self.env_read_op(|e: &Environment| unsafe { mdb_env_stat(e.env, &tmp)},
+                             || tmp)
+        }
+
+        pub fn info(&self) -> MDBResult<MDB_envinfo> {
+            let tmp: MDB_envinfo = unsafe { std::mem::init() };
+            self.env_read_op(|e: &Environment| unsafe { mdb_env_info(e.env, &tmp)},
+                             || tmp)
+        }
+
+        pub fn sync(&mut self, force: bool) -> MDBResult<()> {
+            self.env_mut_op(|e: &mut Environment| unsafe { mdb_env_sync(e.env, if force {1} else {0})},
+                            || ())
+        }
+
+        pub fn set_flags(&mut self, flags: c_uint, turn_on: bool) -> MDBResult<()> {
+            self.env_mut_op(|e: &mut Environment| {
+                unsafe {
+                    mdb_env_set_flags(e.env, flags, if turn_on {1} else {0})
+                }
+            },
+                           || ())
+        }
+
+        pub fn get_flags(&self) -> MDBResult<c_uint> {
+            let flags = 0;
+            self.env_read_op(|e: &Environment| { unsafe {mdb_env_get_flags(e.env, &flags)} },
+                             || flags)
+        }
+
+        /// Returns a copy of database path, if it was opened successfully
+        pub fn get_path(&self) -> Option<~Path> {
+            match self.path {
+                Some(ref p) => Some(p.clone()),
+                _ => None
+            }
+        }
+
+        pub fn set_mapsize(&mut self, size: size_t) -> MDBResult<()> {
+            self.env_mut_op(|e: &mut Environment| { unsafe { mdb_env_set_mapsize(e.env, size)} },
+                            || ())
+        }
+
+        pub fn set_maxreaders(&mut self, max_readers: c_uint) -> MDBResult<()> {
+            self.env_mut_op(|e: &mut Environment| { unsafe { mdb_env_set_maxreaders(e.env, max_readers)} },
+                            || ())
+        }
+
+        pub fn get_maxreaders(&self) -> MDBResult<c_uint> {
+            let max_readers: c_uint = 0;
+            self.env_read_op(|e: &Environment| { unsafe { mdb_env_get_maxreaders(e.env, &max_readers)}},
+                             || max_readers )
+        }
+
+        pub fn set_maxdbs(&mut self, dbs: MDB_dbi) -> MDBResult<()> {
+            self.env_mut_op(|e: &mut Environment| { unsafe { mdb_env_set_maxdbs(e.env, dbs)} },
+                            || ())
+        }
+
+        pub fn get_maxkeysize(&self) -> c_int {
+            unsafe { mdb_env_get_maxkeysize(self.env) }
+        }
+
+        /// Creates a backup copy in specified file descriptor
+        pub fn copy_to_fd(&self, fd: mdb_filehandle_t) -> MDBResult<()> {
+            self.env_read_op(|e: &Environment| { unsafe { mdb_env_copyfd(e.env, fd) }},
+                             || ())
+        }
+
+        /// Gets file descriptor of this environment
+        pub fn get_fd(&self) -> MDBResult<mdb_filehandle_t> {
+            let fd = 0;
+            self.env_read_op(|e: &Environment| { unsafe { mdb_env_get_fd(e.env, &fd) }},
+                             || fd )
+        }
+
+        /// Creates a backup copy in specified path
+        pub fn copy_to_path(&self, path: &Path) -> MDBResult<()> {
+            path.with_c_str(|c_path| unsafe {
+                self.env_read_op(|e: &Environment| mdb_env_copy(e.env, c_path),
+                                 || ())
+            })
+        }
+    }
+
+    impl Drop for Environment {
+        fn drop(&mut self) {
+            unsafe {
+                mdb_env_close(self.env);
+            }
+        }
+    }
+}
+
+
+#[cfg(test)]
+mod test {
+    use super::mdb::{Environment};
+    use std::path::Path;
+    use super::mdb::consts;
+
+    #[test]
+    fn test_environment() {
+        match Environment::new() {
+            Ok(mut env) => {
+                match env.get_maxreaders() {
+                    Ok(readers) => assert!(readers != 0, "Max number of readers couldn't be 0"),
+                    Err(err) => fail!("Failed to get max number of readers: {}", err.message)
+                };
+
+                let test_readers = 33;
+                match env.set_maxreaders(test_readers) {
+                    Ok(_) => {
+                        match env.get_maxreaders() {
+                            Ok(readers) => assert!(readers == test_readers, "Get readers != set readers"),
+                            Err(err) => fail!("Failed to get max number of readers: {}", err.message)
+                        }
+                    },
+                    Err(err) => fail!("Failed to set max number of readers: {}", err.message)
+                };
+
+                let path = Path::new("test_lmdb");
+                match env.open(&path, 0, 0o755) {
+                    Ok(..) => {
+                        match env.sync(true) {
+                            Ok(..) => (),
+                            Err(err) => fail!("Failed to sync: {}", err.message)
+                        };
+
+                        let test_flags = consts::MDB_NOMEMINIT | consts::MDB_NOMETASYNC;
+
+                        match env.set_flags(test_flags, true) {
+                            Ok(_) => {
+                                match env.get_flags() {
+                                    Ok(new_flags) => assert!((new_flags & test_flags) == test_flags, "Get flags != set flags"),
+                                    Err(err) => fail!("Failed to get flags: {}", err.message)
+                                }
+                            },
+                            Err(err) => fail!("Failed to set flags: {}", err.message)
+                        };
+                    },
+                    Err(err) => fail!("Failed to open path {}: {}", path.display(), err.message)
+                }
+            },
+            Err(err) => fail!("Failed to initialize environment: {}", err.message)
+        };
     }
 }

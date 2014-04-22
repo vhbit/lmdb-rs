@@ -5,4 +5,4 @@
 
 extern crate libc;
 
-mod mdb;
+pub mod mdb;
