@@ -1,21 +1,12 @@
-#![feature(globs)]
-#![crate_id = "rmdb"]
-#![crate_type = "rlib"]
-#![crate_type = "staticlib"] // for now
 #![allow(non_camel_case_types)]
 #![allow(dead_code)] // TODO: remove it once wrapper complete
 
-extern crate libc;
-
-#[link(name = "mdb")]
-extern {}
-
-pub mod mdb {
+mod mdb {
     use libc::{c_int, c_uint, size_t, c_char, c_void, c_uchar, c_ushort, off_t};
     use libc::types::os::common::posix01::pthread_t;
 
+    use self::os::{mdb_mode_t, mdb_filehandle_t, pthread_key_t, pthread_mutex_t, MDB_PID_T};
     pub use self::consts::*;
-    use self::os::*;
 
     pub mod consts {
         use libc::{c_int, c_uint};
@@ -61,7 +52,7 @@ pub mod mdb {
         pub static MDB_CREATE: c_uint = 0x40000;
 
         // Environment flags
-         pub static MDB_FIXEDMAP: c_uint =  0x01;
+        pub static MDB_FIXEDMAP: c_uint =  0x01;
         pub static MDB_NOSUBDIR: c_uint = 0x4000;
         pub static MDB_NOSYNC: c_uint = 0x10000;
         pub static MDB_RDONLY: c_uint = 0x20000;
@@ -156,6 +147,7 @@ pub mod mdb {
         pub type mdb_filehandle_t = *c_void;
         pub type pthread_key_t = u32;
         pub type pthread_mutex_t = c_int;
+        pub type MDB_PID_T = c_uint;
     }
 
     type pgno_t = MDB_ID;
@@ -165,7 +157,6 @@ pub mod mdb {
     type MDB_dbi = c_uint;
     type MDB_ID = size_t;
     type MDB_IDL = *MDB_ID;
-
 
     type MDB_rel_func = fn(*MDB_val, *c_void, *c_void, *c_void);
     type MDB_msg_func = fn(*c_char, *c_void) -> c_int;
@@ -402,6 +393,8 @@ pub mod mdb {
         mx_dbflag: c_uchar,
     }
 
+    // Embedding should work better for now
+    #[link(name = "lmdb", kind = "static")]
     extern "C" {
         fn mdb_version(major: *c_int, minor: *c_int, patch: *c_int) -> *c_char;
         fn mdb_stderror(err: c_int) -> *c_char;
@@ -453,5 +446,31 @@ pub mod mdb {
         fn mdb_dcmp(txn: *MDB_txn, dbi: MDB_dbi, a: *MDB_val, b: *MDB_val) -> c_int;
         fn mdb_reader_list(env: *MDB_env, func: MDB_msg_func, ctx: *c_void) -> c_int;
         fn mdb_reader_check(env: *MDB_env, dead: *c_int) -> c_int;
+    }
+
+    pub struct Environment {}
+
+    impl Environment {
+        /*
+        fn mdb_version(major: *c_int, minor: *c_int, patch: *c_int) -> *c_char;
+        fn mdb_stderror(err: c_int) -> *c_char;
+        fn mdb_env_create(env: **MDB_env) -> c_int;
+        fn mdb_env_open(env: *MDB_env, path: *c_char, flags: c_uint, mode: mdb_mode_t) -> c_int;
+        fn mdb_env_copy(env: *MDB_env, path: *c_char) -> c_int;
+        fn mdb_env_copyfd(env: *MDB_env, fd: mdb_filehandle_t) -> c_int;
+        fn mdb_env_stat(env: *MDB_env, stat: *MDB_stat) -> c_int;
+        fn mdb_env_info(env: *MDB_env, info: *MDB_envinfo) -> c_int;
+        fn mdb_env_sync(env: *MDB_env, force: c_int) -> c_int;
+        fn mdb_env_close(env: *MDB_env);
+        fn mdb_env_set_flags(env: *MDB_env, flags: c_uint, onoff: c_int) -> c_int;
+        fn mdb_env_get_flags(env: *MDB_env, flags: c_uint) -> c_int;
+        fn mdb_env_get_path(env: *MDB_env, path: **c_char) -> c_int;
+        fn mdb_env_get_fd(env: *MDB_env, fd: *mdb_filehandle_t) -> c_int;
+        fn mdb_env_set_mapsize(env: *MDB_env, size: size_t) -> c_int;
+        fn mdb_env_set_maxreaders(env: *MDB_env, readers: c_uint) -> c_int;
+        fn mdb_env_get_maxreaders(env: *MDB_env, readers: *c_uint) -> c_int;
+        fn mdb_env_set_maxdbs(env: *MDB_env, dbs: MDB_dbi) -> c_int;
+        fn mdb_env_get_maxkeysize(env: *MDB_env) -> c_int;
+        */
     }
 }
