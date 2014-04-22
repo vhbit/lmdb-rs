@@ -1,5 +1,5 @@
-rmdb
-====
+lmdb-rs
+=======
 
 Rust bindings for [LMDB](http://symas.com/mdb/)
 
