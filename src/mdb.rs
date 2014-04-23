@@ -9,6 +9,7 @@ pub mod mdb {
     use std::result::Result;
     use std::str;
     use std::ptr;
+    use std::default::Default;
 
     use self::os::{pthread_key_t, pthread_mutex_t, MDB_PID_T};
     pub use self::consts::*;
@@ -460,6 +461,15 @@ pub mod mdb {
         pub message: ~str
     }
 
+    impl MDBError {
+        pub fn new_with_code(code: c_int) -> MDBError {
+            MDBError {
+                code: code,
+                message: error_msg(code)
+            }
+        }
+    }
+
     pub type MDBResult<T> = Result<T, MDBError>;
 
     fn error_msg(code: c_int) -> ~str {
@@ -476,6 +486,9 @@ pub mod mdb {
 
     impl Environment {
         /// Initializes environment
+        ///
+        /// Note that for using named databases, it should be followed by set_maxdbs()
+        /// before opening
         pub fn new() -> MDBResult<Environment> {
             let env: *MDB_env = ptr::RawPtr::null();
             let res = unsafe {
@@ -485,14 +498,15 @@ pub mod mdb {
 
             match res {
                 MDB_SUCCESS => Ok(Environment {env: env, path: None}),
-                _ => Err(MDBError {code: res, message: error_msg(res)})
+                _ => Err(MDBError::new_with_code(res))
             }
 
         }
 
-        /// Opens database
+        /// Opens environment
         ///
-        /// flags bitwise ORed flags for database, see [documentation](http://symas.com/mdb/doc/group__mdb.html#ga32a193c6bf4d7d5c5d579e71f22e9340)
+        /// flags bitwise ORed flags for environment, see
+        /// [original documentation](http://symas.com/mdb/doc/group__mdb.html#ga32a193c6bf4d7d5c5d579e71f22e9340)
         ///
         /// mode is expected to be permissions on UNIX like systems and is ignored on Windows
         pub fn open(&mut self, path: &Path, flags: c_uint, mode: mdb_mode_t) -> MDBResult<()> {
@@ -523,7 +537,7 @@ pub mod mdb {
                     self.path = Some(~path.clone());
                     Ok(())
                 },
-                _ => Err(MDBError {code: res, message: error_msg(res) }) // FIXME: if it fails, environment should be immediately destroyed
+                _ => Err(MDBError::new_with_code(res)) // FIXME: if it fails, environment should be immediately destroyed
             }
         }
 
@@ -532,7 +546,7 @@ pub mod mdb {
 
             match res {
                 MDB_SUCCESS => Ok(success_block()),
-                _ => Err(MDBError {code: res, message: error_msg(res) })
+                _ => Err(MDBError::new_with_code(res))
             }
         }
 
@@ -541,7 +555,7 @@ pub mod mdb {
 
             match res {
                 MDB_SUCCESS => Ok(success_block()),
-                _ => Err(MDBError {code: res, message: error_msg(res) })
+                _ => Err(MDBError::new_with_code(res))
             }
         }
 
@@ -557,6 +571,7 @@ pub mod mdb {
                              || tmp)
         }
 
+        /// Sync environment to disk
         pub fn sync(&mut self, force: bool) -> MDBResult<()> {
             self.env_mut_op(|e: &mut Environment| unsafe { mdb_env_sync(e.env, if force {1} else {0})},
                             || ())
@@ -601,6 +616,7 @@ pub mod mdb {
                              || max_readers )
         }
 
+        /// Sets number of max DBs open. Should be called before open.
         pub fn set_maxdbs(&mut self, dbs: MDB_dbi) -> MDBResult<()> {
             self.env_mut_op(|e: &mut Environment| { unsafe { mdb_env_set_maxdbs(e.env, dbs)} },
                             || ())
@@ -624,12 +640,48 @@ pub mod mdb {
         }
 
         /// Creates a backup copy in specified path
+        // FIXME: check who is responsible for creating path: callee or caller
         pub fn copy_to_path(&self, path: &Path) -> MDBResult<()> {
             path.with_c_str(|c_path| unsafe {
                 self.env_read_op(|e: &Environment| mdb_env_copy(e.env, c_path),
                                  || ())
             })
         }
+
+        fn create_transaction(&mut self, parent: Option<NativeTransaction>, flags: c_uint) -> MDBResult<NativeTransaction> {
+            let handle: *MDB_txn = ptr::RawPtr::null();
+            let parent_handle = match parent {
+                Some(t) => t.handle,
+                _ => ptr::RawPtr::<MDB_txn>::null()
+            };
+
+            self.env_mut_op(|e: &mut Environment| unsafe { mdb_txn_begin(e.env, parent_handle, flags, &handle) },
+                            || { NativeTransaction::new_with_handle(handle) })
+        }
+
+        /*
+        pub fn new_transaction(parent: Option<&Transaction>, flags: c_uint) -> MDBResult<Transaction> {
+        }
+
+        pub fn new_readonly_transaction(parent: Option<&ReadonlyTransaction>, flags: c_uint) -> MDBResult<ReadonlyTransaction> {
+        }
+
+        pub fn in_transaction(block: ||) -> MDBResult<()> {
+        }
+
+        fn get_db_by_name(&mut self, c_name: *c_char) -> MDBResult<Database> {
+        }
+
+        pub fn get_or_create_db(&mut self, name: &str) -> MDBResult<Database> {
+            name.with_c_str(|c_name| {
+                self.get_db_by_name(c_name)
+            })
+        }
+
+        pub fn get_default_db(&mut self) -> MDBResult<Database> {
+            self.get_db_by_name(std::ptr::RawPtr::null())
+        }
+        */
     }
 
     impl Drop for Environment {
@@ -637,6 +689,178 @@ pub mod mdb {
             unsafe {
                 mdb_env_close(self.env);
             }
+        }
+    }
+
+    #[deriving(Show, Eq)]
+    enum TransactionState {
+        TxnStateNormal,   // Normal, any operation possible
+        TxnStateReleased, // Released (reset on readonly), has to be renewed
+        TxnStateInvalid,  // Invalid, no further operation possible
+    }
+
+    struct NativeTransaction {
+        handle: *MDB_txn,
+        state: TransactionState,
+    }
+
+    impl NativeTransaction {
+        fn new_with_handle(h: *MDB_txn) -> NativeTransaction {
+            NativeTransaction { handle: h, state: TxnStateNormal }
+        }
+
+        /// Transactions are supposed to work in one thread anyway
+        /// so state changes are lock free
+        #[inline]
+        fn change_state<U:Default>(&mut self, expected_state: TransactionState, op: |h: *MDB_txn| -> (TransactionState, U)) -> U {
+            if self.state != expected_state {
+                error!("Invalid transaction operation in state {}", self.state);
+                Default::default()
+            } else {
+                let (ns, res) = op(self.handle);
+                self.state = ns;
+                res
+            }
+        }
+
+        #[inline]
+        fn wrap_result(res: c_int) -> MDBResult<()> {
+            match res {
+                MDB_SUCCESS => Ok(()),
+                _ => Err(MDBError::new_with_code(res))
+            }
+        }
+
+        fn commit(&mut self) -> MDBResult<()> {
+            let res: c_int = self.change_state(TxnStateNormal, |h: *MDB_txn| unsafe {
+                (TxnStateInvalid, mdb_txn_commit(h))
+            } );
+            NativeTransaction::wrap_result(res)
+        }
+
+        fn abort(&mut self) {
+            self.change_state(TxnStateNormal, |h: *MDB_txn| unsafe {
+                (TxnStateInvalid, { mdb_txn_abort(h); })
+            });
+        }
+
+        /// Resets read only transaction, handle is kept. Must be followed
+        /// by call to renew
+        fn reset(&mut self) {
+            self.change_state(TxnStateNormal, |h: *MDB_txn| unsafe {
+                (TxnStateReleased, mdb_txn_reset(h))
+            });
+        }
+
+        /// Acquires a new reader lock after it was released by reset
+        fn renew(&mut self) -> MDBResult<()> {
+            let res: c_int = self.change_state(TxnStateReleased, |h: *MDB_txn| unsafe {
+                (TxnStateNormal, mdb_txn_renew(h))
+            });
+            NativeTransaction::wrap_result(res)
+        }
+
+        fn create_child(&mut self, flags: c_uint) -> MDBResult<NativeTransaction> {
+            let out: *MDB_txn = ptr::RawPtr::null();
+            let res = unsafe { mdb_txn_begin(mdb_txn_env(self.handle), self.handle, flags, &out) };
+
+            match res {
+                MDB_SUCCESS => Ok(NativeTransaction::new_with_handle(out)),
+                _ => Err(MDBError::new_with_code(res))
+            }
+        }
+
+        fn silent_abort(&mut self) {
+            match self.state {
+                TxnStateInvalid => unsafe {
+                    mdb_txn_abort(self.handle);
+                    self.state = TxnStateInvalid;
+                },
+                _ => ()
+            }
+        }
+    }
+
+    pub struct Transaction {
+        inner: NativeTransaction,
+    }
+
+    pub struct ReadonlyTransaction {
+        inner: NativeTransaction,
+    }
+
+    impl Transaction {
+        fn new_with_native(txn: NativeTransaction) -> Transaction {
+            Transaction {
+                inner: txn
+            }
+        }
+
+        pub fn create_child(&mut self) -> MDBResult<Transaction> {
+            match self.inner.create_child(0) {
+                Ok(txn) => Ok(Transaction::new_with_native(txn)),
+                Err(e) => Err(e)
+            }
+        }
+
+        pub fn create_ro_child(&mut self) -> MDBResult<ReadonlyTransaction> {
+            match self.inner.create_child(MDB_RDONLY) {
+                Ok(txn) => Ok(ReadonlyTransaction::new_with_native(txn)),
+                Err(e) => Err(e)
+            }
+        }
+
+        /// Aborts transaction, handle is freed
+        pub fn commit(&mut self) -> MDBResult<()> {
+            self.inner.commit()
+        }
+
+        /// Aborts transaction, handle is freed
+        pub fn abort(&mut self) {
+            self.inner.abort();
+        }
+    }
+
+    impl ReadonlyTransaction {
+        fn new_with_native(txn: NativeTransaction) -> ReadonlyTransaction {
+            ReadonlyTransaction {
+                inner: txn,
+            }
+        }
+
+        pub fn create_ro_child(&mut self) -> MDBResult<ReadonlyTransaction> {
+            match self.inner.create_child(MDB_RDONLY) {
+                Ok(txn) => Ok(ReadonlyTransaction::new_with_native(txn)),
+                Err(e) => Err(e)
+            }
+        }
+
+        /// Aborts transaction, handle is freed
+        pub fn abort(&mut self) {
+            self.inner.abort();
+        }
+
+        /// Resets read only transaction, handle is kept. Must be followed
+        /// by call to renew
+        pub fn reset(&mut self) {
+            self.inner.reset();
+        }
+
+        /// Acquires a new reader lock after it was released by reset
+        pub fn renew(&mut self) -> MDBResult<()> {
+            self.inner.renew()
+        }
+    }
+
+    impl Drop for Transaction {
+        fn drop(&mut self) {
+            self.inner.silent_abort();
+        }
+    }
+
+    impl Drop for ReadonlyTransaction {
+        fn drop(&mut self) {
+            self.inner.silent_abort();
         }
     }
 }
