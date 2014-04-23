@@ -40,6 +40,12 @@ pub mod mdb {
         pub static MDB_BAD_TXN: c_int = -30782;
         pub static MDB_BAD_VALSIZE: c_int = -30781;
 
+        /// It's internal error code if operation is
+        /// being preformed from invalid initial state
+        /// for example, trying to commit transaction,
+        /// which was already freed
+        pub static MDB_INVALID_STATE: c_int = -30000;
+
         // Write flags
         pub static MDB_NOOVERWRITE: c_int = 0x10;
         pub static MDB_NODUPDATA: c_int = 0x20;
@@ -428,7 +434,7 @@ pub mod mdb {
         fn mdb_txn_abort(txn: *MDB_txn);
         fn mdb_txn_reset(txn: *MDB_txn);
         fn mdb_txn_renew(txn: *MDB_txn) -> c_int;
-        fn mdb_dbi_open(txn: *MDB_txn, name: **c_char, flags: c_uint, dbi: *MDB_dbi) -> c_int;
+        fn mdb_dbi_open(txn: *MDB_txn, name: *c_char, flags: c_uint, dbi: *MDB_dbi) -> c_int;
         fn mdb_stat(txn: *MDB_txn, dbi: MDB_dbi, stat: *MDB_stat) -> c_int;
         fn mdb_dbi_flags(txn: *MDB_txn, dbi: MDB_dbi, flags: *c_uint) -> c_int;
         fn mdb_dbi_close(txn: *MDB_txn, dbi: MDB_dbi);
@@ -462,10 +468,17 @@ pub mod mdb {
     }
 
     impl MDBError {
-        pub fn new_with_code(code: c_int) -> MDBError {
+        fn new_with_code(code: c_int) -> MDBError {
             MDBError {
                 code: code,
                 message: error_msg(code)
+            }
+        }
+
+        fn new_state_error(msg: ~str) -> MDBError {
+            MDBError {
+                code: MDB_INVALID_STATE,
+                message: msg
             }
         }
     }
@@ -475,6 +488,40 @@ pub mod mdb {
     fn error_msg(code: c_int) -> ~str {
         unsafe {
             str::raw::from_c_str(mdb_strerror(code))
+        }
+    }
+
+    #[inline]
+    fn lift<U>(code: c_int, res: || -> U) -> MDBResult<U> {
+        match code {
+            MDB_SUCCESS => Ok(res() ),
+            _ => Err(MDBError::new_with_code(code))
+        }
+    }
+
+    #[inline]
+    fn lift_val<U>(code: c_int, res: U) -> MDBResult<U> {
+        match code {
+            MDB_SUCCESS => Ok(res),
+            _ => Err(MDBError::new_with_code(code))
+        }
+    }
+
+    #[inline]
+    fn lift_noret(code: c_int) -> MDBResult<()> {
+        match code {
+            MDB_SUCCESS => Ok(()),
+            _ => Err(MDBError::new_with_code(code))
+        }
+    }
+
+    pub struct Database {
+        handle: MDB_dbi,
+    }
+
+    impl Database {
+        fn new_with_handle(handle: MDB_dbi) -> Database {
+            Database { handle: handle }
         }
     }
 
@@ -491,15 +538,10 @@ pub mod mdb {
         /// before opening
         pub fn new() -> MDBResult<Environment> {
             let env: *MDB_env = ptr::RawPtr::null();
-            let res = unsafe {
+            lift(unsafe {
                 let pEnv: **mut MDB_env = std::cast::transmute(&env);
-                mdb_env_create(pEnv)
-            };
-
-            match res {
-                MDB_SUCCESS => Ok(Environment {env: env, path: None}),
-                _ => Err(MDBError::new_with_code(res))
-            }
+                mdb_env_create(pEnv)},
+                 || Environment {env: env, path: None})
 
         }
 
@@ -541,55 +583,33 @@ pub mod mdb {
             }
         }
 
-        fn env_mut_op<T>(&mut self, op_block: |s: &mut Environment| -> c_int, success_block: || -> T) -> MDBResult<T> {
-            let res = op_block(self);
-
-            match res {
-                MDB_SUCCESS => Ok(success_block()),
-                _ => Err(MDBError::new_with_code(res))
-            }
-        }
-
-        fn env_read_op<T>(&self, op_block: |s: &Environment| -> c_int, success_block: || -> T) -> MDBResult<T> {
-            let res = op_block(self);
-
-            match res {
-                MDB_SUCCESS => Ok(success_block()),
-                _ => Err(MDBError::new_with_code(res))
-            }
-        }
-
         pub fn stat(&self) -> MDBResult<MDB_stat> {
             let tmp: MDB_stat = unsafe { std::mem::init() };
-            self.env_read_op(|e: &Environment| unsafe { mdb_env_stat(e.env, &tmp)},
-                             || tmp)
+            lift(unsafe { mdb_env_stat(self.env, &tmp)},
+                 || tmp)
         }
 
         pub fn info(&self) -> MDBResult<MDB_envinfo> {
             let tmp: MDB_envinfo = unsafe { std::mem::init() };
-            self.env_read_op(|e: &Environment| unsafe { mdb_env_info(e.env, &tmp)},
-                             || tmp)
+            lift(unsafe { mdb_env_info(self.env, &tmp)},
+                 || tmp)
         }
 
         /// Sync environment to disk
         pub fn sync(&mut self, force: bool) -> MDBResult<()> {
-            self.env_mut_op(|e: &mut Environment| unsafe { mdb_env_sync(e.env, if force {1} else {0})},
-                            || ())
+            lift_noret(unsafe { mdb_env_sync(self.env, if force {1} else {0})})
         }
 
         pub fn set_flags(&mut self, flags: c_uint, turn_on: bool) -> MDBResult<()> {
-            self.env_mut_op(|e: &mut Environment| {
-                unsafe {
-                    mdb_env_set_flags(e.env, flags, if turn_on {1} else {0})
-                }
-            },
-                           || ())
+            lift_noret(unsafe {
+                mdb_env_set_flags(self.env, flags, if turn_on {1} else {0})
+            })
         }
 
         pub fn get_flags(&self) -> MDBResult<c_uint> {
             let flags = 0;
-            self.env_read_op(|e: &Environment| { unsafe {mdb_env_get_flags(e.env, &flags)} },
-                             || flags)
+            lift(unsafe {mdb_env_get_flags(self.env, &flags)},
+                 || flags)
         }
 
         /// Returns a copy of database path, if it was opened successfully
@@ -601,25 +621,22 @@ pub mod mdb {
         }
 
         pub fn set_mapsize(&mut self, size: size_t) -> MDBResult<()> {
-            self.env_mut_op(|e: &mut Environment| { unsafe { mdb_env_set_mapsize(e.env, size)} },
-                            || ())
+            lift_noret(unsafe { mdb_env_set_mapsize(self.env, size)})
         }
 
         pub fn set_maxreaders(&mut self, max_readers: c_uint) -> MDBResult<()> {
-            self.env_mut_op(|e: &mut Environment| { unsafe { mdb_env_set_maxreaders(e.env, max_readers)} },
-                            || ())
+            lift_noret(unsafe { mdb_env_set_maxreaders(self.env, max_readers)})
         }
 
         pub fn get_maxreaders(&self) -> MDBResult<c_uint> {
             let max_readers: c_uint = 0;
-            self.env_read_op(|e: &Environment| { unsafe { mdb_env_get_maxreaders(e.env, &max_readers)}},
-                             || max_readers )
+            lift(unsafe { mdb_env_get_maxreaders(self.env, &max_readers)},
+                 || max_readers )
         }
 
         /// Sets number of max DBs open. Should be called before open.
         pub fn set_maxdbs(&mut self, dbs: MDB_dbi) -> MDBResult<()> {
-            self.env_mut_op(|e: &mut Environment| { unsafe { mdb_env_set_maxdbs(e.env, dbs)} },
-                            || ())
+            lift_noret(unsafe { mdb_env_set_maxdbs(self.env, dbs)})
         }
 
         pub fn get_maxkeysize(&self) -> c_int {
@@ -628,23 +645,20 @@ pub mod mdb {
 
         /// Creates a backup copy in specified file descriptor
         pub fn copy_to_fd(&self, fd: mdb_filehandle_t) -> MDBResult<()> {
-            self.env_read_op(|e: &Environment| { unsafe { mdb_env_copyfd(e.env, fd) }},
-                             || ())
+            lift_noret(unsafe { mdb_env_copyfd(self.env, fd) })
         }
 
         /// Gets file descriptor of this environment
         pub fn get_fd(&self) -> MDBResult<mdb_filehandle_t> {
             let fd = 0;
-            self.env_read_op(|e: &Environment| { unsafe { mdb_env_get_fd(e.env, &fd) }},
-                             || fd )
+            lift({ unsafe { mdb_env_get_fd(self.env, &fd) }}, || fd)
         }
 
         /// Creates a backup copy in specified path
         // FIXME: check who is responsible for creating path: callee or caller
         pub fn copy_to_path(&self, path: &Path) -> MDBResult<()> {
             path.with_c_str(|c_path| unsafe {
-                self.env_read_op(|e: &Environment| mdb_env_copy(e.env, c_path),
-                                 || ())
+                lift_noret(mdb_env_copy(self.env, c_path))
             })
         }
 
@@ -655,8 +669,8 @@ pub mod mdb {
                 _ => ptr::RawPtr::<MDB_txn>::null()
             };
 
-            self.env_mut_op(|e: &mut Environment| unsafe { mdb_txn_begin(e.env, parent_handle, flags, &handle) },
-                            || { NativeTransaction::new_with_handle(handle) })
+            lift(unsafe { mdb_txn_begin(self.env, parent_handle, flags, &handle) },
+                 || NativeTransaction::new_with_handle(handle))
         }
 
         /*
@@ -668,20 +682,26 @@ pub mod mdb {
 
         pub fn in_transaction(block: ||) -> MDBResult<()> {
         }
+         */
 
-        fn get_db_by_name(&mut self, c_name: *c_char) -> MDBResult<Database> {
+        fn get_db_by_name(&mut self, c_name: *c_char, flags: c_uint) -> MDBResult<Database> {
+            let dbi: MDB_dbi = 0;
+
+            self.create_transaction(None, 0)
+                .and_then(|txn| lift(unsafe { mdb_dbi_open(txn.handle, c_name, flags, &dbi)}, || txn) )
+                .and_then(|mut t| t.commit() )
+                .and_then(|_| Ok(Database::new_with_handle(dbi)))
         }
 
-        pub fn get_or_create_db(&mut self, name: &str) -> MDBResult<Database> {
+        pub fn get_or_create_db(&mut self, name: &str, flags: c_uint) -> MDBResult<Database> {
             name.with_c_str(|c_name| {
-                self.get_db_by_name(c_name)
+                self.get_db_by_name(c_name, flags)
             })
         }
 
-        pub fn get_default_db(&mut self) -> MDBResult<Database> {
-            self.get_db_by_name(std::ptr::RawPtr::null())
+        pub fn get_default_db(&mut self, flags: c_uint) -> MDBResult<Database> {
+            self.get_db_by_name(std::ptr::RawPtr::null(), flags)
         }
-        */
     }
 
     impl Drop for Environment {
@@ -712,14 +732,19 @@ pub mod mdb {
         /// Transactions are supposed to work in one thread anyway
         /// so state changes are lock free
         #[inline]
-        fn change_state<U:Default>(&mut self, expected_state: TransactionState, op: |h: *MDB_txn| -> (TransactionState, U)) -> U {
+        fn change_state(&mut self, expected_state: TransactionState, op: |h: *MDB_txn| -> (TransactionState, c_int)) -> MDBResult<()> {
             if self.state != expected_state {
-                error!("Invalid transaction operation in state {}", self.state);
-                Default::default()
+                let msg = format!("Invalid txn op in state {}", self.state);
+                Err(MDBError::new_state_error(msg))
             } else {
                 let (ns, res) = op(self.handle);
-                self.state = ns;
-                res
+                match res {
+                    MDB_SUCCESS => {
+                        self.state = ns;
+                        Ok(Default::default())
+                    },
+                    _ => Err(MDBError::new_with_code(res))
+                }
             }
         }
 
@@ -732,32 +757,32 @@ pub mod mdb {
         }
 
         fn commit(&mut self) -> MDBResult<()> {
-            let res: c_int = self.change_state(TxnStateNormal, |h: *MDB_txn| unsafe {
+            self.change_state(TxnStateNormal, |h: *MDB_txn| unsafe {
                 (TxnStateInvalid, mdb_txn_commit(h))
-            } );
-            NativeTransaction::wrap_result(res)
+            } )
         }
 
+        #[allow(unused_must_use)]
         fn abort(&mut self) {
             self.change_state(TxnStateNormal, |h: *MDB_txn| unsafe {
-                (TxnStateInvalid, { mdb_txn_abort(h); })
+                (TxnStateInvalid, { mdb_txn_abort(h); MDB_SUCCESS })
             });
         }
 
         /// Resets read only transaction, handle is kept. Must be followed
         /// by call to renew
+        #[allow(unused_must_use)]
         fn reset(&mut self) {
             self.change_state(TxnStateNormal, |h: *MDB_txn| unsafe {
-                (TxnStateReleased, mdb_txn_reset(h))
+                (TxnStateReleased, { mdb_txn_reset(h); MDB_SUCCESS })
             });
         }
 
         /// Acquires a new reader lock after it was released by reset
         fn renew(&mut self) -> MDBResult<()> {
-            let res: c_int = self.change_state(TxnStateReleased, |h: *MDB_txn| unsafe {
+            self.change_state(TxnStateReleased, |h: *MDB_txn| unsafe {
                 (TxnStateNormal, mdb_txn_renew(h))
-            });
-            NativeTransaction::wrap_result(res)
+            })
         }
 
         fn create_child(&mut self, flags: c_uint) -> MDBResult<NativeTransaction> {
@@ -911,6 +936,11 @@ mod test {
                             },
                             Err(err) => fail!("Failed to set flags: {}", err.message)
                         };
+
+                        match env.get_default_db(0) {
+                            Ok(_) => (),
+                            Err(err) => fail!("Failed to get default database: {}", err.message)
+                        }
                     },
                     Err(err) => fail!("Failed to open path {}: {}", path.display(), err.message)
                 }
