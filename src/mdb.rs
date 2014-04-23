@@ -189,6 +189,17 @@ pub mod mdb {
         mv_data: *c_void,
     }
 
+    impl MDB_val {
+        pub fn from_slice<T>(a: &[T]) -> MDB_val {
+            unsafe {
+                MDB_val {
+                    mv_data: std::cast::transmute(a.as_ptr()),
+                    mv_size: a.len() as u64
+                }
+            }
+        }
+    }
+
     struct MDB_rxbody {
         mrb_txnid: txnid_t,
         mrb_pid: MDB_PID_T,
@@ -515,6 +526,7 @@ pub mod mdb {
         }
     }
 
+    /// Database
     pub struct Database {
         handle: MDB_dbi,
     }
@@ -673,16 +685,17 @@ pub mod mdb {
                  || NativeTransaction::new_with_handle(handle))
         }
 
-        /*
-        pub fn new_transaction(parent: Option<&Transaction>, flags: c_uint) -> MDBResult<Transaction> {
+        /// Creates a new read-write transaction
+        pub fn new_transaction(&mut self) -> MDBResult<Transaction> {
+            self.create_transaction(None, 0)
+                .and_then(|txn| Ok(Transaction::new_with_native(txn)))
         }
 
-        pub fn new_readonly_transaction(parent: Option<&ReadonlyTransaction>, flags: c_uint) -> MDBResult<ReadonlyTransaction> {
+        /// Creates a readonly transaction
+        pub fn new_readonly_transaction(&mut self) -> MDBResult<ReadonlyTransaction> {
+            self.create_transaction(None, MDB_RDONLY)
+                .and_then(|txn| Ok(ReadonlyTransaction::new_with_native(txn)))
         }
-
-        pub fn in_transaction(block: ||) -> MDBResult<()> {
-        }
-         */
 
         fn get_db_by_name(&mut self, c_name: *c_char, flags: c_uint) -> MDBResult<Database> {
             let dbi: MDB_dbi = 0;
@@ -693,12 +706,16 @@ pub mod mdb {
                 .and_then(|_| Ok(Database::new_with_handle(dbi)))
         }
 
+        /// Returns or creates database with name
+        ///
+        /// Note: set_maxdbis should be called before
         pub fn get_or_create_db(&mut self, name: &str, flags: c_uint) -> MDBResult<Database> {
             name.with_c_str(|c_name| {
                 self.get_db_by_name(c_name, flags)
             })
         }
 
+        /// Returns default database
         pub fn get_default_db(&mut self, flags: c_uint) -> MDBResult<Database> {
             self.get_db_by_name(std::ptr::RawPtr::null(), flags)
         }
@@ -748,14 +765,6 @@ pub mod mdb {
             }
         }
 
-        #[inline]
-        fn wrap_result(res: c_int) -> MDBResult<()> {
-            match res {
-                MDB_SUCCESS => Ok(()),
-                _ => Err(MDBError::new_with_code(res))
-            }
-        }
-
         fn commit(&mut self) -> MDBResult<()> {
             self.change_state(TxnStateNormal, |h: *MDB_txn| unsafe {
                 (TxnStateInvalid, mdb_txn_commit(h))
@@ -787,22 +796,75 @@ pub mod mdb {
 
         fn create_child(&mut self, flags: c_uint) -> MDBResult<NativeTransaction> {
             let out: *MDB_txn = ptr::RawPtr::null();
-            let res = unsafe { mdb_txn_begin(mdb_txn_env(self.handle), self.handle, flags, &out) };
-
-            match res {
-                MDB_SUCCESS => Ok(NativeTransaction::new_with_handle(out)),
-                _ => Err(MDBError::new_with_code(res))
-            }
+            lift(unsafe { mdb_txn_begin(mdb_txn_env(self.handle), self.handle, flags, &out) },
+                 || NativeTransaction::new_with_handle(out))
         }
 
         fn silent_abort(&mut self) {
             match self.state {
-                TxnStateInvalid => unsafe {
+                TxnStateInvalid => (),
+                _ => unsafe {
                     mdb_txn_abort(self.handle);
                     self.state = TxnStateInvalid;
-                },
-                _ => ()
+                }
             }
+        }
+
+        #[inline]
+        fn in_state<U>(&mut self, expected_state: TransactionState, p: |a: &mut NativeTransaction| -> MDBResult<U>) -> MDBResult<U> {
+            if self.state != expected_state {
+                Err(MDBError::new_state_error(format!("Unexpected state for transaction: {}", self.state)))
+            } else {
+                p(self)
+            }
+        }
+
+        fn get_value(&self, db: &Database, key: &[u8]) -> MDBResult<~[u8]> {
+            unsafe {
+                let key_val = MDB_val::from_slice(key);
+                let data_val: MDB_val = std::mem::init();
+
+                lift(mdb_get(self.handle, db.handle, &key_val, &data_val),
+                     || std::slice::raw::from_buf_raw(data_val.mv_data as *u8, data_val.mv_size as uint))
+            }
+        }
+
+        pub fn get(&mut self, db: &Database, key: &[u8]) -> MDBResult<~[u8]> {
+            self.in_state(TxnStateNormal,
+                          |t| t.get_value(db, key))
+        }
+
+        fn set_value(&self, db: &Database, key: &[u8], value: &[u8]) -> MDBResult<()> {
+            unsafe {
+                let key_val = MDB_val::from_slice(key);
+                let data_val = MDB_val::from_slice(value);
+
+                // FIXME: supply set flags
+                lift_noret(mdb_put(self.handle, db.handle, &key_val, &data_val, 0))
+            }
+        }
+
+        pub fn set(&mut self, db: &Database, key: &[u8], value: &[u8]) -> MDBResult<()> {
+            self.in_state(TxnStateNormal,
+                          |t| t.set_value(db, key, value))
+        }
+
+
+        fn del_value(&self, db: &Database, key: &[u8]) -> MDBResult<()> {
+            unsafe {
+                let key_val = MDB_val {
+                    mv_data: std::cast::transmute(key.as_ptr()),
+                    mv_size: key.len() as u64
+                };
+
+                // FIXME: transmit also data value
+                lift_noret(mdb_del(self.handle, db.handle, &key_val, std::ptr::RawPtr::null()))
+            }
+        }
+
+        pub fn del(&mut self, db: &Database, key: &[u8]) -> MDBResult<()> {
+            self.in_state(TxnStateNormal,
+                          |t| t.del_value(db, key))
         }
     }
 
@@ -843,6 +905,18 @@ pub mod mdb {
         /// Aborts transaction, handle is freed
         pub fn abort(&mut self) {
             self.inner.abort();
+        }
+
+        pub fn get(&mut self, db: &Database, key: &[u8]) -> MDBResult<~[u8]> {
+            self.inner.get(db, key)
+        }
+
+        pub fn set(&mut self, db: &Database, key: &[u8], value: &[u8]) -> MDBResult<()> {
+            self.inner.set(db, key, value)
+        }
+
+        pub fn del(&mut self, db: &Database, key: &[u8]) -> MDBResult<()> {
+            self.inner.del(db, key)
         }
     }
 
@@ -899,6 +973,8 @@ mod test {
 
     #[test]
     fn test_environment() {
+        // It looks pretty tree like, because it is the simplest test and
+        // it expected to produce easy traceable results
         match Environment::new() {
             Ok(mut env) => {
                 match env.get_maxreaders() {
@@ -938,7 +1014,25 @@ mod test {
                         };
 
                         match env.get_default_db(0) {
-                            Ok(_) => (),
+                            Ok(db) => {
+                                let key: ~[u8] = "hello".bytes().collect();
+                                let value: ~[u8] = "world".bytes().collect();
+
+                                match env.new_transaction() {
+                                    Ok(mut tnx) => {
+                                        match tnx.set(&db, key.as_slice(), value.as_slice()) {
+                                            Ok(_) => {
+                                                match tnx.get(&db, key.as_slice()) {
+                                                    Ok(v) => assert!(v == value, "Written {:?} and read {:?}", value.as_slice(), v.as_slice()),
+                                                    Err(err) => fail!("Failed to read value: {}", err.message)
+                                                }
+                                            },
+                                            Err(err) => fail!("Failed to write value: {}", err.message)
+                                        }
+                                    },
+                                    Err(err) => fail!("Failed to create transaction: {}", err.message)
+                                }
+                            },
                             Err(err) => fail!("Failed to get default database: {}", err.message)
                         }
                     },
