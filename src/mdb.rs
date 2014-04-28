@@ -118,8 +118,8 @@ pub mod mdb {
             static __PTHREAD_MUTEX_SIZE__: uint = 40;
 
             pub struct pthread_mutex_t {
-            __sig: libc::c_long,
-            __opaque: [u8, ..__PTHREAD_MUTEX_SIZE__],
+                __sig: libc::c_long,
+                __opaque: [u8, ..__PTHREAD_MUTEX_SIZE__],
             }
         }
 
