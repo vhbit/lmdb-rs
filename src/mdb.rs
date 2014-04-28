@@ -85,7 +85,8 @@ pub mod mdb {
     #[cfg(target_os = "android")]
     mod os {
         use libc::{c_ulong, c_int, mode_t, pid_t};
-        pub use self::mutex::pthread_mutex_t;
+
+        pub use pthread_mutex_t = self::mutex::pthread_mutex_t;
 
         #[cfg(target_os = "macos")]
         pub type pthread_key_t = c_ulong;
@@ -1175,8 +1176,8 @@ mod test {
     use std::rt::unwind::Unwinder;
     use std::path::Path;
 
-    use super::mdb::consts;
-    use super::mdb::{Environment};
+    use mdb::mdb::consts;
+    use mdb::mdb::{Environment};
 
     #[allow(unused_must_use)]
     fn test_db_in_path(path: &Path, f: ||) {
