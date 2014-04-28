@@ -184,7 +184,7 @@ pub mod mdb {
 
     type MDB_ID2L = *MDB_ID2;
 
-    struct MDB_val {
+    pub struct MDB_val {
         mv_size: size_t,
         mv_data: *c_void,
     }
@@ -198,6 +198,14 @@ pub mod mdb {
                 }
             }
         }
+    }
+
+    pub trait MDBIncomingValue {
+        fn to_mdb_value(&self) -> MDB_val;
+    }
+
+    pub trait MDBOutgoingValue {
+        fn from_mdb_value(value: &MDB_val) -> Self;
     }
 
     struct MDB_rxbody {
@@ -742,6 +750,25 @@ pub mod mdb {
         TxnStateInvalid,  // Invalid, no further operation possible
     }
 
+    impl MDBIncomingValue for ~[u8] {
+        fn to_mdb_value(&self) -> MDB_val {
+            unsafe {
+                MDB_val {
+                    mv_data: std::cast::transmute(self.as_ptr()),
+                    mv_size: self.len() as u64
+                }
+            }
+        }
+    }
+
+    impl MDBOutgoingValue for ~[u8] {
+        fn from_mdb_value(value: &MDB_val) -> ~[u8] {
+            unsafe {
+                std::slice::raw::from_buf_raw(value.mv_data as *u8, value.mv_size as uint)
+            }
+        }
+    }
+
     struct NativeTransaction {
         handle: *MDB_txn,
         state: TransactionState,
@@ -825,58 +852,58 @@ pub mod mdb {
             }
         }
 
-        fn get_value(&self, db: &Database, key: &[u8]) -> MDBResult<~[u8]> {
+        fn get_value<T: MDBOutgoingValue>(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<T> {
             unsafe {
-                let key_val = MDB_val::from_slice(key);
+                let key_val = key.to_mdb_value();
                 let data_val: MDB_val = std::mem::init();
 
                 lift(mdb_get(self.handle, db.handle, &key_val, &data_val),
-                     || std::slice::raw::from_buf_raw(data_val.mv_data as *u8, data_val.mv_size as uint))
+                     || MDBOutgoingValue::from_mdb_value(&data_val))
             }
         }
 
-        pub fn get(&mut self, db: &Database, key: &[u8]) -> MDBResult<~[u8]> {
+        pub fn get<T: MDBOutgoingValue>(&mut self, db: &Database, key: &MDBIncomingValue) -> MDBResult<T> {
             self.in_state(TxnStateNormal,
                           |t| t.get_value(db, key))
         }
 
-        fn set_value(&self, db: &Database, key: &[u8], value: &[u8]) -> MDBResult<()> {
+        fn set_value(&self, db: &Database, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
             self.set_value_with_flags(db, key, value, 0)
         }
 
-        fn set_value_with_flags(&self, db: &Database, key: &[u8], value: &[u8], flags: c_uint) -> MDBResult<()> {
+        fn set_value_with_flags(&self, db: &Database, key: &MDBIncomingValue, value: &MDBIncomingValue, flags: c_uint) -> MDBResult<()> {
             unsafe {
-                let key_val = MDB_val::from_slice(key);
-                let data_val = MDB_val::from_slice(value);
+                let key_val = key.to_mdb_value();
+                let data_val = value.to_mdb_value();
 
                 lift_noret(mdb_put(self.handle, db.handle, &key_val, &data_val, flags))
             }
         }
 
-        pub fn set(&mut self, db: &Database, key: &[u8], value: &[u8]) -> MDBResult<()> {
+        pub fn set(&mut self, db: &Database, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
             self.in_state(TxnStateNormal,
                           |t| t.set_value(db, key, value))
         }
 
         /// Deletes all values by key
-        fn del_value(&self, db: &Database, key: &[u8]) -> MDBResult<()> {
+        fn del_value(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<()> {
             unsafe {
-                let key_val = MDB_val::from_slice(key);
+                let key_val = key.to_mdb_value();
                 lift_noret(mdb_del(self.handle, db.handle, &key_val, std::ptr::RawPtr::null()))
             }
         }
 
         /// If duplicate keys are allowed deletes value for key which is equal to data
-        fn del_exact_value(&self, db: &Database, key: &[u8], data: &[u8]) -> MDBResult<()> {
+        fn del_exact_value(&self, db: &Database, key: &MDBIncomingValue, data: &MDBIncomingValue) -> MDBResult<()> {
             unsafe {
-                let key_val = MDB_val::from_slice(key);
-                let data_val = MDB_val::from_slice(data);
+                let key_val = key.to_mdb_value();
+                let data_val = data.to_mdb_value();
 
                 lift_noret(mdb_del(self.handle, db.handle, &key_val, &data_val))
             }
         }
 
-        pub fn del(&mut self, db: &Database, key: &[u8]) -> MDBResult<()> {
+        pub fn del(&mut self, db: &Database, key: &MDBIncomingValue) -> MDBResult<()> {
             self.in_state(TxnStateNormal,
                           |t| t.del_value(db, key))
         }
@@ -921,19 +948,19 @@ pub mod mdb {
             self.inner.abort();
         }
 
-        pub fn get(&mut self, db: &Database, key: &[u8]) -> MDBResult<~[u8]> {
+        pub fn get<T: MDBOutgoingValue>(&mut self, db: &Database, key: &MDBIncomingValue) -> MDBResult<T> {
             self.inner.get(db, key)
         }
 
-        pub fn set(&mut self, db: &Database, key: &[u8], value: &[u8]) -> MDBResult<()> {
+        pub fn set(&mut self, db: &Database, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
             self.inner.set(db, key, value)
         }
 
-        pub fn del(&mut self, db: &Database, key: &[u8]) -> MDBResult<()> {
+        pub fn del(&mut self, db: &Database, key: &MDBIncomingValue) -> MDBResult<()> {
             self.inner.del(db, key)
         }
 
-        pub fn del_exact(&mut self, db: &Database, key: &[u8], data: &[u8]) -> MDBResult<()> {
+        pub fn del_exact(&mut self, db: &Database, key: &MDBIncomingValue, data: &MDBIncomingValue) -> MDBResult<()> {
             self.inner.del_exact_value(db, key, data)
         }
     }
@@ -968,7 +995,7 @@ pub mod mdb {
             self.inner.renew()
         }
 
-        pub fn get(&mut self, db: &Database, key: &[u8]) -> MDBResult<~[u8]> {
+        pub fn get<T: MDBOutgoingValue>(&mut self, db: &Database, key: &MDBIncomingValue) -> MDBResult<T> {
             self.inner.get(db, key)
         }
     }
@@ -1059,9 +1086,9 @@ mod test {
 
                                     match env.new_transaction() {
                                         Ok(mut tnx) => {
-                                            match tnx.set(&db, key.as_slice(), value.as_slice()) {
+                                            match tnx.set(&db, &key, &value) {
                                                 Ok(_) => {
-                                                    match tnx.get(&db, key.as_slice()) {
+                                                    match tnx.get::<~[u8]>(&db, &key) {
                                                         Ok(v) => assert!(v == value, "Written {:?} and read {:?}", value.as_slice(), v.as_slice()),
                                                         Err(err) => fail!("Failed to read value: {}", err.message)
                                                     }
@@ -1098,18 +1125,18 @@ mod test {
             let test_data1: ~[u8] = "value1".bytes().collect();
             let test_data2: ~[u8] = "value2".bytes().collect();
 
-            assert!(txn.get(&db, test_key1.as_slice()).is_err(), "Key shouldn't exist yet");
+            assert!(txn.get::<~[u8]>(&db, &test_key1).is_err(), "Key shouldn't exist yet");
 
-            let _ = txn.set(&db, test_key1.as_slice(), test_data1.as_slice());
-            let v = txn.get(&db, test_key1.as_slice()).unwrap();
+            let _ = txn.set(&db, &test_key1, &test_data1);
+            let v: ~[u8] = txn.get(&db, &test_key1).unwrap();
             assert!(v == test_data1, "Data written differs from data read");
 
-            let _ = txn.set(&db, test_key1.as_slice(), test_data2);
-            let v = txn.get(&db, test_key1.as_slice()).unwrap();
+            let _ = txn.set(&db, &test_key1, &test_data2);
+            let v: ~[u8] = txn.get(&db, &test_key1).unwrap();
             assert!(v == test_data2, "Data written differs from data read");
 
-            let _ = txn.del(&db, test_key1.as_slice());
-            assert!(txn.get(&db, test_key1.as_slice()).is_err(), "Key should be deleted");
+            let _ = txn.del(&db, &test_key1);
+            assert!(txn.get::<~[u8]>(&db, &test_key1).is_err(), "Key should be deleted");
         });
     }
 
@@ -1129,6 +1156,26 @@ mod test {
             let test_data2: ~[u8] = "value2".bytes().collect();
             // let test_data3: ~[u8] = "value3".bytes().collect();
             // let test_data4: ~[u8] = "value4".bytes().collect();
+
+            assert!(txn.get::<~[u8]>(&db, &test_key1).is_err(), "Key shouldn't exist yet");
+
+            let _ = txn.set(&db, &test_key1, &test_data1);
+            let v: ~[u8] = txn.get(&db, &test_key1).unwrap();
+            assert!(v == test_data1, "Data written differs from data read");
+
+            let _ = txn.set(&db, &test_key1, &test_data2);
+            let v: ~[u8] = txn.get(&db, &test_key1).unwrap();
+            assert!(v == test_data1, "It should still return first value");
+
+            let _ = txn.del_exact(&db, &test_key1, &test_data1);
+
+            let v: ~[u8] = txn.get(&db, &test_key1).unwrap();
+            assert!(v == test_data2, "It should return second value");
+            let _ = txn.del(&db, &test_key1);
+
+            assert!(txn.get::<~[u8]>(&db, &test_key1).is_err(), "Key shouldn't exist anymore!");
+        });
+    }
 
             assert!(txn.get(&db, test_key1.as_slice()).is_err(), "Key shouldn't exist yet");
 
