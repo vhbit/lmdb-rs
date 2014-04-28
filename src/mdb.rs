@@ -907,6 +907,10 @@ pub mod mdb {
             self.in_state(TxnStateNormal,
                           |t| t.del_value(db, key))
         }
+
+        pub fn new_cursor(&mut self, db: &Database) -> MDBResult<Cursor> {
+            Cursor::new(self, db)
+        }
     }
 
     pub struct Transaction {
@@ -963,6 +967,10 @@ pub mod mdb {
         pub fn del_exact(&mut self, db: &Database, key: &MDBIncomingValue, data: &MDBIncomingValue) -> MDBResult<()> {
             self.inner.del_exact_value(db, key, data)
         }
+
+        pub fn new_cursor(&mut self, db: &Database) -> MDBResult<Cursor> {
+            self.inner.new_cursor(db)
+        }
     }
 
     impl ReadonlyTransaction {
@@ -998,6 +1006,10 @@ pub mod mdb {
         pub fn get<T: MDBOutgoingValue>(&mut self, db: &Database, key: &MDBIncomingValue) -> MDBResult<T> {
             self.inner.get(db, key)
         }
+
+        pub fn new_cursor(&mut self, db: &Database) -> MDBResult<Cursor> {
+            self.inner.new_cursor(db)
+        }
     }
 
     impl Drop for Transaction {
@@ -1009,6 +1021,124 @@ pub mod mdb {
     impl Drop for ReadonlyTransaction {
         fn drop(&mut self) {
             self.inner.silent_abort();
+        }
+    }
+
+    pub struct Cursor {
+        handle: *MDB_cursor,
+    }
+
+    impl Cursor {
+        fn new(txn: &NativeTransaction, db: &Database) -> MDBResult<Cursor> {
+            let tmp: *MDB_cursor = std::ptr::RawPtr::null();
+            lift(unsafe { mdb_cursor_open(txn.handle, db.handle, &tmp) },
+                 || Cursor {handle: tmp })
+        }
+
+        fn move_to<'a>(&mut self, key: Option<&'a MDBIncomingValue>, op: MDB_cursor_op) -> MDBResult<()> {
+            // Even if we don't ask for any data and want only to set a position
+            // MDB still insists in writing back key and data to provided pointers
+            // it's actually not that big deal, considering no actual data copy happens
+            let data_val = unsafe {std::mem::init()};
+            let key_val = match key {
+                Some(k) => k.to_mdb_value(),
+                _ => unsafe {std::mem::init()}
+            };
+
+            lift_noret(unsafe { mdb_cursor_get(self.handle, &key_val, &data_val, op) })
+        }
+
+        pub fn to_first(&mut self) -> MDBResult<()> {
+            self.move_to(None, MDB_FIRST)
+        }
+
+        pub fn to_last(&mut self) -> MDBResult<()> {
+            self.move_to(None, MDB_LAST)
+        }
+
+        pub fn to_key(&mut self, key: &MDBIncomingValue) -> MDBResult<()> {
+            self.move_to(Some(key), MDB_SET)
+        }
+
+        pub fn to_gte_key(&mut self, key: &MDBIncomingValue) -> MDBResult<()> {
+            self.move_to(Some(key), MDB_SET_RANGE)
+        }
+
+        pub fn to_next_key(&mut self) -> MDBResult<()> {
+            self.move_to(None, MDB_NEXT_NODUP)
+        }
+
+        pub fn to_next_key_item(&mut self) -> MDBResult<()> {
+            self.move_to(None, MDB_NEXT_DUP)
+        }
+
+        pub fn to_prev_key(&mut self) -> MDBResult<()> {
+            self.move_to(None, MDB_PREV_NODUP)
+        }
+
+        pub fn to_prev_key_item(&mut self) -> MDBResult<()> {
+            self.move_to(None, MDB_PREV_DUP)
+        }
+
+        pub fn to_first_key_item(&mut self) -> MDBResult<()> {
+            self.move_to(None, MDB_FIRST_DUP)
+        }
+
+        pub fn to_last_key_item(&mut self) -> MDBResult<()> {
+            self.move_to(None, MDB_LAST_DUP)
+        }
+
+        pub fn get<T: MDBOutgoingValue, U: MDBOutgoingValue>(&mut self) -> MDBResult<(T, U)> {
+            unsafe {
+                let key_val: MDB_val = std::mem::init();
+                let data_val: MDB_val = std::mem::init();
+                lift(mdb_cursor_get(self.handle, &key_val, &data_val, MDB_GET_CURRENT),
+                     || (MDBOutgoingValue::from_mdb_value(&key_val), MDBOutgoingValue::from_mdb_value(&data_val)))
+            }
+        }
+
+        fn set_value<'a>(&mut self, key:Option<&'a MDBIncomingValue>, value: &MDBIncomingValue, flags: c_uint) -> MDBResult<()> {
+            let data_val = value.to_mdb_value();
+            let key_val = unsafe {
+                match  key {
+                    Some(k) => k.to_mdb_value(),
+                    _ => std::mem::init()
+                }
+            };
+
+            lift_noret(unsafe {mdb_cursor_put(self.handle, &key_val, &data_val, flags)})
+        }
+
+        pub fn set(&mut self, value: &MDBIncomingValue) -> MDBResult<()> {
+            self.set_value(None, value, MDB_CURRENT)
+        }
+
+        pub fn upsert(&mut self, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
+            self.set_value(Some(key), value, MDB_NOOVERWRITE)
+        }
+
+        fn del_value(&mut self, flags: c_uint) -> MDBResult<()> {
+            lift_noret(unsafe { mdb_cursor_del(self.handle, flags) })
+        }
+
+        pub fn del_single(&mut self) -> MDBResult<()> {
+            self.del_value(0)
+        }
+
+        pub fn del_all(&mut self) -> MDBResult<()> {
+            self.del_value(MDB_NODUPDATA)
+        }
+
+        pub fn item_count(&self) -> MDBResult<size_t> {
+            let tmp: size_t = 0;
+            lift(unsafe {mdb_cursor_count(self.handle, &tmp)},
+                 || tmp)
+        }
+    }
+
+    impl Drop for Cursor {
+        fn drop(&mut self) {
+            unsafe { mdb_cursor_close(self.handle) };
         }
     }
 }
@@ -1177,25 +1307,51 @@ mod test {
         });
     }
 
-            assert!(txn.get(&db, test_key1.as_slice()).is_err(), "Key shouldn't exist yet");
+    #[test]
+    fn test_cursors() {
 
-            let _ = txn.set(&db, test_key1.as_slice(), test_data1.as_slice());
-            let v = txn.get(&db, test_key1.as_slice()).unwrap();
-            assert!(v == test_data1, "Data written differs from data read");
+        let path = Path::new("cursors");
+        test_db_in_path(&path, || {
+            let mut env = Environment::new().unwrap();
+            let _ = env.open(&path, 0, 0o755);
+            let _ = env.set_maxdbs(5);
 
-            let _ = txn.set(&db, test_key1.as_slice(), test_data2);
-            let v = txn.get(&db, test_key1.as_slice()).unwrap();
-            assert!(v == test_data1, "It should still return first value");
+            let db = env.get_default_db(consts::MDB_DUPSORT).unwrap();
+            let mut txn = env.new_transaction().unwrap();
 
-            let _ = txn.del_exact(&db, test_key1.as_slice(), test_data1.as_slice());
+            let test_key1: ~[u8] = "key1".bytes().collect();
+            let test_key2: ~[u8] = "key2".bytes().collect();
+            let test_values: Vec<~[u8]> = vec!("value1", "value2", "value3", "value4").iter().map(|x| x.bytes().collect()).collect();
 
-            let v = txn.get(&db, test_key1.as_slice()).unwrap();
-            assert!(v == test_data2, "It should return second value");
-            let _ = txn.del(&db, test_key1.as_slice());
+            assert!(txn.get::<~[u8]>(&db, &test_key1).is_err(), "Key shouldn't exist yet");
 
-            assert!(txn.get(&db, test_key1.as_slice()).is_err(), "Key shouldn't exist anymore!");
+            for t in test_values.iter() {
+                let _ = txn.set(&db, &test_key1, t);
+                let _ = txn.set(&db, &test_key2, t);
+            }
+
+            let mut cursor = txn.new_cursor(&db).unwrap();
+            //assert!(cursor.to_key(&test_key1).is_ok());
+            assert!(cursor.to_first().is_ok());
+
+            assert!(cursor.to_key(&test_key1).is_ok());
+            assert!(cursor.item_count().unwrap() == 4);
+
+            assert!(cursor.del_single().is_ok());
+            assert!(cursor.item_count().unwrap() == 3);
+
+            assert!(cursor.to_key(&test_key1).is_ok());
+            let new_value: ~[u8] = "testme".bytes().collect();
+
+            assert!(cursor.set(&new_value).is_ok());
+            let (_, v): (~[u8], ~[u8]) = cursor.get().unwrap();
+
+            // NOTE: this asserting will work once new_value is
+            // of the same length as it is inplace change
+            assert!(v == new_value);
+
+            assert!(cursor.del_all().is_ok());
+            assert!(cursor.to_key(&test_key1).is_err());
         });
-    }
-
     }
 }
