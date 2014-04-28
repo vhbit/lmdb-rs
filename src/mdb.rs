@@ -84,7 +84,7 @@ pub mod mdb {
     #[cfg(target_os = "freebsd")]
     #[cfg(target_os = "android")]
     mod os {
-        use libc::{c_ulong, c_int, mode_t, pid_t};
+        use libc::{c_ulong, c_uint, c_int, mode_t, pid_t};
 
         pub use pthread_mutex_t = self::mutex::pthread_mutex_t;
 
@@ -125,7 +125,7 @@ pub mod mdb {
         }
 
         #[cfg(target_os = "linux")]
-        mod os {
+        mod mutex {
             use libc;
 
             // minus 8 because we have an 'align' field
@@ -145,7 +145,7 @@ pub mod mdb {
 
         }
         #[cfg(target_os = "android")]
-        mod os {
+        mod mutex {
             use libc;
 
             pub struct pthread_mutex_t { value: libc::c_int }
@@ -160,8 +160,11 @@ pub mod mdb {
         pub type mdb_mode_t = c_int;
         pub type mdb_filehandle_t = *c_void;
         pub type pthread_key_t = u32;
-        pub type pthread_mutex_t = c_int;
         pub type MDB_PID_T = c_uint;
+
+        mod mutex {
+            pub type pthread_mutex_t = libc::c_int;
+        }
     }
 
     type pgno_t = MDB_ID;
