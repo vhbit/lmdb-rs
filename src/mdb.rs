@@ -985,79 +985,166 @@ pub mod mdb {
 
 #[cfg(test)]
 mod test {
-    use super::mdb::{Environment};
+    use std::io::fs;
+    use std::rt::unwind::Unwinder;
     use std::path::Path;
+
     use super::mdb::consts;
+    use super::mdb::{Environment};
+
+    #[allow(unused_must_use)]
+    fn test_db_in_path(path: &Path, f: ||) {
+        // Delete dir to be sure nothing existed before test
+        if path.exists() {
+            fs::rmdir_recursive(path);
+        };
+
+        let mut unwinder = Unwinder::new();
+        unwinder.try(f);
+
+        fs::rmdir_recursive(path);
+    }
 
     #[test]
     fn test_environment() {
-        // It looks pretty tree like, because it is the simplest test and
-        // it expected to produce easy traceable results
-        match Environment::new() {
-            Ok(mut env) => {
-                match env.get_maxreaders() {
-                    Ok(readers) => assert!(readers != 0, "Max number of readers couldn't be 0"),
-                    Err(err) => fail!("Failed to get max number of readers: {}", err.message)
-                };
+        let path = Path::new("test-lmdb");
+        test_db_in_path(&path, || {
+            // It looks pretty tree like, because it is the simplest test and
+            // it expected to produce easy traceable results
+            match Environment::new() {
+                Ok(mut env) => {
+                    match env.get_maxreaders() {
+                        Ok(readers) => assert!(readers != 0, "Max number of readers couldn't be 0"),
+                        Err(err) => fail!("Failed to get max number of readers: {}", err.message)
+                    };
 
-                let test_readers = 33;
-                match env.set_maxreaders(test_readers) {
-                    Ok(_) => {
-                        match env.get_maxreaders() {
-                            Ok(readers) => assert!(readers == test_readers, "Get readers != set readers"),
-                            Err(err) => fail!("Failed to get max number of readers: {}", err.message)
-                        }
-                    },
-                    Err(err) => fail!("Failed to set max number of readers: {}", err.message)
-                };
+                    let test_readers = 33;
+                    match env.set_maxreaders(test_readers) {
+                        Ok(_) => {
+                            match env.get_maxreaders() {
+                                Ok(readers) => assert!(readers == test_readers, "Get readers != set readers"),
+                                Err(err) => fail!("Failed to get max number of readers: {}", err.message)
+                            }
+                        },
+                        Err(err) => fail!("Failed to set max number of readers: {}", err.message)
+                    };
 
-                let path = Path::new("test_lmdb");
-                match env.open(&path, 0, 0o755) {
-                    Ok(..) => {
-                        match env.sync(true) {
-                            Ok(..) => (),
-                            Err(err) => fail!("Failed to sync: {}", err.message)
-                        };
+                    match env.open(&path, 0, 0o755) {
+                        Ok(..) => {
+                            match env.sync(true) {
+                                Ok(..) => (),
+                                Err(err) => fail!("Failed to sync: {}", err.message)
+                            };
 
-                        let test_flags = consts::MDB_NOMEMINIT | consts::MDB_NOMETASYNC;
+                            let test_flags = consts::MDB_NOMEMINIT | consts::MDB_NOMETASYNC;
 
-                        match env.set_flags(test_flags, true) {
-                            Ok(_) => {
-                                match env.get_flags() {
-                                    Ok(new_flags) => assert!((new_flags & test_flags) == test_flags, "Get flags != set flags"),
-                                    Err(err) => fail!("Failed to get flags: {}", err.message)
-                                }
-                            },
-                            Err(err) => fail!("Failed to set flags: {}", err.message)
-                        };
+                            match env.set_flags(test_flags, true) {
+                                Ok(_) => {
+                                    match env.get_flags() {
+                                        Ok(new_flags) => assert!((new_flags & test_flags) == test_flags, "Get flags != set flags"),
+                                        Err(err) => fail!("Failed to get flags: {}", err.message)
+                                    }
+                                },
+                                Err(err) => fail!("Failed to set flags: {}", err.message)
+                            };
 
-                        match env.get_default_db(0) {
-                            Ok(db) => {
-                                let key: ~[u8] = "hello".bytes().collect();
-                                let value: ~[u8] = "world".bytes().collect();
+                            match env.get_default_db(0) {
+                                Ok(db) => {
+                                    let key: ~[u8] = "hello".bytes().collect();
+                                    let value: ~[u8] = "world".bytes().collect();
 
-                                match env.new_transaction() {
-                                    Ok(mut tnx) => {
-                                        match tnx.set(&db, key.as_slice(), value.as_slice()) {
-                                            Ok(_) => {
-                                                match tnx.get(&db, key.as_slice()) {
-                                                    Ok(v) => assert!(v == value, "Written {:?} and read {:?}", value.as_slice(), v.as_slice()),
-                                                    Err(err) => fail!("Failed to read value: {}", err.message)
-                                                }
-                                            },
-                                            Err(err) => fail!("Failed to write value: {}", err.message)
-                                        }
-                                    },
-                                    Err(err) => fail!("Failed to create transaction: {}", err.message)
-                                }
-                            },
-                            Err(err) => fail!("Failed to get default database: {}", err.message)
-                        }
-                    },
-                    Err(err) => fail!("Failed to open path {}: {}", path.display(), err.message)
-                }
-            },
-            Err(err) => fail!("Failed to initialize environment: {}", err.message)
-        };
+                                    match env.new_transaction() {
+                                        Ok(mut tnx) => {
+                                            match tnx.set(&db, key.as_slice(), value.as_slice()) {
+                                                Ok(_) => {
+                                                    match tnx.get(&db, key.as_slice()) {
+                                                        Ok(v) => assert!(v == value, "Written {:?} and read {:?}", value.as_slice(), v.as_slice()),
+                                                        Err(err) => fail!("Failed to read value: {}", err.message)
+                                                    }
+                                                },
+                                                Err(err) => fail!("Failed to write value: {}", err.message)
+                                            }
+                                        },
+                                        Err(err) => fail!("Failed to create transaction: {}", err.message)
+                                    }
+                                },
+                                Err(err) => fail!("Failed to get default database: {}", err.message)
+                            }
+                        },
+                        Err(err) => fail!("Failed to open path {}: {}", path.display(), err.message)
+                    }
+                },
+                Err(err) => fail!("Failed to initialize environment: {}", err.message)
+            };
+        });
+    }
+
+    #[test]
+    fn test_single_values() {
+        let path = Path::new("single-values");
+        test_db_in_path(&path, || {
+            let mut env = Environment::new().unwrap();
+            let _ = env.open(&path, 0, 0o755);
+            let _ = env.set_maxdbs(5);
+
+            let db = env.get_default_db(0).unwrap();
+            let mut txn = env.new_transaction().unwrap();
+
+            let test_key1: ~[u8] = "key1".bytes().collect();
+            let test_data1: ~[u8] = "value1".bytes().collect();
+            let test_data2: ~[u8] = "value2".bytes().collect();
+
+            assert!(txn.get(&db, test_key1.as_slice()).is_err(), "Key shouldn't exist yet");
+
+            let _ = txn.set(&db, test_key1.as_slice(), test_data1.as_slice());
+            let v = txn.get(&db, test_key1.as_slice()).unwrap();
+            assert!(v == test_data1, "Data written differs from data read");
+
+            let _ = txn.set(&db, test_key1.as_slice(), test_data2);
+            let v = txn.get(&db, test_key1.as_slice()).unwrap();
+            assert!(v == test_data2, "Data written differs from data read");
+
+            let _ = txn.del(&db, test_key1.as_slice());
+            assert!(txn.get(&db, test_key1.as_slice()).is_err(), "Key should be deleted");
+        });
+    }
+
+    #[test]
+    fn test_multiple_values() {
+        let path = Path::new("multiple-values");
+        test_db_in_path(&path, || {
+            let mut env = Environment::new().unwrap();
+            let _ = env.open(&path, 0, 0o755);
+            let _ = env.set_maxdbs(5);
+
+            let db = env.get_default_db(consts::MDB_DUPSORT).unwrap();
+            let mut txn = env.new_transaction().unwrap();
+
+            let test_key1: ~[u8] = "key1".bytes().collect();
+            let test_data1: ~[u8] = "value1".bytes().collect();
+            let test_data2: ~[u8] = "value2".bytes().collect();
+            // let test_data3: ~[u8] = "value3".bytes().collect();
+            // let test_data4: ~[u8] = "value4".bytes().collect();
+
+            assert!(txn.get(&db, test_key1.as_slice()).is_err(), "Key shouldn't exist yet");
+
+            let _ = txn.set(&db, test_key1.as_slice(), test_data1.as_slice());
+            let v = txn.get(&db, test_key1.as_slice()).unwrap();
+            assert!(v == test_data1, "Data written differs from data read");
+
+            let _ = txn.set(&db, test_key1.as_slice(), test_data2);
+            let v = txn.get(&db, test_key1.as_slice()).unwrap();
+            assert!(v == test_data1, "It should still return first value");
+
+            let _ = txn.del_exact(&db, test_key1.as_slice(), test_data1.as_slice());
+
+            let v = txn.get(&db, test_key1.as_slice()).unwrap();
+            assert!(v == test_data2, "It should return second value");
+            let _ = txn.del(&db, test_key1.as_slice());
+
+            assert!(txn.get(&db, test_key1.as_slice()).is_err(), "Key shouldn't exist anymore!");
+        });
+    }
+
     }
 }
