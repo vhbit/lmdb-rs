@@ -494,6 +494,12 @@ pub mod mdb {
         }
     }
 
+    impl std::fmt::Show for MDBError {
+        fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fmt.buf.write_str(format!("MDBErr: {}", self.message))
+        }
+    }
+
     pub type MDBResult<T> = Result<T, MDBError>;
 
     fn error_msg(code: c_int) -> ~str {
