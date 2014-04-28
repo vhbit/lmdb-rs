@@ -967,6 +967,10 @@ pub mod mdb {
         pub fn renew(&mut self) -> MDBResult<()> {
             self.inner.renew()
         }
+
+        pub fn get(&mut self, db: &Database, key: &[u8]) -> MDBResult<~[u8]> {
+            self.inner.get(db, key)
+        }
     }
 
     impl Drop for Transaction {
