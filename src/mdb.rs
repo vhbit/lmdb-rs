@@ -858,16 +858,21 @@ pub mod mdb {
                           |t| t.set_value(db, key, value))
         }
 
-
+        /// Deletes all values by key
         fn del_value(&self, db: &Database, key: &[u8]) -> MDBResult<()> {
             unsafe {
-                let key_val = MDB_val {
-                    mv_data: std::cast::transmute(key.as_ptr()),
-                    mv_size: key.len() as u64
-                };
-
-                // FIXME: transmit also data value
+                let key_val = MDB_val::from_slice(key);
                 lift_noret(mdb_del(self.handle, db.handle, &key_val, std::ptr::RawPtr::null()))
+            }
+        }
+
+        /// If duplicate keys are allowed deletes value for key which is equal to data
+        fn del_exact_value(&self, db: &Database, key: &[u8], data: &[u8]) -> MDBResult<()> {
+            unsafe {
+                let key_val = MDB_val::from_slice(key);
+                let data_val = MDB_val::from_slice(data);
+
+                lift_noret(mdb_del(self.handle, db.handle, &key_val, &data_val))
             }
         }
 
@@ -926,6 +931,10 @@ pub mod mdb {
 
         pub fn del(&mut self, db: &Database, key: &[u8]) -> MDBResult<()> {
             self.inner.del(db, key)
+        }
+
+        pub fn del_exact(&mut self, db: &Database, key: &[u8], data: &[u8]) -> MDBResult<()> {
+            self.inner.del_exact_value(db, key, data)
         }
     }
 
