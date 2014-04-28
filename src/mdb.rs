@@ -841,12 +841,15 @@ pub mod mdb {
         }
 
         fn set_value(&self, db: &Database, key: &[u8], value: &[u8]) -> MDBResult<()> {
+            self.set_value_with_flags(db, key, value, 0)
+        }
+
+        fn set_value_with_flags(&self, db: &Database, key: &[u8], value: &[u8], flags: c_uint) -> MDBResult<()> {
             unsafe {
                 let key_val = MDB_val::from_slice(key);
                 let data_val = MDB_val::from_slice(value);
 
-                // FIXME: supply set flags
-                lift_noret(mdb_put(self.handle, db.handle, &key_val, &data_val, 0))
+                lift_noret(mdb_put(self.handle, db.handle, &key_val, &data_val, flags))
             }
         }
 
