@@ -47,13 +47,13 @@ pub mod mdb {
         pub static MDB_INVALID_STATE: c_int = -30000;
 
         // Write flags
-        pub static MDB_NOOVERWRITE: c_int = 0x10;
-        pub static MDB_NODUPDATA: c_int = 0x20;
-        pub static MDB_CURRENT: c_int = 0x40;
-        pub static MDB_RESERVE: c_int = 0x10000;
-        pub static MDB_APPEND: c_int = 0x20000;
-        pub static MDB_APPENDDUP: c_int = 0x40000;
-        pub static MDB_MULTIPLE: c_int = 0x80000;
+        pub static MDB_NOOVERWRITE: c_uint = 0x10;
+        pub static MDB_NODUPDATA: c_uint = 0x20;
+        pub static MDB_CURRENT: c_uint = 0x40;
+        pub static MDB_RESERVE: c_uint = 0x10000;
+        pub static MDB_APPEND: c_uint = 0x20000;
+        pub static MDB_APPENDDUP: c_uint = 0x40000;
+        pub static MDB_MULTIPLE: c_uint = 0x80000;
 
         // Database flags
         pub static MDB_REVERSEKEY: c_uint = 0x02;
