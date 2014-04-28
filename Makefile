@@ -15,14 +15,14 @@ all: mdb lib tests doc
 mdb:
 	cd $(LMDB_ROOT) && make liblmdb.a
 
-lib: $(SRC)
+lib: mdb $(SRC)
 	$(RUSTC) $(RUSTC_FLAGS) --out-dir $(BUILD_DIR) $(CRATE_MAIN)
 
 doc: $(SRC)
 	mkdir -p doc
 	$(RUSTDOC) -o doc $(CRATE_MAIN)
 
-tests: $(SRC)
+tests: mdb $(SRC)
 	mkdir -p $(BUILD_DIR)
 	$(RUSTC) $(RUSTC_FLAGS) --test $(CRATE_MAIN) -o $(BUILD_DIR)/test_runner
 	@echo "=============================================="
