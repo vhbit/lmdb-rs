@@ -755,7 +755,7 @@ pub mod mdb {
             unsafe {
                 MDB_val {
                     mv_data: std::cast::transmute(self.as_ptr()),
-                    mv_size: self.len() as u64
+                    mv_size: self.len() as size_t
                 }
             }
         }
@@ -766,6 +766,31 @@ pub mod mdb {
             unsafe {
                 std::slice::raw::from_buf_raw(value.mv_data as *u8, value.mv_size as uint)
             }
+        }
+    }
+
+    impl MDBIncomingValue for ~str {
+        fn to_mdb_value(&self) -> MDB_val {
+            unsafe {
+                let t = self.as_slice();
+                MDB_val {
+                    mv_data: std::cast::transmute(t.as_ptr()),
+                    mv_size: t.len() as size_t
+                }
+            }
+        }
+    }
+
+    impl MDBOutgoingValue for ~str {
+        fn from_mdb_value(value: &MDB_val) -> ~str {
+            unsafe {
+                std::str::raw::from_buf_len(std::cast::transmute(value.mv_data), value.mv_size as uint)
+            }
+        }
+    }
+
+    impl MDBOutgoingValue for () {
+        fn from_mdb_value(_: &MDB_val) {
         }
     }
 
@@ -1211,14 +1236,14 @@ mod test {
 
                             match env.get_default_db(0) {
                                 Ok(db) => {
-                                    let key: ~[u8] = "hello".bytes().collect();
-                                    let value: ~[u8] = "world".bytes().collect();
+                                    let key = ~"hello";
+                                    let value = ~"world";
 
                                     match env.new_transaction() {
                                         Ok(mut tnx) => {
                                             match tnx.set(&db, &key, &value) {
                                                 Ok(_) => {
-                                                    match tnx.get::<~[u8]>(&db, &key) {
+                                                    match tnx.get::<~str>(&db, &key) {
                                                         Ok(v) => assert!(v == value, "Written {:?} and read {:?}", value.as_slice(), v.as_slice()),
                                                         Err(err) => fail!("Failed to read value: {}", err.message)
                                                     }
@@ -1251,22 +1276,22 @@ mod test {
             let db = env.get_default_db(0).unwrap();
             let mut txn = env.new_transaction().unwrap();
 
-            let test_key1: ~[u8] = "key1".bytes().collect();
-            let test_data1: ~[u8] = "value1".bytes().collect();
-            let test_data2: ~[u8] = "value2".bytes().collect();
+            let test_key1 = ~"key1";
+            let test_data1 = ~"value1";
+            let test_data2 = ~"value2";
 
-            assert!(txn.get::<~[u8]>(&db, &test_key1).is_err(), "Key shouldn't exist yet");
+            assert!(txn.get::<()>(&db, &test_key1).is_err(), "Key shouldn't exist yet");
 
             let _ = txn.set(&db, &test_key1, &test_data1);
-            let v: ~[u8] = txn.get(&db, &test_key1).unwrap();
+            let v: ~str = txn.get(&db, &test_key1).unwrap();
             assert!(v == test_data1, "Data written differs from data read");
 
             let _ = txn.set(&db, &test_key1, &test_data2);
-            let v: ~[u8] = txn.get(&db, &test_key1).unwrap();
+            let v: ~str = txn.get(&db, &test_key1).unwrap();
             assert!(v == test_data2, "Data written differs from data read");
 
             let _ = txn.del(&db, &test_key1);
-            assert!(txn.get::<~[u8]>(&db, &test_key1).is_err(), "Key should be deleted");
+            assert!(txn.get::<()>(&db, &test_key1).is_err(), "Key should be deleted");
         });
     }
 
@@ -1281,29 +1306,27 @@ mod test {
             let db = env.get_default_db(consts::MDB_DUPSORT).unwrap();
             let mut txn = env.new_transaction().unwrap();
 
-            let test_key1: ~[u8] = "key1".bytes().collect();
-            let test_data1: ~[u8] = "value1".bytes().collect();
-            let test_data2: ~[u8] = "value2".bytes().collect();
-            // let test_data3: ~[u8] = "value3".bytes().collect();
-            // let test_data4: ~[u8] = "value4".bytes().collect();
+            let test_key1 = ~"key1";
+            let test_data1 = ~"value1";
+            let test_data2 = ~"value2";
 
-            assert!(txn.get::<~[u8]>(&db, &test_key1).is_err(), "Key shouldn't exist yet");
+            assert!(txn.get::<()>(&db, &test_key1).is_err(), "Key shouldn't exist yet");
 
             let _ = txn.set(&db, &test_key1, &test_data1);
-            let v: ~[u8] = txn.get(&db, &test_key1).unwrap();
+            let v: ~str = txn.get(&db, &test_key1).unwrap();
             assert!(v == test_data1, "Data written differs from data read");
 
             let _ = txn.set(&db, &test_key1, &test_data2);
-            let v: ~[u8] = txn.get(&db, &test_key1).unwrap();
+            let v: ~str = txn.get(&db, &test_key1).unwrap();
             assert!(v == test_data1, "It should still return first value");
 
             let _ = txn.del_exact(&db, &test_key1, &test_data1);
 
-            let v: ~[u8] = txn.get(&db, &test_key1).unwrap();
+            let v: ~str = txn.get(&db, &test_key1).unwrap();
             assert!(v == test_data2, "It should return second value");
             let _ = txn.del(&db, &test_key1);
 
-            assert!(txn.get::<~[u8]>(&db, &test_key1).is_err(), "Key shouldn't exist anymore!");
+            assert!(txn.get::<()>(&db, &test_key1).is_err(), "Key shouldn't exist anymore!");
         });
     }
 
@@ -1319,11 +1342,11 @@ mod test {
             let db = env.get_default_db(consts::MDB_DUPSORT).unwrap();
             let mut txn = env.new_transaction().unwrap();
 
-            let test_key1: ~[u8] = "key1".bytes().collect();
-            let test_key2: ~[u8] = "key2".bytes().collect();
-            let test_values: Vec<~[u8]> = vec!("value1", "value2", "value3", "value4").iter().map(|x| x.bytes().collect()).collect();
+            let test_key1 = ~"key1";
+            let test_key2 = ~"key2";
+            let test_values: Vec<~str> = vec!(~"value1", ~"value2", ~"value3", ~"value4");
 
-            assert!(txn.get::<~[u8]>(&db, &test_key1).is_err(), "Key shouldn't exist yet");
+            assert!(txn.get::<()>(&db, &test_key1).is_err(), "Key shouldn't exist yet");
 
             for t in test_values.iter() {
                 let _ = txn.set(&db, &test_key1, t);
@@ -1331,7 +1354,6 @@ mod test {
             }
 
             let mut cursor = txn.new_cursor(&db).unwrap();
-            //assert!(cursor.to_key(&test_key1).is_ok());
             assert!(cursor.to_first().is_ok());
 
             assert!(cursor.to_key(&test_key1).is_ok());
@@ -1341,10 +1363,10 @@ mod test {
             assert!(cursor.item_count().unwrap() == 3);
 
             assert!(cursor.to_key(&test_key1).is_ok());
-            let new_value: ~[u8] = "testme".bytes().collect();
+            let new_value = ~"testme";
 
             assert!(cursor.set(&new_value).is_ok());
-            let (_, v): (~[u8], ~[u8]) = cursor.get().unwrap();
+            let (_, v): ((), ~str) = cursor.get().unwrap();
 
             // NOTE: this asserting will work once new_value is
             // of the same length as it is inplace change
@@ -1352,6 +1374,8 @@ mod test {
 
             assert!(cursor.del_all().is_ok());
             assert!(cursor.to_key(&test_key1).is_err());
+
+            assert!(cursor.to_key(&test_key2).is_ok());
         });
     }
 }
