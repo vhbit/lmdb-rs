@@ -42,6 +42,30 @@ impl std::fmt::Show for MDBError {
 
 pub type MDBResult<T> = Result<T, MDBError>;
 
+pub enum TypeKeeper<T> {_TypeKeeper}
+
+pub trait FlagsFor {
+    fn flags(TypeKeeper<Self>) -> c_uint;
+}
+
+pub trait _Cursor {
+    fn new_with_native(cursor: Cursor) -> Self;
+}
+
+pub trait _DB<C: _Cursor> {
+    fn new_with_native(db: Database) -> Self;
+
+    fn inner<'a>(&'a mut self) -> &'a Database;
+
+    fn new_cursor(&mut self, txn: &_Txn) -> MDBResult<C> {
+        self.inner().new_cursor(txn)
+    }
+}
+
+pub trait _Txn {
+    fn handle(&self) -> *MDB_txn;
+}
+
 /// Database
 pub struct Database {
     handle: MDB_dbi,
@@ -50,6 +74,14 @@ pub struct Database {
 impl Database {
     fn new_with_handle(handle: MDB_dbi) -> Database {
         Database { handle: handle }
+    }
+
+    fn new_cursor<C: _Cursor>(&mut self, txn: &_Txn) -> MDBResult<C> {
+        unsafe {
+            let c: *MDB_cursor = std::ptr::RawPtr::null();
+            lift(unsafe {mdb_cursor_open(txn.handle(), self.handle, &c)},
+                 || _Cursor::new_with_native(Cursor::new_with_handle(c)))
+        }
     }
 }
 
@@ -201,6 +233,7 @@ impl Environment {
              || NativeTransaction::new_with_handle(handle))
     }
 
+    /*
     /// Creates a new read-write transaction
     pub fn new_transaction(&mut self) -> MDBResult<Transaction> {
         self.create_transaction(None, 0)
@@ -212,27 +245,28 @@ impl Environment {
         self.create_transaction(None, MDB_RDONLY)
             .and_then(|txn| Ok(ReadonlyTransaction::new_with_native(txn)))
     }
+    */
 
-    fn get_db_by_name(&mut self, c_name: *c_char, flags: c_uint) -> MDBResult<Database> {
+    fn get_db_by_name<C:_Cursor, T: _DB<C>>(&mut self, c_name: *c_char, flags: c_uint) -> MDBResult<T> {
         let dbi: MDB_dbi = 0;
 
         self.create_transaction(None, 0)
             .and_then(|txn| lift(unsafe { mdb_dbi_open(txn.handle, c_name, flags, &dbi)}, || txn) )
             .and_then(|mut t| t.commit() )
-            .and_then(|_| Ok(Database::new_with_handle(dbi)))
+            .and_then(|_| Ok(_DB::new_with_native(Database::new_with_handle(dbi))))
     }
 
     /// Returns or creates database with name
     ///
     /// Note: set_maxdbis should be called before
-    pub fn get_or_create_db(&mut self, name: &str, flags: c_uint) -> MDBResult<Database> {
+    pub fn get_or_create_db<C:_Cursor, T: _DB<C>>(&mut self, name: &str, flags: c_uint) -> MDBResult<T> {
         name.with_c_str(|c_name| {
             self.get_db_by_name(c_name, flags)
         })
     }
 
     /// Returns default database
-    pub fn get_default_db(&mut self, flags: c_uint) -> MDBResult<Database> {
+    pub fn get_default_db<C:_Cursor, T: _DB<C>>(&mut self, flags: c_uint) -> MDBResult<T> {
         self.get_db_by_name(std::ptr::RawPtr::null(), flags)
     }
 }
@@ -521,6 +555,10 @@ pub struct Cursor {
 }
 
 impl Cursor {
+    fn new_with_handle(handle: *MDB_cursor) -> Cursor {
+        Cursor {handle: handle}
+    }
+
     fn new(txn: &NativeTransaction, db: &Database) -> MDBResult<Cursor> {
         let tmp: *MDB_cursor = std::ptr::RawPtr::null();
         lift(unsafe { mdb_cursor_open(txn.handle, db.handle, &tmp) },
@@ -654,6 +692,7 @@ impl Drop for Cursor {
     }
 }
 
+/*
 #[cfg(test)]
 mod test {
     use std::io::fs;
@@ -864,3 +903,4 @@ mod test {
         });
     }
 }
+*/
