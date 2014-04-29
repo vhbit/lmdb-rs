@@ -322,6 +322,7 @@ impl NativeTransaction {
              || NativeTransaction::new_with_handle(out))
     }
 
+    /// Used in Drop to switch state
     fn silent_abort(&mut self) {
         match self.state {
             TxnStateInvalid => (),
@@ -369,6 +370,8 @@ impl NativeTransaction {
         }
     }
 
+    /// Sets a new value for key, in case of enabled duplicates
+    /// it actually appends a new value
     pub fn set(&mut self, db: &Database, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
         self.in_state(TxnStateNormal,
                       |t| t.set_value(db, key, value))
@@ -383,6 +386,7 @@ impl NativeTransaction {
     }
 
     /// If duplicate keys are allowed deletes value for key which is equal to data
+    // FIXME: it should check state too
     fn del_exact_value(&self, db: &Database, key: &MDBIncomingValue, data: &MDBIncomingValue) -> MDBResult<()> {
         unsafe {
             let key_val = key.to_mdb_value();
@@ -392,11 +396,13 @@ impl NativeTransaction {
         }
     }
 
+    /// Deletes all values for key
     pub fn del(&mut self, db: &Database, key: &MDBIncomingValue) -> MDBResult<()> {
         self.in_state(TxnStateNormal,
                       |t| t.del_value(db, key))
     }
 
+    /// creates a new cursor in current transaction tied to db
     pub fn new_cursor(&mut self, db: &Database) -> MDBResult<Cursor> {
         Cursor::new(self, db)
     }
@@ -462,6 +468,12 @@ impl Transaction {
     }
 }
 
+impl Drop for Transaction {
+    fn drop(&mut self) {
+        self.inner.silent_abort();
+    }
+}
+
 impl ReadonlyTransaction {
     fn new_with_native(txn: NativeTransaction) -> ReadonlyTransaction {
         ReadonlyTransaction {
@@ -501,12 +513,6 @@ impl ReadonlyTransaction {
     }
 }
 
-impl Drop for Transaction {
-    fn drop(&mut self) {
-        self.inner.silent_abort();
-    }
-}
-
 impl Drop for ReadonlyTransaction {
     fn drop(&mut self) {
         self.inner.silent_abort();
@@ -537,46 +543,60 @@ impl Cursor {
         lift_noret(unsafe { mdb_cursor_get(self.handle, &key_val, &data_val, op) })
     }
 
+    /// Moves cursor to first entry
     pub fn to_first(&mut self) -> MDBResult<()> {
         self.move_to(None, MDB_FIRST)
     }
 
+    /// Moves cursor to last entry
     pub fn to_last(&mut self) -> MDBResult<()> {
         self.move_to(None, MDB_LAST)
     }
 
+    /// Moves cursor to first entry for key if it exists
     pub fn to_key(&mut self, key: &MDBIncomingValue) -> MDBResult<()> {
         self.move_to(Some(key), MDB_SET)
     }
 
+    /// Moves cursor to first entry for key greater than
+    /// or equal to ke
     pub fn to_gte_key(&mut self, key: &MDBIncomingValue) -> MDBResult<()> {
         self.move_to(Some(key), MDB_SET_RANGE)
     }
 
+    /// Moves cursor to next key, i.e. skip items
+    /// with duplicate keys
     pub fn to_next_key(&mut self) -> MDBResult<()> {
         self.move_to(None, MDB_NEXT_NODUP)
     }
 
+    /// Moves cursor to next item with the same key as current
     pub fn to_next_key_item(&mut self) -> MDBResult<()> {
         self.move_to(None, MDB_NEXT_DUP)
     }
 
+    /// Moves cursor to prev entry, i.e. skips items
+    /// with duplicate keys
     pub fn to_prev_key(&mut self) -> MDBResult<()> {
         self.move_to(None, MDB_PREV_NODUP)
     }
 
+    /// Moves cursor to prev item with the same key as current
     pub fn to_prev_key_item(&mut self) -> MDBResult<()> {
         self.move_to(None, MDB_PREV_DUP)
     }
 
+    /// Moves cursor to first item with the same key as current
     pub fn to_first_key_item(&mut self) -> MDBResult<()> {
         self.move_to(None, MDB_FIRST_DUP)
     }
 
+    /// Moves cursor to last item with the same key as current
     pub fn to_last_key_item(&mut self) -> MDBResult<()> {
         self.move_to(None, MDB_LAST_DUP)
     }
 
+    /// Retrieves current key/value as tuple
     pub fn get<T: MDBOutgoingValue, U: MDBOutgoingValue>(&mut self) -> MDBResult<(T, U)> {
         unsafe {
             let key_val: MDB_val = std::mem::init();
@@ -598,10 +618,13 @@ impl Cursor {
         lift_noret(unsafe {mdb_cursor_put(self.handle, &key_val, &data_val, flags)})
     }
 
+    /// Overwrites value for current item
+    /// Note: overwrites max cur_value.len() bytes
     pub fn set(&mut self, value: &MDBIncomingValue) -> MDBResult<()> {
         self.set_value(None, value, MDB_CURRENT)
     }
 
+    /// Adds a new value if it doesn't exist yet
     pub fn upsert(&mut self, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
         self.set_value(Some(key), value, MDB_NOOVERWRITE)
     }
@@ -610,14 +633,17 @@ impl Cursor {
         lift_noret(unsafe { mdb_cursor_del(self.handle, flags) })
     }
 
+    /// Deletes only current item
     pub fn del_single(&mut self) -> MDBResult<()> {
         self.del_value(0)
     }
 
+    /// Deletes all items with same key as current
     pub fn del_all(&mut self) -> MDBResult<()> {
         self.del_value(MDB_NODUPDATA)
     }
 
+    /// Returns count of items with the same key as current
     pub fn item_count(&self) -> MDBResult<size_t> {
         let tmp: size_t = 0;
         lift(unsafe {mdb_cursor_count(self.handle, &tmp)},
