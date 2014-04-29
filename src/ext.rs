@@ -10,155 +10,99 @@ trait _RW {
 trait _RO {
 }
 
-pub struct ReadonlyEnv {
-    native: base::Environment,
+impl _RW for base::Database {
 }
 
-impl ReadonlyEnv {
-    pub fn get_or_create_ro_db<C: _Cursor, T: _DB<C>+_RO>(&mut self, name: &str) -> MDBResult<T> {
-        self.native.get_or_create_db(name, 0)
-    }
-
-    pub fn get_ro_default_db<C: _Cursor, T: _DB<C>+_RO>(&mut self) -> MDBResult<T> {
-        self.native.get_default_db(0)
-    }
+trait ROEnv {
+    fn get_or_create_ro_db<T: RODB_>(&mut self, name: &str) -> MDBResult<T>;
+    fn get_ro_default_db<T: RODB_>(&mut self) -> MDBResult<T>;
 }
 
-
-pub struct Env {
-    native: base::Environment,
+trait RWEnv: ROEnv {
+    fn get_or_create_rw_db<T: _DB>(&mut self, name: &str) -> MDBResult<T>;
+    fn get_rw_default_db<T: _DB>(&mut self) -> MDBResult<T>;
 }
 
-impl Env {
-    pub fn get_or_create_rw_db<C: _Cursor, T: _DB<C>+_RW>(&mut self, name: &str) -> MDBResult<T> {
-        self.native.get_or_create_db(name, 0)
+impl ROEnv for base::Environment {
+    pub fn get_or_create_ro_db<T: RODB_>(&mut self, name: &str) -> MDBResult<T> {
+        self.get_or_create_db(name, 0)
     }
 
-    pub fn get_rw_default_db<C: _Cursor, T: _DB<C>+_RW>(&mut self) -> MDBResult<T> {
-        self.native.get_default_db(0)
-    }
-
-    pub fn get_or_create_ro_db<C: _Cursor, T: _DB<C>+_RO>(&mut self, name: &str) -> MDBResult<T> {
-        self.native.get_or_create_db(name, 0)
-    }
-
-    pub fn get_ro_default_db<C: _Cursor, T: _DB<C>+_RO>(&mut self) -> MDBResult<T> {
-        self.native.get_default_db(0)
+    pub fn get_ro_default_db<T: RODB_>(&mut self) -> MDBResult<T> {
+        self.get_default_db(0)
     }
 }
 
-pub struct RODB<T> {
-    native: base::Database,
-}
-
-impl<C: _Cursor + _RO> _DB<C> for RODB<C> {
-    fn new_with_native(db: base::Database) -> RODB<C> {
-        RODB {
-            native: db,
-        }
+impl RWEnv for base::Environment {
+    pub fn get_or_create_rw_db<T: _DB>(&mut self, name: &str) -> MDBResult<T> {
+        self.get_or_create_db(name, 0)
     }
 
-    #[inline]
-    fn inner<'a>(&'a mut self) -> &'a base::Database {
-        &self.native
-    }
-
-    /*
-    pub fn get<K, V>(&mut self, txn: &_RO, key: &K) -> MDBResult<V> {
-        self.native.get(txn, key)
-    }
-    */
-}
-
-impl<T: _Cursor + FlagsFor> FlagsFor for RODB<T> {
-    fn flags(_: TypeKeeper<RODB<T>>) -> c_uint {
-        MDB_RDONLY + FlagsFor::flags(_TypeKeeper::<T>)
+    pub fn get_rw_default_db<T: _DB>(&mut self) -> MDBResult<T> {
+        self.get_default_db(0)
     }
 }
 
-impl<T> _RO for RODB<T> {
+pub fn new_rw_env() -> ~RWEnv {
+    let e = ~base::Environment::new().unwrap();
+    e as ~RWEnv
 }
 
-pub struct DB<C> {
-    native: base::Database,
+pub fn new_ro_env() -> ~ROEnv {
+    let e = ~base::Environment::new().unwrap();
+    e as ~ROEnv
 }
 
-impl<T> _RW for DB<T> {
+trait RODB_ : _DB {
+    fn get<K, V>(&mut self, txn: &_Txn, key: &K) -> MDBResult<V>;
+    //fn new_cursor();
 }
 
-impl<C: _Cursor+_RW> _DB<C> for DB<C> {
-    fn new_with_native(db: base::Database) -> DB<C> {
-        DB {
-            native: db,
-        }
-    }
-
-    #[inline]
-    fn inner<'a>(&'a mut self) -> &'a base::Database {
-        &self.native
-    }
-    /*
+impl RODB_ for base::Database {
     pub fn get<K, V>(&mut self, txn: &_Txn, key: &K) -> MDBResult<V> {
-        self.native.get(txn, key)
-    }
-
-    pub fn set<K, V>(&mut self, txn: &_RW, key: &K, value: &V) -> MDBResult<()> {
-        self.native.put(txn, key, value, 0)
-    }
-
-    pub fn upsert<K, V>(&mut self, txn: &_RW, key: &K, value: &V) -> MDBResult<Option<V>> {
-        self.native.put_copy_value(txn, key, value, MDB_NOOVERWRITE)
-    }
-
-    pub fn del<K>(&mut self, txn: &_RW, key: &K) -> MDBResult<()> {
-        self.native.del(txn, key, None)
-    }
-    */
-}
-
-impl<T: _Cursor + FlagsFor> FlagsFor for DB<T> {
-    fn flags(_: TypeKeeper<DB<T>>) -> c_uint {
-        FlagsFor::flags(_TypeKeeper::<T>)
+        self.get(txn, key)
     }
 }
 
-pub struct ROCursor {
-    inner: base::Cursor
+trait RWDB_ : RODB_ + _RW {
+    fn set<K, V>(&mut self, txn: &_Txn, key: &K, value: &V) -> MDBResult<()>;
+    fn upsert<K, V>(&mut self, txn: &_Txn, key: &K, value: &V) -> MDBResult<Option<V>>;
+    fn del<K, V>(&mut self, txn: &_Txn, key: &K) -> MDBResult<()>;
+    //fn new_cursor();
 }
 
-impl _Cursor for ROCursor {
-    fn new_with_native(cursor: base::Cursor) -> ROCursor {
-        ROCursor {
-            inner: cursor,
-        }
+impl RWDB_ for base::Database {
+    pub fn set<K, V>(&mut self, txn: &_Txn, key: &K, value: &V) -> MDBResult<()> {
+        self._put(txn, key, value, 0)
+    }
+
+    pub fn upsert<K, V>(&mut self, txn: &_Txn, key: &K, value: &V) -> MDBResult<Option<V>> {
+        self._put_copy_value(txn, key, value, MDB_NOOVERWRITE)
+    }
+
+    pub fn del<K, V>(&mut self, txn: &_Txn, key: &K) -> MDBResult<()> {
+        self._del(txn, key, None::<&V>)
     }
 }
 
-impl ROCursor {
-    pub fn get()
+trait RWDBDup_ : RODB_ + _RW {
+    fn insert<K, V>(&mut self, txn: &_Txn, key: &K, value: &V) -> MDBResult<()>;
+    fn upsert<K, V>(&mut self, txn: &_Txn, key: &K, value: &V) -> MDBResult<Option<V>>;
+    fn del<K, V>(&mut self, txn: &_Txn, key: &K) -> MDBResult<()>;
+    //fn new_cursor();
 }
 
-pub struct Cursor {
-    inner: base::Cursor,
-}
-
-impl _Cursor for Cursor {
-    fn new_with_native(cursor: base::Cursor) -> Cursor {
-        Cursor {
-            inner: cursor
-        }
+impl RWDBDup_ for base::Database {
+    pub fn insert<K, V>(&mut self, txn: &_Txn, key: &K, value: &V) -> MDBResult<()> {
+        self._put(txn, key, value, 0)
     }
-}
 
-pub struct DuplicateKeysCursor {
-    inner: base::Cursor,
-}
+    pub fn upsert<K, V>(&mut self, txn: &_Txn, key: &K, value: &V) -> MDBResult<Option<V>> {
+        self._put_copy_value(txn, key, value, MDB_NOOVERWRITE)
+    }
 
-impl _Cursor for DuplicateKeysCursor {
-    fn new_with_native(cursor: base::Cursor) -> DuplicateKeysCursor {
-        DuplicateKeysCursor {
-            inner: cursor
-        }
+    pub fn del<K, V>(&mut self, txn: &_Txn, key: &K) -> MDBResult<()> {
+        self._del(txn, key, None::<&V>)
     }
 }
 
@@ -169,15 +113,11 @@ mod tests {
 
     #[test]
     fn test_dbs() {
-        let mut ro_env = ReadonlyEnv {
-            native:  base::Environment::new().unwrap()
-        };
-        let mut rw_env = Env {
-            native:  base::Environment::new().unwrap()
-        };
+        let mut ro_env = new_ro_env();
+        let mut rw_env = new_rw_env();
 
-        let ro_db: RODB = ro_env.get_ro_default_db().unwrap();
-        let rw_db: DB = rw_env.get_rw_default_db().unwrap();
-        let ro_db: RODB = rw_env.get_ro_default_db().unwrap();
+        let ro_db: base::Database = ro_env.get_ro_default_db().unwrap();
+        let rw_db = rw_env.get_rw_default_db().unwrap();
+        let ro_db = rw_env.get_ro_default_db().unwrap();
     }
 }
