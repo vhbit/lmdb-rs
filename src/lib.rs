@@ -8,4 +8,7 @@
 #[phase(syntax, link)] extern crate log;
 extern crate libc;
 
-pub mod mdb;
+mod traits;
+mod utils;
+mod mdb;
+pub mod base;
