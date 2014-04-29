@@ -372,13 +372,16 @@ impl NativeTransaction {
 
     /// Sets a new value for key, in case of enabled duplicates
     /// it actually appends a new value
+    // FIXME: add explicit append function
+    // FIXME: think about creating explicit separation of
+    // all traits for databases with dup keys
     pub fn set(&mut self, db: &Database, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
         self.in_state(TxnStateNormal,
                       |t| t.set_value(db, key, value))
     }
 
     /// Deletes all values by key
-    fn del_value(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<()> {
+    fn del_value(&mut self, db: &Database, key: &MDBIncomingValue) -> MDBResult<()> {
         unsafe {
             let key_val = key.to_mdb_value();
             lift_noret(mdb_del(self.handle, db.handle, &key_val, std::ptr::RawPtr::null()))
@@ -386,14 +389,14 @@ impl NativeTransaction {
     }
 
     /// If duplicate keys are allowed deletes value for key which is equal to data
-    // FIXME: it should check state too
-    fn del_exact_value(&self, db: &Database, key: &MDBIncomingValue, data: &MDBIncomingValue) -> MDBResult<()> {
-        unsafe {
-            let key_val = key.to_mdb_value();
-            let data_val = data.to_mdb_value();
+    pub fn del_exact_value(&mut self, db: &Database, key: &MDBIncomingValue, data: &MDBIncomingValue) -> MDBResult<()> {
+        self.in_state(TxnStateNormal,
+                      |t| unsafe {
+                          let key_val = key.to_mdb_value();
+                          let data_val = data.to_mdb_value();
 
-            lift_noret(mdb_del(self.handle, db.handle, &key_val, &data_val))
-        }
+                          lift_noret(mdb_del(t.handle, db.handle, &key_val, &data_val))
+                      })
     }
 
     /// Deletes all values for key
