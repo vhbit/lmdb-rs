@@ -12,12 +12,6 @@ use mdb::types::*;
 use traits::{MDBIncomingValue, MDBOutgoingValue};
 use utils::{error_msg, lift, lift_noret};
 
-// Public re-exports of stat/info structs
-pub use MDB_stat = mdb::types::MDB_stat;
-pub use MDB_envinfo = mdb::types::MDB_envinfo;
-pub use mdb_filehandle_t = mdb::types::mdb_filehandle_t;
-pub use mdb_mode_t = mdb::types::mdb_mode_t;
-
 /// MDBError wraps information about LMDB error
 pub struct MDBError {
     code: c_int,
