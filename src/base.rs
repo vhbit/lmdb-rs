@@ -12,6 +12,19 @@ use mdb::types::*;
 use traits::{MDBIncomingValue, MDBOutgoingValue};
 use utils::{error_msg, lift, lift_noret};
 
+macro_rules! declare_inner(
+    ($name: ident, $t:ident) => (
+        #[doc(hidden)]
+        pub trait $name {
+            #[inline]
+            fn inner<'a>(&'a self) -> &'a $t;
+            #[inline]
+            fn inner_mut<'a>(&'a mut self) -> &'a mut $t;
+            fn new_with(inner: $t) -> Self;
+        }
+    )
+)
+
 /// MDBError wraps information about LMDB error
 pub struct MDBError {
     code: c_int,
@@ -53,7 +66,7 @@ pub trait _Cursor {
 }
 
 pub trait _DB {
-    fn set_handle(&mut self, handle: MDB_dbi)  -> Self;
+    fn set_handle(&mut self, handle: MDB_dbi);
     //fn new_with_native(db: Database) -> Self;
 
     /*
@@ -75,44 +88,37 @@ pub struct Database {
 }
 
 impl Database {
-    fn new_with_handle<T: _DB>(handle: MDB_dbi) -> T {
-        unsafe {
-            let x: T = std::mem::init();
-            x.set_handle(handle);
-            x
-        }
-        //Database { handle: handle }
+    fn new_with_handle(handle: MDB_dbi) -> Database {    
+        Database { handle: handle }
     }
 
-    /*
-    fn new_cursor<C: _Cursor>(&mut self, txn: &_Txn) -> MDBResult<C> {
+    pub fn new_cursor<C: InnerCursor, T: InnerTxn>(&self, txn: &T) -> MDBResult<C> {
         unsafe {
             let c: *MDB_cursor = std::ptr::RawPtr::null();
-            lift(unsafe {mdb_cursor_open(txn.handle(), self.handle, &c)},
-                 || _Cursor::new_with_native(Cursor::new_with_handle(c)))
+            lift(unsafe {mdb_cursor_open(txn.inner().handle, self.handle, &c)},
+                 || InnerCursor::new_with(Cursor::new_with_handle(c)))
         }
     }
-     */
 
-    fn _put<K, V>(&mut self, txn: &_Txn, key: &K, value: &V, flags: c_uint) -> MDBResult<()> {
+    pub fn _put(&self, txn: &InnerTxn, key: &MDBIncomingValue, value: &MDBIncomingValue, flags: c_uint) -> MDBResult<()> {
         Err(MDBError::new_state_error(~""))
     }
 
-    fn _put_copy_value<K, V>(&mut self, txn: &_Txn, key: &K, value: &V, flags: c_uint) -> MDBResult<Option<V>> {
-        Err(MDBError::new_state_error(~""))
-    }
-
-    fn _del<K, V>(&mut self, txn: &_Txn, key: &K, value: Option<&V>) -> MDBResult<()> {
+    pub fn _put_copy_value<K, V>(&self, txn: &InnerTxn, key: &MDBIncomingValue, value: &V, flags: c_uint) -> MDBResult<Option<V>> {
         Err(MDBError::new_state_error(~""))
     }
 }
 
 impl _DB for Database {
-    fn set_handle(&mut self, value: MDB_dbi) -> Database {
+    fn set_handle(&mut self, value: MDB_dbi) {
         self.handle = value;
     }
 }
 
+declare_inner!(InnerEnv, Environment)
+declare_inner!(InnerDb, Database)
+declare_inner!(InnerTxn, NativeTransaction)
+declare_inner!(InnerCursor, Cursor)
 
 /// Environment
 pub struct Environment {
@@ -185,11 +191,11 @@ impl Environment {
     }
 
     /// Sync environment to disk
-    pub fn sync(&mut self, force: bool) -> MDBResult<()> {
+    pub fn sync(&self, force: bool) -> MDBResult<()> {
         lift_noret(unsafe { mdb_env_sync(self.env, if force {1} else {0})})
     }
 
-    pub fn set_flags(&mut self, flags: c_uint, turn_on: bool) -> MDBResult<()> {
+    pub fn set_flags(&self, flags: c_uint, turn_on: bool) -> MDBResult<()> {
         lift_noret(unsafe {
             mdb_env_set_flags(self.env, flags, if turn_on {1} else {0})
         })
@@ -209,11 +215,11 @@ impl Environment {
         }
     }
 
-    pub fn set_mapsize(&mut self, size: size_t) -> MDBResult<()> {
+    pub fn set_mapsize(&self, size: size_t) -> MDBResult<()> {
         lift_noret(unsafe { mdb_env_set_mapsize(self.env, size)})
     }
 
-    pub fn set_maxreaders(&mut self, max_readers: c_uint) -> MDBResult<()> {
+    pub fn set_maxreaders(&self, max_readers: c_uint) -> MDBResult<()> {
         lift_noret(unsafe { mdb_env_set_maxreaders(self.env, max_readers)})
     }
 
@@ -224,7 +230,7 @@ impl Environment {
     }
 
     /// Sets number of max DBs open. Should be called before open.
-    pub fn set_maxdbs(&mut self, max_dbs: c_uint) -> MDBResult<()> {
+    pub fn set_maxdbs(&self, max_dbs: c_uint) -> MDBResult<()> {
         lift_noret(unsafe { mdb_env_set_maxdbs(self.env, max_dbs)})
     }
 
@@ -251,7 +257,7 @@ impl Environment {
         })
     }
 
-    fn create_transaction(&mut self, parent: Option<NativeTransaction>, flags: c_uint) -> MDBResult<NativeTransaction> {
+    pub fn create_transaction(&self, parent: Option<&NativeTransaction>, flags: c_uint) -> MDBResult<NativeTransaction> {
         let handle: *MDB_txn = ptr::RawPtr::null();
         let parent_handle = match parent {
             Some(t) => t.handle,
@@ -276,26 +282,26 @@ impl Environment {
     }
     */
 
-    fn get_db_by_name<T: _DB>(&mut self, c_name: *c_char, flags: c_uint) -> MDBResult<T> {
+    fn get_db_by_name<T: InnerDb>(&self, c_name: *c_char, flags: c_uint) -> MDBResult<T> {
         let dbi: MDB_dbi = 0;
 
         self.create_transaction(None, 0)
             .and_then(|txn| lift(unsafe { mdb_dbi_open(txn.handle, c_name, flags, &dbi)}, || txn) )
             .and_then(|mut t| t.commit() )
-            .and_then(|_| Ok(Database::new_with_handle(dbi)))
+            .and_then(|_| Ok(InnerDb::new_with(Database::new_with_handle(dbi))))
     }
 
     /// Returns or creates database with name
     ///
     /// Note: set_maxdbis should be called before
-    pub fn get_or_create_db<T: _DB>(&mut self, name: &str, flags: c_uint) -> MDBResult<T> {
+    pub fn get_or_create_db<T: InnerDb>(&self, name: &str, flags: c_uint) -> MDBResult<T> {
         name.with_c_str(|c_name| {
             self.get_db_by_name(c_name, flags)
         })
     }
 
     /// Returns default database
-    pub fn get_default_db<T: _DB>(&mut self, flags: c_uint) -> MDBResult<T> {
+    pub fn get_default_db<T: InnerDb>(&self, flags: c_uint) -> MDBResult<T> {
         self.get_db_by_name(std::ptr::RawPtr::null(), flags)
     }
 }
@@ -315,7 +321,7 @@ enum TransactionState {
     TxnStateInvalid,  // Invalid, no further operation possible
 }
 
-struct NativeTransaction {
+pub struct NativeTransaction {
     handle: *MDB_txn,
     state: TransactionState,
 }
@@ -344,14 +350,14 @@ impl NativeTransaction {
         }
     }
 
-    fn commit(&mut self) -> MDBResult<()> {
+    pub fn commit(&mut self) -> MDBResult<()> {
         self.change_state(TxnStateNormal, |h: *MDB_txn| unsafe {
             (TxnStateInvalid, mdb_txn_commit(h))
         } )
     }
 
     #[allow(unused_must_use)]
-    fn abort(&mut self) {
+    pub fn abort(&mut self) {
         self.change_state(TxnStateNormal, |h: *MDB_txn| unsafe {
             (TxnStateInvalid, { mdb_txn_abort(h); MDB_SUCCESS })
         });
@@ -360,20 +366,20 @@ impl NativeTransaction {
     /// Resets read only transaction, handle is kept. Must be followed
     /// by call to renew
     #[allow(unused_must_use)]
-    fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.change_state(TxnStateNormal, |h: *MDB_txn| unsafe {
             (TxnStateReleased, { mdb_txn_reset(h); MDB_SUCCESS })
         });
     }
 
     /// Acquires a new reader lock after it was released by reset
-    fn renew(&mut self) -> MDBResult<()> {
+    pub fn renew(&mut self) -> MDBResult<()> {
         self.change_state(TxnStateReleased, |h: *MDB_txn| unsafe {
             (TxnStateNormal, mdb_txn_renew(h))
         })
     }
 
-    fn create_child(&mut self, flags: c_uint) -> MDBResult<NativeTransaction> {
+    pub fn create_child(&self, flags: c_uint) -> MDBResult<NativeTransaction> {
         let out: *MDB_txn = ptr::RawPtr::null();
         lift(unsafe { mdb_txn_begin(mdb_txn_env(self.handle), self.handle, flags, &out) },
              || NativeTransaction::new_with_handle(out))
@@ -391,7 +397,7 @@ impl NativeTransaction {
     }
 
     #[inline]
-    fn in_state<U>(&mut self, expected_state: TransactionState, p: |a: &mut NativeTransaction| -> MDBResult<U>) -> MDBResult<U> {
+    fn in_state<U>(&self, expected_state: TransactionState, p: |a: &NativeTransaction| -> MDBResult<U>) -> MDBResult<U> {
         if self.state != expected_state {
             Err(MDBError::new_state_error(format!("Unexpected state for transaction: {}", self.state)))
         } else {
@@ -409,7 +415,7 @@ impl NativeTransaction {
         }
     }
 
-    pub fn get<T: MDBOutgoingValue>(&mut self, db: &Database, key: &MDBIncomingValue) -> MDBResult<T> {
+    pub fn get<T: MDBOutgoingValue>(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<T> {
         self.in_state(TxnStateNormal,
                       |t| t.get_value(db, key))
     }
@@ -432,13 +438,13 @@ impl NativeTransaction {
     // FIXME: add explicit append function
     // FIXME: think about creating explicit separation of
     // all traits for databases with dup keys
-    pub fn set(&mut self, db: &Database, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
+    pub fn set(&self, db: &Database, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
         self.in_state(TxnStateNormal,
                       |t| t.set_value(db, key, value))
     }
 
     /// Deletes all values by key
-    fn del_value(&mut self, db: &Database, key: &MDBIncomingValue) -> MDBResult<()> {
+    fn del_value(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<()> {
         unsafe {
             let key_val = key.to_mdb_value();
             lift_noret(mdb_del(self.handle, db.handle, &key_val, std::ptr::RawPtr::null()))
@@ -446,7 +452,7 @@ impl NativeTransaction {
     }
 
     /// If duplicate keys are allowed deletes value for key which is equal to data
-    pub fn del_exact_value(&mut self, db: &Database, key: &MDBIncomingValue, data: &MDBIncomingValue) -> MDBResult<()> {
+    pub fn del_exact_value(&self, db: &Database, key: &MDBIncomingValue, data: &MDBIncomingValue) -> MDBResult<()> {
         self.in_state(TxnStateNormal,
                       |t| unsafe {
                           let key_val = key.to_mdb_value();
@@ -457,13 +463,13 @@ impl NativeTransaction {
     }
 
     /// Deletes all values for key
-    pub fn del(&mut self, db: &Database, key: &MDBIncomingValue) -> MDBResult<()> {
+    pub fn del(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<()> {
         self.in_state(TxnStateNormal,
                       |t| t.del_value(db, key))
     }
 
     /// creates a new cursor in current transaction tied to db
-    pub fn new_cursor(&mut self, db: &Database) -> MDBResult<Cursor> {
+    pub fn new_cursor(&self, db: &Database) -> MDBResult<Cursor> {
         Cursor::new(self, db)
     }
 }

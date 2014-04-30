@@ -1,8 +1,9 @@
 use base;
-use base::{MDBResult};
+use base::{MDBResult, MDBError};
 use base::{_DB, _Cursor, _Txn, FlagsFor, TypeKeeper, _TypeKeeper};
 use libc::c_uint;
 use mdb::consts::*;
+use mdb::types::MDB_dbi;
 
 trait _RW {
 }
@@ -13,44 +14,45 @@ trait _RO {
 impl _RW for base::Database {
 }
 
-trait ROEnv {
-    fn get_or_create_ro_db<T: RODB_>(&mut self, name: &str) -> MDBResult<T>;
-    fn get_ro_default_db<T: RODB_>(&mut self) -> MDBResult<T>;
+trait ROEnv<T: RODB_> {
+    fn get_or_create_ro_db(&mut self, name: &str) -> MDBResult<T>;
+    fn get_ro_default_db(&mut self) -> MDBResult<~RODB_>;
 }
 
-trait RWEnv: ROEnv {
-    fn get_or_create_rw_db<T: _DB>(&mut self, name: &str) -> MDBResult<T>;
-    fn get_rw_default_db<T: _DB>(&mut self) -> MDBResult<T>;
+trait RWEnv<T: _DB>: ROEnv<T> {
+    fn get_or_create_rw_db(&mut self, name: &str) -> MDBResult<T>;
+    fn get_rw_default_db(&mut self) -> MDBResult<T>;
 }
 
-impl ROEnv for base::Environment {
-    pub fn get_or_create_ro_db<T: RODB_>(&mut self, name: &str) -> MDBResult<T> {
-        self.get_or_create_db(name, 0)
+impl<RODB_> ROEnv<RODB_> for base::Environment {
+    fn get_or_create_ro_db(&mut self, name: &str) -> MDBResult<~RODB_> {
+        //self.get_or_create_db::<RODB_>(name, 0)
+        Err(MDBError::new_state_error(~""))
     }
 
-    pub fn get_ro_default_db<T: RODB_>(&mut self) -> MDBResult<T> {
+    fn get_ro_default_db(&mut self) -> MDBResult<~RODB_> {
         self.get_default_db(0)
     }
 }
 
-impl RWEnv for base::Environment {
-    pub fn get_or_create_rw_db<T: _DB>(&mut self, name: &str) -> MDBResult<T> {
-        self.get_or_create_db(name, 0)
+impl<T: RODB_> RWEnv<T> for base::Environment {
+    fn get_or_create_rw_db(&mut self, name: &str) -> MDBResult<T> {
+        self.get_or_create_db::<T>(name, 0)
     }
 
-    pub fn get_rw_default_db<T: _DB>(&mut self) -> MDBResult<T> {
+    fn get_rw_default_db(&mut self) -> MDBResult<T> {
         self.get_default_db(0)
     }
 }
 
-pub fn new_rw_env() -> ~RWEnv {
+pub fn new_rw_env<T:RODB_>() -> ~RWEnv<T> {
     let e = ~base::Environment::new().unwrap();
-    e as ~RWEnv
+    e as ~RWEnv<T>
 }
 
-pub fn new_ro_env() -> ~ROEnv {
+pub fn new_ro_env<T:RODB_>() -> ~ROEnv<T> {
     let e = ~base::Environment::new().unwrap();
-    e as ~ROEnv
+    e as ~ROEnv<T>
 }
 
 trait RODB_ : _DB {
@@ -59,8 +61,12 @@ trait RODB_ : _DB {
 }
 
 impl RODB_ for base::Database {
-    pub fn get<K, V>(&mut self, txn: &_Txn, key: &K) -> MDBResult<V> {
+    fn get<K, V>(&mut self, txn: &_Txn, key: &K) -> MDBResult<V> {
         self.get(txn, key)
+    }
+
+    fn set_handle(&mut self, value: MDB_dbi) {
+        self.handle = value;
     }
 }
 
@@ -72,15 +78,15 @@ trait RWDB_ : RODB_ + _RW {
 }
 
 impl RWDB_ for base::Database {
-    pub fn set<K, V>(&mut self, txn: &_Txn, key: &K, value: &V) -> MDBResult<()> {
+    fn set<K, V>(&mut self, txn: &_Txn, key: &K, value: &V) -> MDBResult<()> {
         self._put(txn, key, value, 0)
     }
 
-    pub fn upsert<K, V>(&mut self, txn: &_Txn, key: &K, value: &V) -> MDBResult<Option<V>> {
+    fn upsert<K, V>(&mut self, txn: &_Txn, key: &K, value: &V) -> MDBResult<Option<V>> {
         self._put_copy_value(txn, key, value, MDB_NOOVERWRITE)
     }
 
-    pub fn del<K, V>(&mut self, txn: &_Txn, key: &K) -> MDBResult<()> {
+    fn del<K, V>(&mut self, txn: &_Txn, key: &K) -> MDBResult<()> {
         self._del(txn, key, None::<&V>)
     }
 }
@@ -93,15 +99,15 @@ trait RWDBDup_ : RODB_ + _RW {
 }
 
 impl RWDBDup_ for base::Database {
-    pub fn insert<K, V>(&mut self, txn: &_Txn, key: &K, value: &V) -> MDBResult<()> {
+    fn insert<K, V>(&mut self, txn: &_Txn, key: &K, value: &V) -> MDBResult<()> {
         self._put(txn, key, value, 0)
     }
 
-    pub fn upsert<K, V>(&mut self, txn: &_Txn, key: &K, value: &V) -> MDBResult<Option<V>> {
+    fn upsert<K, V>(&mut self, txn: &_Txn, key: &K, value: &V) -> MDBResult<Option<V>> {
         self._put_copy_value(txn, key, value, MDB_NOOVERWRITE)
     }
 
-    pub fn del<K, V>(&mut self, txn: &_Txn, key: &K) -> MDBResult<()> {
+    fn del<K, V>(&mut self, txn: &_Txn, key: &K) -> MDBResult<()> {
         self._del(txn, key, None::<&V>)
     }
 }
@@ -116,8 +122,8 @@ mod tests {
         let mut ro_env = new_ro_env();
         let mut rw_env = new_rw_env();
 
-        let ro_db: base::Database = ro_env.get_ro_default_db().unwrap();
-        let rw_db = rw_env.get_rw_default_db().unwrap();
-        let ro_db = rw_env.get_ro_default_db().unwrap();
+        let ro_db = ro_env.get_ro_default_db().unwrap();
+        let rw_db: base::Database = rw_env.get_rw_default_db().unwrap();
+        let ro_db: base::Database = rw_env.get_ro_default_db().unwrap();
     }
 }

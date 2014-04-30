@@ -4,6 +4,7 @@
 
 #![feature(phase)]
 #![feature(globs)]
+#![feature(macro_rules)]
 
 #[phase(syntax, link)] extern crate log;
 extern crate libc;
@@ -15,4 +16,4 @@ mod traits;
 mod utils;
 mod mdb;
 pub mod base;
-pub mod ext;
+pub mod ext2;
