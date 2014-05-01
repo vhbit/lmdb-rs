@@ -428,7 +428,7 @@ impl NativeTransaction {
                           || lift_noret(unsafe {mdb_txn_renew(t)}))
     }
 
-    fn create_child(&mut self, flags: c_uint) -> MDBResult<NativeTransaction> {
+    fn create_child(&self, flags: c_uint) -> MDBResult<NativeTransaction> {
         let out: *MDB_txn = ptr::RawPtr::null();
         lift(unsafe { mdb_txn_begin(mdb_txn_env(self.handle), self.handle, flags, &out) },
              || NativeTransaction::new_with_handle(out))
@@ -451,7 +451,7 @@ impl NativeTransaction {
         }
     }
 
-    pub fn get<T: MDBOutgoingValue>(&mut self, db: &Database, key: &MDBIncomingValue) -> MDBResult<T> {
+    pub fn get<T: MDBOutgoingValue>(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<T> {
         self.state.then(TxnStateNormal,
                         || self.get_value(db, key))
     }
@@ -505,7 +505,7 @@ impl NativeTransaction {
     }
 
     /// creates a new cursor in current transaction tied to db
-    pub fn new_cursor(&mut self, db: &Database) -> MDBResult<Cursor> {
+    pub fn new_cursor(&self, db: &Database) -> MDBResult<Cursor> {
         Cursor::new(self, db)
     }
 }
@@ -525,18 +525,14 @@ impl Transaction {
         }
     }
 
-    pub fn create_child(&mut self) -> MDBResult<Transaction> {
-        match self.inner.create_child(0) {
-            Ok(txn) => Ok(Transaction::new_with_native(txn)),
-            Err(e) => Err(e)
-        }
+    pub fn create_child(&self) -> MDBResult<Transaction> {
+        self.inner.create_child(0)
+            .and_then(|txn| Ok(Transaction::new_with_native(txn)))
     }
 
-    pub fn create_ro_child(&mut self) -> MDBResult<ReadonlyTransaction> {
-        match self.inner.create_child(MDB_RDONLY) {
-            Ok(txn) => Ok(ReadonlyTransaction::new_with_native(txn)),
-            Err(e) => Err(e)
-        }
+    pub fn create_ro_child(&self) -> MDBResult<ReadonlyTransaction> {
+        self.inner.create_child(MDB_RDONLY)
+            .and_then(|txn| Ok(ReadonlyTransaction::new_with_native(txn))) 
     }
 
     /// Aborts transaction, handle is freed
@@ -549,23 +545,23 @@ impl Transaction {
         self.inner.abort();
     }
 
-    pub fn get<T: MDBOutgoingValue>(&mut self, db: &Database, key: &MDBIncomingValue) -> MDBResult<T> {
+    pub fn get<T: MDBOutgoingValue>(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<T> {
         self.inner.get(db, key)
     }
 
-    pub fn set(&mut self, db: &Database, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
+    pub fn set(&self, db: &Database, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
         self.inner.set(db, key, value)
     }
 
-    pub fn del(&mut self, db: &Database, key: &MDBIncomingValue) -> MDBResult<()> {
+    pub fn del(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<()> {
         self.inner.del(db, key)
     }
 
-    pub fn del_exact(&mut self, db: &Database, key: &MDBIncomingValue, data: &MDBIncomingValue) -> MDBResult<()> {
+    pub fn del_exact(&self, db: &Database, key: &MDBIncomingValue, data: &MDBIncomingValue) -> MDBResult<()> {
         self.inner.del_exact_value(db, key, data)
     }
 
-    pub fn new_cursor(&mut self, db: &Database) -> MDBResult<Cursor> {
+    pub fn new_cursor(&self, db: &Database) -> MDBResult<Cursor> {
         self.inner.new_cursor(db)
     }
 }
@@ -583,11 +579,10 @@ impl ReadonlyTransaction {
         }
     }
 
-    pub fn create_ro_child(&mut self) -> MDBResult<ReadonlyTransaction> {
-        match self.inner.create_child(MDB_RDONLY) {
-            Ok(txn) => Ok(ReadonlyTransaction::new_with_native(txn)),
-            Err(e) => Err(e)
-        }
+    pub fn create_ro_child(&self) -> MDBResult<ReadonlyTransaction> {
+        self.inner.create_child(MDB_RDONLY)
+            .and_then(|txn| Ok(ReadonlyTransaction::new_with_native(txn))) 
+
     }
 
     /// Aborts transaction, handle is freed
@@ -606,11 +601,11 @@ impl ReadonlyTransaction {
         self.inner.renew()
     }
 
-    pub fn get<T: MDBOutgoingValue>(&mut self, db: &Database, key: &MDBIncomingValue) -> MDBResult<T> {
+    pub fn get<T: MDBOutgoingValue>(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<T> {
         self.inner.get(db, key)
     }
 
-    pub fn new_cursor(&mut self, db: &Database) -> MDBResult<Cursor> {
+    pub fn new_cursor(&self, db: &Database) -> MDBResult<Cursor> {
         self.inner.new_cursor(db)
     }
 }
@@ -830,7 +825,7 @@ mod test {
                                     let value = ~"world";
 
                                     match env.new_transaction() {
-                                        Ok(mut tnx) => {
+                                        Ok(tnx) => {
                                             match tnx.set(&db, &key, &value) {
                                                 Ok(_) => {
                                                     match tnx.get::<~str>(&db, &key) {
@@ -864,7 +859,7 @@ mod test {
             let _ = env.set_maxdbs(5);
 
             let db = env.get_default_db(0).unwrap();
-            let mut txn = env.new_transaction().unwrap();
+            let txn = env.new_transaction().unwrap();
 
             let test_key1 = ~"key1";
             let test_data1 = ~"value1";
@@ -894,7 +889,7 @@ mod test {
             let _ = env.set_maxdbs(5);
 
             let db = env.get_default_db(consts::MDB_DUPSORT).unwrap();
-            let mut txn = env.new_transaction().unwrap();
+            let txn = env.new_transaction().unwrap();
 
             let test_key1 = ~"key1";
             let test_data1 = ~"value1";
@@ -930,7 +925,7 @@ mod test {
             let _ = env.set_maxdbs(5);
 
             let db = env.get_default_db(consts::MDB_DUPSORT).unwrap();
-            let mut txn = env.new_transaction().unwrap();
+            let txn = env.new_transaction().unwrap();
 
             let test_key1 = ~"key1";
             let test_key2 = ~"key2";
