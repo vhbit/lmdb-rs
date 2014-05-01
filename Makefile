@@ -15,19 +15,21 @@ all: mdb lib tests doc
 mdb:
 	cd $(LMDB_ROOT) && make liblmdb.a
 
-lib: mdb $(SRC)
-	$(RUSTC) $(RUSTC_FLAGS) -Z once-fns --out-dir $(BUILD_DIR) $(CRATE_MAIN)
+lib: mdb $(SRC) dirs
+	$(RUSTC) $(RUSTC_FLAGS) --out-dir $(BUILD_DIR) $(CRATE_MAIN)
 
-doc: $(SRC)
-	mkdir -p doc
+doc: $(SRC) dirs
 	$(RUSTDOC) -o doc $(CRATE_MAIN)
 
-tests: mdb $(SRC)
-	mkdir -p $(BUILD_DIR)
+tests: mdb $(SRC) dirs
 	$(RUSTC) $(RUSTC_FLAGS) --test $(CRATE_MAIN) -o $(BUILD_DIR)/test_runner
 	@echo "=============================================="
 	$(BUILD_DIR)/test_runner
 	@echo "=============================================="
+
+dirs:
+	mkdir -p doc
+	mkdir -p $(BUILD_DIR)
 
 clean:
 	cd $(LMDB_ROOT) && make clean
