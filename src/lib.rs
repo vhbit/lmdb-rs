@@ -4,6 +4,8 @@
 
 #![feature(phase)]
 #![feature(globs)]
+#![feature(macro_rules)]
+#![feature(once_fns)]
 
 #[phase(syntax, link)] extern crate log;
 extern crate libc;

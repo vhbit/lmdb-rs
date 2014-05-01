@@ -3,20 +3,34 @@ use std::ptr;
 use libc;
 use libc::{c_int, c_uint, size_t, c_char};
 use std::result::Result;
-use std::default::Default;
 
 use mdb::consts::*;
 use mdb::funcs::*;
 use mdb::types::*;
 
-use traits::{MDBIncomingValue, MDBOutgoingValue};
+use traits::{MDBIncomingValue, MDBOutgoingValue, StateError};
 use utils::{error_msg, lift, lift_noret};
 
-/// MDBError wraps information about LMDB error
-pub struct MDBError {
-    code: c_int,
-    message: ~str
-}
+use std::fmt::Show;
+use std::default::Default;
+
+macro_rules! lift(
+    ($e:expr, $r:expr) => (
+        {
+            let t = $e;
+            match t {
+                MDB_SUCCESS => Ok($r),
+                _ => Err(MDBError::new_with_code(t))
+            }
+        }
+        )
+        )
+
+    /// MDBError wraps information about LMDB error
+    pub struct MDBError {
+        code: c_int,
+        message: ~str
+    }
 
 impl MDBError {
     pub fn new_with_code(code: c_int) -> MDBError {
@@ -25,8 +39,10 @@ impl MDBError {
             message: error_msg(code)
         }
     }
+}
 
-    pub fn new_state_error(msg: ~str) -> MDBError {
+impl StateError for MDBError {
+    fn new_state_error(msg: ~str) -> MDBError {
         MDBError {
             code: MDB_INVALID_STATE,
             message: msg
@@ -53,10 +69,87 @@ impl Database {
     }
 }
 
+struct State<S> {
+    log_name: ~str,
+    cur_state: S,
+}
+
+impl<S: Eq + Show + Clone> State<S> {
+    fn new(name: ~str, initial: S) -> State<S> {
+        State {
+            log_name: name,
+            cur_state: initial,
+        }
+    }
+
+    #[inline]
+    fn is(&self, state: S) -> bool {
+        self.cur_state == state
+    }
+
+    /// Invokes P if current state is equal to desired
+    fn then<T, E: StateError>(&self, desired: S, p: once || -> Result<T, E>) -> Result<T, E> {
+        if self.cur_state != desired {
+            let msg = format!("{}: requires {}, is in {}", self.log_name, desired, self.cur_state);
+            Err(StateError::new_state_error(msg))
+        } else {
+            p()
+        }
+    }
+
+    fn then_not<T, E: StateError>(&self, unwanted: S, p: once || -> Result<T, E>) -> Result<T, E> {
+        if self.cur_state == unwanted {
+            let msg = format!("{}: shouldn't be {}", self.log_name, self.cur_state);
+            Err(StateError::new_state_error(msg))
+        } else {
+            p()
+        }
+    }
+
+    fn silent_then<T: Default>(&self, desired: S, p: once || -> T) -> T {
+        if self.cur_state != desired {
+            Default::default()
+        } else {
+            p()
+        }
+    }
+
+    fn silent_then_not<T: Default>(&self, unwanted: S, p: once || -> T) -> T {
+        if self.cur_state == unwanted {
+            Default::default()
+        } else {
+            p()
+        }
+    }
+
+    fn change<T, E: StateError>(&mut self, desired: S, next: S, p: once || -> Result<T, E>) -> Result<T, E> {
+        self.then(desired, p)
+            .and_then(|t| {
+                self.cur_state = next.clone(); // FIXME: try to find a cleaner way without cloning
+                Ok(t)})
+    }
+
+    fn force_change_to(&mut self, desired: S, p: ||) {
+        if self.cur_state != desired {
+            p();
+            self.cur_state = desired;
+        }
+    }
+}
+
+#[deriving(Eq, Show, Clone)]
+enum EnvState {
+    EnvCreated,
+    EnvOpened,
+    EnvClosed
+}
+
 /// Environment
 pub struct Environment {
     env: *MDB_env,
-    path: Option<~Path>
+    path: Option<~Path>,
+    state: State<EnvState>,
+    flags: c_uint,
 }
 
 impl Environment {
@@ -69,8 +162,35 @@ impl Environment {
         lift(unsafe {
             let pEnv: **mut MDB_env = std::cast::transmute(&env);
             mdb_env_create(pEnv)},
-             || Environment {env: env, path: None})
+             || Environment {
+                 env: env,
+                 path: None,
+                 state: State::new(~"Env", EnvCreated),
+                 flags: 0
+             })
+    }
 
+    fn check_path(path: &Path, flags: c_uint, mode: mdb_mode_t) -> MDBResult<()> {
+        let as_file = (flags & MDB_NOSUBDIR) == MDB_NOSUBDIR;
+
+        let res =
+            if as_file {
+                // FIXME: check file existence/absence
+                MDB_SUCCESS
+            } else {
+                // There should be a directory before open
+                match (path.exists(), path.is_dir()) {
+                    (false, _) => {
+                        path.with_c_str(|c_path| unsafe {
+                            libc::mkdir(c_path, mode)
+                        })
+                    },
+                    (true, true) => MDB_SUCCESS,
+                    (true, false) => libc::EACCES,
+                }
+            };
+
+        lift_noret(res)
     }
 
     /// Opens environment
@@ -80,64 +200,58 @@ impl Environment {
     ///
     /// mode is expected to be permissions on UNIX like systems and is ignored on Windows
     pub fn open(&mut self, path: &Path, flags: c_uint, mode: mdb_mode_t) -> MDBResult<()> {
-        let res = unsafe {
-            // There should be a directory before open
-            let temp_res = match (path.exists(), path.is_dir()) {
-                (false, _) => {
-                    path.with_c_str(|c_path| {
-                        libc::mkdir(c_path, mode)
-                    })
-                },
-                (true, true) => MDB_SUCCESS,
-                (true, false) => libc::EACCES,
-            };
+        let t = self.env;
 
-            match temp_res {
-                MDB_SUCCESS => {
-                    path.with_c_str(|c_path| {
-                        mdb_env_open(self.env, c_path, flags, mode)
-                    })
-                },
-                _ => temp_res
-            }
-        };
+        let res = self.state.change(EnvCreated, EnvOpened,
+                                    || {
+                                        Environment::check_path(path, flags, mode)
+                                            .and_then(|_| {
+                                                path.with_c_str(|c_path| {
+                                                    lift_noret(unsafe {mdb_env_open(t, c_path, flags, mode)})})})});
 
-        match res {
-            MDB_SUCCESS => {
-                self.path = Some(~path.clone());
-                Ok(())
-            },
-            _ => Err(MDBError::new_with_code(res)) // FIXME: if it fails, environment should be immediately destroyed
+        if res.is_ok() {
+            self.path = Some(~path.clone());
+            self.flags = flags;
         }
+
+        res
     }
 
     pub fn stat(&self) -> MDBResult<MDB_stat> {
-        let tmp: MDB_stat = unsafe { std::mem::init() };
-        lift(unsafe { mdb_env_stat(self.env, &tmp)},
-             || tmp)
+        self.state.then(EnvOpened, || {
+            let tmp: MDB_stat = unsafe { std::mem::init() };
+            lift(unsafe { mdb_env_stat(self.env, &tmp)},
+                 || tmp)
+        })
     }
 
     pub fn info(&self) -> MDBResult<MDB_envinfo> {
-        let tmp: MDB_envinfo = unsafe { std::mem::init() };
-        lift(unsafe { mdb_env_info(self.env, &tmp)},
-             || tmp)
+        self.state.then(EnvOpened, || {
+            let tmp: MDB_envinfo = unsafe { std::mem::init() };
+            lift(unsafe { mdb_env_info(self.env, &tmp)},
+                 || tmp)
+        })
     }
 
     /// Sync environment to disk
     pub fn sync(&mut self, force: bool) -> MDBResult<()> {
-        lift_noret(unsafe { mdb_env_sync(self.env, if force {1} else {0})})
-    }
-
-    pub fn set_flags(&mut self, flags: c_uint, turn_on: bool) -> MDBResult<()> {
-        lift_noret(unsafe {
-            mdb_env_set_flags(self.env, flags, if turn_on {1} else {0})
+        self.state.then(EnvOpened, || {
+            lift_noret(unsafe { mdb_env_sync(self.env, if force {1} else {0})})
         })
     }
 
+    pub fn set_flags(&mut self, flags: c_uint, turn_on: bool) -> MDBResult<()> {
+        self.state.then_not(EnvClosed, ||
+                            lift_noret(unsafe {
+                                mdb_env_set_flags(self.env, flags, if turn_on {1} else {0})}))
+    }
+
     pub fn get_flags(&self) -> MDBResult<c_uint> {
-        let flags = 0;
-        lift(unsafe {mdb_env_get_flags(self.env, &flags)},
-             || flags)
+        self.state.then_not(EnvClosed, || {
+            let flags = 0;
+            lift(unsafe {mdb_env_get_flags(self.env, &flags)},
+                 || flags)
+        })
     }
 
     /// Returns a copy of database path, if it was opened successfully
@@ -149,56 +263,71 @@ impl Environment {
     }
 
     pub fn set_mapsize(&mut self, size: size_t) -> MDBResult<()> {
-        lift_noret(unsafe { mdb_env_set_mapsize(self.env, size)})
+        self.state.then(EnvCreated,
+                        || lift_noret(unsafe { mdb_env_set_mapsize(self.env, size)})
+                        )
     }
 
     pub fn set_maxreaders(&mut self, max_readers: c_uint) -> MDBResult<()> {
-        lift_noret(unsafe { mdb_env_set_maxreaders(self.env, max_readers)})
+        self.state.then(EnvCreated,
+                        || lift_noret(unsafe { mdb_env_set_maxreaders(self.env, max_readers)}))
     }
 
     pub fn get_maxreaders(&self) -> MDBResult<c_uint> {
-        let max_readers: c_uint = 0;
-        lift(unsafe { mdb_env_get_maxreaders(self.env, &max_readers)},
-             || max_readers )
+        self.state.then_not(EnvClosed,
+                            || {
+                                let max_readers: c_uint = 0;
+                                lift(unsafe { mdb_env_get_maxreaders(self.env, &max_readers)},
+                                     || max_readers )})
     }
 
     /// Sets number of max DBs open. Should be called before open.
     pub fn set_maxdbs(&mut self, max_dbs: c_uint) -> MDBResult<()> {
-        lift_noret(unsafe { mdb_env_set_maxdbs(self.env, max_dbs)})
+        self.state.then(EnvCreated,
+                        || lift_noret(unsafe { mdb_env_set_maxdbs(self.env, max_dbs)}))
     }
 
     pub fn get_maxkeysize(&self) -> c_int {
-        unsafe { mdb_env_get_maxkeysize(self.env) }
+        self.state.silent_then_not(EnvClosed,
+                                   ||  unsafe {mdb_env_get_maxkeysize(self.env)})
     }
 
     /// Creates a backup copy in specified file descriptor
     pub fn copy_to_fd(&self, fd: mdb_filehandle_t) -> MDBResult<()> {
-        lift_noret(unsafe { mdb_env_copyfd(self.env, fd) })
+        self.state.then(EnvOpened,
+                        || lift_noret(unsafe { mdb_env_copyfd(self.env, fd) })
+                        )
     }
 
     /// Gets file descriptor of this environment
     pub fn get_fd(&self) -> MDBResult<mdb_filehandle_t> {
-        let fd = 0;
-        lift({ unsafe { mdb_env_get_fd(self.env, &fd) }}, || fd)
+        self.state.then(EnvOpened,
+                        || {
+                            let fd = 0;
+                            lift({ unsafe { mdb_env_get_fd(self.env, &fd) }}, || fd)})
     }
 
     /// Creates a backup copy in specified path
     // FIXME: check who is responsible for creating path: callee or caller
     pub fn copy_to_path(&self, path: &Path) -> MDBResult<()> {
-        path.with_c_str(|c_path| unsafe {
-            lift_noret(mdb_env_copy(self.env, c_path))
-        })
+        self.state.then(EnvOpened,
+                        || {
+                            path.with_c_str(|c_path| unsafe {
+                                lift_noret(mdb_env_copy(self.env, c_path))
+                            })})
     }
 
     fn create_transaction(&mut self, parent: Option<NativeTransaction>, flags: c_uint) -> MDBResult<NativeTransaction> {
-        let handle: *MDB_txn = ptr::RawPtr::null();
-        let parent_handle = match parent {
-            Some(t) => t.handle,
-            _ => ptr::RawPtr::<MDB_txn>::null()
-        };
+        self.state.then(EnvOpened,
+                        || {
+                            let handle: *MDB_txn = ptr::RawPtr::null();
+                            let parent_handle = match parent {
+                                Some(t) => t.handle,
+                                _ => ptr::RawPtr::<MDB_txn>::null()
+                            };
 
-        lift(unsafe { mdb_txn_begin(self.env, parent_handle, flags, &handle) },
-             || NativeTransaction::new_with_handle(handle))
+                            lift(unsafe { mdb_txn_begin(self.env, parent_handle, flags, &handle) },
+                                 || NativeTransaction::new_with_handle(handle))})
     }
 
     /// Creates a new read-write transaction
@@ -214,12 +343,16 @@ impl Environment {
     }
 
     fn get_db_by_name(&mut self, c_name: *c_char, flags: c_uint) -> MDBResult<Database> {
-        let dbi: MDB_dbi = 0;
+        self.state.then(EnvOpened,
+                        || {
+                            let dbi: MDB_dbi = 0;
 
-        self.create_transaction(None, 0)
-            .and_then(|txn| lift(unsafe { mdb_dbi_open(txn.handle, c_name, flags, &dbi)}, || txn) )
-            .and_then(|mut t| t.commit() )
-            .and_then(|_| Ok(Database::new_with_handle(dbi)))
+                            // FIXME: using macro to avoid capturing txn in closure
+                            // it's actually pretty awkward although reasonable from compiler view
+                            self.create_transaction(None, 0)
+                                .and_then(|txn| lift!(unsafe { mdb_dbi_open(txn.handle, c_name, flags, &dbi)}, txn) )
+                                .and_then(|mut t| t.commit() )
+                                .and_then(|_| Ok(Database::new_with_handle(dbi)))})
     }
 
     /// Returns or creates database with name
@@ -245,7 +378,9 @@ impl Drop for Environment {
     }
 }
 
-#[deriving(Show, Eq)]
+
+
+#[deriving(Show, Eq, Clone)]
 enum TransactionState {
     TxnStateNormal,   // Normal, any operation possible
     TxnStateReleased, // Released (reset on readonly), has to be renewed
@@ -254,60 +389,43 @@ enum TransactionState {
 
 struct NativeTransaction {
     handle: *MDB_txn,
-    state: TransactionState,
+    state: State<TransactionState>,
 }
 
 impl NativeTransaction {
     fn new_with_handle(h: *MDB_txn) -> NativeTransaction {
-        NativeTransaction { handle: h, state: TxnStateNormal }
-    }
-
-    /// Transactions are supposed to work in one thread anyway
-    /// so state changes are lock free
-    #[inline]
-    fn change_state(&mut self, expected_state: TransactionState, op: |h: *MDB_txn| -> (TransactionState, c_int)) -> MDBResult<()> {
-        if self.state != expected_state {
-            let msg = format!("Invalid txn op in state {}", self.state);
-            Err(MDBError::new_state_error(msg))
-        } else {
-            let (ns, res) = op(self.handle);
-            match res {
-                MDB_SUCCESS => {
-                    self.state = ns;
-                    Ok(Default::default())
-                },
-                _ => Err(MDBError::new_with_code(res))
-            }
-        }
+        NativeTransaction {
+            handle: h,
+            state: State::new(~"Txn", TxnStateNormal) }
     }
 
     fn commit(&mut self) -> MDBResult<()> {
-        self.change_state(TxnStateNormal, |h: *MDB_txn| unsafe {
-            (TxnStateInvalid, mdb_txn_commit(h))
-        } )
+        let t = self.handle;
+        self.state.change(TxnStateNormal, TxnStateInvalid,
+                          || lift_noret(unsafe { mdb_txn_commit(t) } ))
     }
 
     #[allow(unused_must_use)]
     fn abort(&mut self) {
-        self.change_state(TxnStateNormal, |h: *MDB_txn| unsafe {
-            (TxnStateInvalid, { mdb_txn_abort(h); MDB_SUCCESS })
-        });
+        let t = self.handle;
+        self.state.change(TxnStateNormal, TxnStateInvalid,
+                          || lift_noret(unsafe { mdb_txn_abort(t); MDB_SUCCESS }));
     }
 
     /// Resets read only transaction, handle is kept. Must be followed
     /// by call to renew
     #[allow(unused_must_use)]
     fn reset(&mut self) {
-        self.change_state(TxnStateNormal, |h: *MDB_txn| unsafe {
-            (TxnStateReleased, { mdb_txn_reset(h); MDB_SUCCESS })
-        });
+        let t = self.handle;
+        self.state.change(TxnStateNormal, TxnStateReleased,
+                          || lift_noret(unsafe { mdb_txn_reset(t); MDB_SUCCESS }));
     }
 
     /// Acquires a new reader lock after it was released by reset
     fn renew(&mut self) -> MDBResult<()> {
-        self.change_state(TxnStateReleased, |h: *MDB_txn| unsafe {
-            (TxnStateNormal, mdb_txn_renew(h))
-        })
+        let t = self.handle;
+        self.state.change(TxnStateReleased, TxnStateNormal,
+                          || lift_noret(unsafe {mdb_txn_renew(t)}))
     }
 
     fn create_child(&mut self, flags: c_uint) -> MDBResult<NativeTransaction> {
@@ -318,22 +436,9 @@ impl NativeTransaction {
 
     /// Used in Drop to switch state
     fn silent_abort(&mut self) {
-        match self.state {
-            TxnStateInvalid => (),
-            _ => unsafe {
-                mdb_txn_abort(self.handle);
-                self.state = TxnStateInvalid;
-            }
-        }
-    }
-
-    #[inline]
-    fn in_state<U>(&mut self, expected_state: TransactionState, p: |a: &mut NativeTransaction| -> MDBResult<U>) -> MDBResult<U> {
-        if self.state != expected_state {
-            Err(MDBError::new_state_error(format!("Unexpected state for transaction: {}", self.state)))
-        } else {
-            p(self)
-        }
+        let t = self.handle;
+        self.state.force_change_to(TxnStateInvalid,
+                                   || unsafe {mdb_txn_abort(t)})
     }
 
     fn get_value<T: MDBOutgoingValue>(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<T> {
@@ -347,8 +452,8 @@ impl NativeTransaction {
     }
 
     pub fn get<T: MDBOutgoingValue>(&mut self, db: &Database, key: &MDBIncomingValue) -> MDBResult<T> {
-        self.in_state(TxnStateNormal,
-                      |t| t.get_value(db, key))
+        self.state.then(TxnStateNormal,
+                        || self.get_value(db, key))
     }
 
     fn set_value(&self, db: &Database, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
@@ -369,13 +474,13 @@ impl NativeTransaction {
     // FIXME: add explicit append function
     // FIXME: think about creating explicit separation of
     // all traits for databases with dup keys
-    pub fn set(&mut self, db: &Database, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
-        self.in_state(TxnStateNormal,
-                      |t| t.set_value(db, key, value))
+    pub fn set(&self, db: &Database, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
+        self.state.then(TxnStateNormal,
+                        || self.set_value(db, key, value))
     }
 
     /// Deletes all values by key
-    fn del_value(&mut self, db: &Database, key: &MDBIncomingValue) -> MDBResult<()> {
+    fn del_value(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<()> {
         unsafe {
             let key_val = key.to_mdb_value();
             lift_noret(mdb_del(self.handle, db.handle, &key_val, std::ptr::RawPtr::null()))
@@ -383,20 +488,20 @@ impl NativeTransaction {
     }
 
     /// If duplicate keys are allowed deletes value for key which is equal to data
-    pub fn del_exact_value(&mut self, db: &Database, key: &MDBIncomingValue, data: &MDBIncomingValue) -> MDBResult<()> {
-        self.in_state(TxnStateNormal,
-                      |t| unsafe {
-                          let key_val = key.to_mdb_value();
-                          let data_val = data.to_mdb_value();
+    pub fn del_exact_value(&self, db: &Database, key: &MDBIncomingValue, data: &MDBIncomingValue) -> MDBResult<()> {
+        self.state.then(TxnStateNormal,
+                        || unsafe {
+                            let key_val = key.to_mdb_value();
+                            let data_val = data.to_mdb_value();
 
-                          lift_noret(mdb_del(t.handle, db.handle, &key_val, &data_val))
-                      })
+                            lift_noret(mdb_del(self.handle, db.handle, &key_val, &data_val))
+                        })
     }
 
     /// Deletes all values for key
-    pub fn del(&mut self, db: &Database, key: &MDBIncomingValue) -> MDBResult<()> {
-        self.in_state(TxnStateNormal,
-                      |t| t.del_value(db, key))
+    pub fn del(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<()> {
+        self.state.then(TxnStateNormal,
+                        || self.del_value(db, key))
     }
 
     /// creates a new cursor in current transaction tied to db

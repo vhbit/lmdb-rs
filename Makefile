@@ -16,7 +16,7 @@ mdb:
 	cd $(LMDB_ROOT) && make liblmdb.a
 
 lib: mdb $(SRC)
-	$(RUSTC) $(RUSTC_FLAGS) --out-dir $(BUILD_DIR) $(CRATE_MAIN)
+	$(RUSTC) $(RUSTC_FLAGS) -Z once-fns --out-dir $(BUILD_DIR) $(CRATE_MAIN)
 
 doc: $(SRC)
 	mkdir -p doc

@@ -53,3 +53,8 @@ impl MDBOutgoingValue for () {
     fn from_mdb_value(_: &MDB_val) {
     }
 }
+
+
+pub trait StateError {
+    fn new_state_error(msg: ~str) -> Self;
+}
