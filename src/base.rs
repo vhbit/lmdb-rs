@@ -23,14 +23,14 @@ macro_rules! lift(
                 _ => Err(MDBError::new_with_code(t))
             }
         }
-        )
-        )
+    )
+)
 
-    /// MDBError wraps information about LMDB error
-    pub struct MDBError {
-        code: c_int,
-        message: ~str
-    }
+/// MDBError wraps information about LMDB error
+pub struct MDBError {
+    code: c_int,
+    message: ~str
+}
 
 impl MDBError {
     pub fn new_with_code(code: c_int) -> MDBError {
@@ -87,10 +87,12 @@ impl<S: Eq + Show + Clone> State<S> {
         }
     }
 
+    /*
     #[inline]
     fn is(&self, state: S) -> bool {
         self.cur_state == state
     }
+    */
 
     /// Invokes P if current state is equal to desired
     fn then<T, E: StateError>(&self, desired: S, p: once || -> Result<T, E>) -> Result<T, E> {
@@ -131,7 +133,7 @@ impl<S: Eq + Show + Clone> State<S> {
         self.then(desired, p)
             .and_then(|t| {
                 self.cur_state = next.clone(); // FIXME: try to find a cleaner way without cloning
-                Ok(t)})
+            Ok(t)})
     }
 
     fn force_change_to(&mut self, desired: S, p: ||) {
