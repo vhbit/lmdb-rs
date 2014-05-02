@@ -39,6 +39,11 @@ impl MDBError {
             message: error_msg(code)
         }
     }
+
+    #[inline]
+    pub fn get_code(&self) -> c_int {
+        self.code
+    }
 }
 
 impl StateError for MDBError {
