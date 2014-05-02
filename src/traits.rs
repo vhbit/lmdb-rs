@@ -53,6 +53,12 @@ impl MDBIncomingValue for &'static str {
     }
 }
 
+impl MDBIncomingValue for MDB_val {
+    fn to_mdb_value(&self) -> MDB_val {
+        *self
+    }
+}
+
 impl MDBOutgoingValue for ~str {
     fn from_mdb_value(value: &MDB_val) -> ~str {
         unsafe {

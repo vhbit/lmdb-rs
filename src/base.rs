@@ -394,12 +394,12 @@ enum TransactionState {
     TxnStateInvalid,  // Invalid, no further operation possible
 }
 
-struct NativeTransaction {
+struct NativeTransaction<'a> {
     handle: *MDB_txn,
     state: State<TransactionState>,
 }
 
-impl NativeTransaction {
+impl<'a> NativeTransaction<'a> {
     fn new_with_handle(h: *MDB_txn) -> NativeTransaction {
         NativeTransaction {
             handle: h,
@@ -512,21 +512,21 @@ impl NativeTransaction {
     }
 
     /// creates a new cursor in current transaction tied to db
-    pub fn new_cursor(&self, db: &Database) -> MDBResult<Cursor> {
-        Cursor::new(self, db)
+    pub fn new_cursor(&'a self, db: &'a Database) -> MDBResult<Cursor<'a>> {
+        Cursor::<'a>::new(self, db)
     }
 }
 
-pub struct Transaction {
-    inner: NativeTransaction,
+pub struct Transaction<'a> {
+    inner: NativeTransaction<'a>,
 }
 
-pub struct ReadonlyTransaction {
-    inner: NativeTransaction,
+pub struct ReadonlyTransaction<'a> {
+    inner: NativeTransaction<'a>,
 }
 
-impl Transaction {
-    fn new_with_native(txn: NativeTransaction) -> Transaction {
+impl<'a> Transaction<'a> {
+    fn new_with_native(txn: NativeTransaction<'a>) -> Transaction<'a> {
         Transaction {
             inner: txn
         }
@@ -568,19 +568,19 @@ impl Transaction {
         self.inner.del_exact_value(db, key, data)
     }
 
-    pub fn new_cursor(&self, db: &Database) -> MDBResult<Cursor> {
+    pub fn new_cursor(&'a self, db: &'a Database) -> MDBResult<Cursor<'a>> {
         self.inner.new_cursor(db)
     }
 }
 
-impl Drop for Transaction {
+impl<'a> Drop for Transaction<'a> {
     fn drop(&mut self) {
         self.inner.silent_abort();
     }
 }
 
-impl ReadonlyTransaction {
-    fn new_with_native(txn: NativeTransaction) -> ReadonlyTransaction {
+impl<'a> ReadonlyTransaction<'a> {
+    fn new_with_native(txn: NativeTransaction<'a>) -> ReadonlyTransaction<'a> {
         ReadonlyTransaction {
             inner: txn,
         }
@@ -612,39 +612,52 @@ impl ReadonlyTransaction {
         self.inner.get(db, key)
     }
 
-    pub fn new_cursor(&self, db: &Database) -> MDBResult<Cursor> {
+    pub fn new_cursor(&'a self, db: &'a Database) -> MDBResult<Cursor<'a>> {
         self.inner.new_cursor(db)
     }
 }
 
-impl Drop for ReadonlyTransaction {
+impl<'a> Drop for ReadonlyTransaction<'a> {
     fn drop(&mut self) {
         self.inner.silent_abort();
     }
 }
 
-pub struct Cursor {
+pub struct Cursor<'a> {
     handle: *MDB_cursor,
+    data_val: MDB_val,
+    key_val: MDB_val,
+    txn: &'a NativeTransaction<'a>,
+    db: &'a Database
 }
 
-impl Cursor {
-    fn new(txn: &NativeTransaction, db: &Database) -> MDBResult<Cursor> {
+impl<'a> Cursor<'a> {
+    fn new(txn: &'a NativeTransaction, db: &'a Database) -> MDBResult<Cursor<'a>> {
         let tmp: *MDB_cursor = std::ptr::RawPtr::null();
         lift(unsafe { mdb_cursor_open(txn.handle, db.handle, &tmp) },
-             || Cursor {handle: tmp })
+             || unsafe {
+                 Cursor {
+                     handle: tmp,
+                     data_val: std::mem::init(),
+                     key_val: std::mem::init(),
+                     txn: txn,
+                     db: db,
+                 }
+             })
     }
 
-    fn move_to<'a>(&self, key: Option<&'a MDBIncomingValue>, op: MDB_cursor_op) -> MDBResult<()> {
+    fn move_to<'b>(&self, key: Option<&'b MDBIncomingValue>, op: MDB_cursor_op) -> MDBResult<()> {
         // Even if we don't ask for any data and want only to set a position
         // MDB still insists in writing back key and data to provided pointers
         // it's actually not that big deal, considering no actual data copy happens
-        let data_val = unsafe {std::mem::init()};
-        let key_val = match key {
+        let t = unsafe {std::cast::transmute_mut(self)};
+        t.data_val = unsafe {std::mem::init()};
+        t.key_val = match key {
             Some(k) => k.to_mdb_value(),
             _ => unsafe {std::mem::init()}
         };
 
-        lift_noret(unsafe { mdb_cursor_get(self.handle, &key_val, &data_val, op) })
+        lift_noret(unsafe { mdb_cursor_get(t.handle, &t.key_val, &t.data_val, op) })
     }
 
     /// Moves cursor to first entry
@@ -710,6 +723,10 @@ impl Cursor {
         }
     }
 
+    fn get_plain(&self) -> (MDB_val, MDB_val) {
+        (self.key_val, self.data_val)
+    }
+
     fn set_value<'a>(&self, key:Option<&'a MDBIncomingValue>, value: &MDBIncomingValue, flags: c_uint) -> MDBResult<()> {
         let data_val = value.to_mdb_value();
         let key_val = unsafe {
@@ -753,11 +770,81 @@ impl Cursor {
         lift(unsafe {mdb_cursor_count(self.handle, &tmp)},
              || tmp)
     }
+
+    /// Returns an iterator for values between start_key and end_key.
+    /// Currently it works only for unique keys (i.e. it will skip
+    /// multiple items when DB created with MDB_DUPSORT).
+    /// Iterator is valid while cursor is valid
+    pub fn iter_in_keyrange<'a, T: MDBIncomingValue>(&'a self, start_key: &'a T, end_key: &'a T) -> CursorKeyRangeIter<'a> {
+        CursorKeyRangeIter {
+            cursor: self,
+            start_key: start_key.to_mdb_value(),
+            end_key: end_key.to_mdb_value(),
+            initialized: false,
+        }
+    }
 }
 
-impl Drop for Cursor {
+#[unsafe_destructor]
+impl<'a> Drop for Cursor<'a> {
     fn drop(&mut self) {
         unsafe { mdb_cursor_close(self.handle) };
+    }
+}
+
+pub struct CursorValue<'a> {
+    key: MDB_val,
+    value: MDB_val,
+}
+
+/// CursorValue performs lazy data extraction from iterator
+/// avoiding any data conversions and memory copy. Lifetime
+/// is limited to iterator lifetime
+impl<'a> CursorValue<'a> {
+    pub fn get_key<T: MDBOutgoingValue>(&self) -> T {
+        MDBOutgoingValue::from_mdb_value(&self.key)
+    }
+
+    pub fn get_value<T: MDBOutgoingValue>(&self) -> T {
+        MDBOutgoingValue::from_mdb_value(&self.value)
+    }
+
+    pub fn get<T: MDBOutgoingValue, U: MDBOutgoingValue>(&self) -> (T, U) {
+        (MDBOutgoingValue::from_mdb_value(&self.key),  MDBOutgoingValue::from_mdb_value(&self.value))
+    }
+}
+
+pub struct CursorKeyRangeIter<'a> {
+    cursor: &'a Cursor<'a>,
+    start_key: MDB_val,
+    end_key: MDB_val,
+    initialized: bool
+}
+
+impl<'a> Iterator<CursorValue<'a>> for CursorKeyRangeIter<'a> {
+    fn next(&mut self) -> Option<CursorValue<'a>> {
+        let move_res = if !self.initialized {
+            self.initialized = true;
+            self.cursor.to_gte_key(&self.start_key)
+        } else {
+            self.cursor.to_next_key()
+        };
+
+        if move_res.is_err() {
+            None
+        } else {
+            let (k, v): (MDB_val, MDB_val) = self.cursor.get_plain();
+            let cmp_res = unsafe {mdb_cmp(self.cursor.txn.handle, self.cursor.db.handle, &k, &self.end_key)};
+
+            if cmp_res > 0 {
+                Some(CursorValue {
+                    key: k,
+                    value: v
+                })
+            } else {
+                None
+            }
+        }
     }
 }
 
