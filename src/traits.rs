@@ -41,6 +41,18 @@ impl MDBIncomingValue for ~str {
     }
 }
 
+impl MDBIncomingValue for &'static str {
+    fn to_mdb_value(&self) -> MDB_val {
+        unsafe {
+            let t = self.as_slice();
+            MDB_val {
+                mv_data: std::cast::transmute(t.as_ptr()),
+                mv_size: t.len() as size_t
+            }
+        }
+    }
+}
+
 impl MDBOutgoingValue for ~str {
     fn from_mdb_value(value: &MDB_val) -> ~str {
         unsafe {
