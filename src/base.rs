@@ -317,7 +317,7 @@ impl Environment {
                             })})
     }
 
-    fn create_transaction(&mut self, parent: Option<NativeTransaction>, flags: c_uint) -> MDBResult<NativeTransaction> {
+    fn create_transaction(&self, parent: Option<NativeTransaction>, flags: c_uint) -> MDBResult<NativeTransaction> {
         self.state.then(EnvOpened,
                         || {
                             let handle: *MDB_txn = ptr::RawPtr::null();
@@ -331,18 +331,18 @@ impl Environment {
     }
 
     /// Creates a new read-write transaction
-    pub fn new_transaction(&mut self) -> MDBResult<Transaction> {
+    pub fn new_transaction(&self) -> MDBResult<Transaction> {
         self.create_transaction(None, 0)
             .and_then(|txn| Ok(Transaction::new_with_native(txn)))
     }
 
     /// Creates a readonly transaction
-    pub fn new_readonly_transaction(&mut self) -> MDBResult<ReadonlyTransaction> {
+    pub fn new_readonly_transaction(& self) -> MDBResult<ReadonlyTransaction> {
         self.create_transaction(None, MDB_RDONLY)
             .and_then(|txn| Ok(ReadonlyTransaction::new_with_native(txn)))
     }
 
-    fn get_db_by_name(&mut self, c_name: *c_char, flags: c_uint) -> MDBResult<Database> {
+    fn get_db_by_name(&self, c_name: *c_char, flags: c_uint) -> MDBResult<Database> {
         self.state.then(EnvOpened,
                         || {
                             let dbi: MDB_dbi = 0;
@@ -358,14 +358,14 @@ impl Environment {
     /// Returns or creates database with name
     ///
     /// Note: set_maxdbis should be called before
-    pub fn get_or_create_db(&mut self, name: &str, flags: c_uint) -> MDBResult<Database> {
+    pub fn get_or_create_db(&self, name: &str, flags: c_uint) -> MDBResult<Database> {
         name.with_c_str(|c_name| {
             self.get_db_by_name(c_name, flags)
         })
     }
 
     /// Returns default database
-    pub fn get_default_db(&mut self, flags: c_uint) -> MDBResult<Database> {
+    pub fn get_default_db(&self, flags: c_uint) -> MDBResult<Database> {
         self.get_db_by_name(std::ptr::RawPtr::null(), flags)
     }
 }
@@ -532,7 +532,7 @@ impl Transaction {
 
     pub fn create_ro_child(&self) -> MDBResult<ReadonlyTransaction> {
         self.inner.create_child(MDB_RDONLY)
-            .and_then(|txn| Ok(ReadonlyTransaction::new_with_native(txn))) 
+            .and_then(|txn| Ok(ReadonlyTransaction::new_with_native(txn)))
     }
 
     /// Aborts transaction, handle is freed
@@ -581,7 +581,7 @@ impl ReadonlyTransaction {
 
     pub fn create_ro_child(&self) -> MDBResult<ReadonlyTransaction> {
         self.inner.create_child(MDB_RDONLY)
-            .and_then(|txn| Ok(ReadonlyTransaction::new_with_native(txn))) 
+            .and_then(|txn| Ok(ReadonlyTransaction::new_with_native(txn)))
 
     }
 
@@ -627,7 +627,7 @@ impl Cursor {
              || Cursor {handle: tmp })
     }
 
-    fn move_to<'a>(&mut self, key: Option<&'a MDBIncomingValue>, op: MDB_cursor_op) -> MDBResult<()> {
+    fn move_to<'a>(&self, key: Option<&'a MDBIncomingValue>, op: MDB_cursor_op) -> MDBResult<()> {
         // Even if we don't ask for any data and want only to set a position
         // MDB still insists in writing back key and data to provided pointers
         // it's actually not that big deal, considering no actual data copy happens
@@ -641,60 +641,60 @@ impl Cursor {
     }
 
     /// Moves cursor to first entry
-    pub fn to_first(&mut self) -> MDBResult<()> {
+    pub fn to_first(&self) -> MDBResult<()> {
         self.move_to(None, MDB_FIRST)
     }
 
     /// Moves cursor to last entry
-    pub fn to_last(&mut self) -> MDBResult<()> {
+    pub fn to_last(&self) -> MDBResult<()> {
         self.move_to(None, MDB_LAST)
     }
 
     /// Moves cursor to first entry for key if it exists
-    pub fn to_key(&mut self, key: &MDBIncomingValue) -> MDBResult<()> {
+    pub fn to_key(&self, key: &MDBIncomingValue) -> MDBResult<()> {
         self.move_to(Some(key), MDB_SET)
     }
 
     /// Moves cursor to first entry for key greater than
     /// or equal to ke
-    pub fn to_gte_key(&mut self, key: &MDBIncomingValue) -> MDBResult<()> {
+    pub fn to_gte_key(&self, key: &MDBIncomingValue) -> MDBResult<()> {
         self.move_to(Some(key), MDB_SET_RANGE)
     }
 
     /// Moves cursor to next key, i.e. skip items
     /// with duplicate keys
-    pub fn to_next_key(&mut self) -> MDBResult<()> {
+    pub fn to_next_key(&self) -> MDBResult<()> {
         self.move_to(None, MDB_NEXT_NODUP)
     }
 
     /// Moves cursor to next item with the same key as current
-    pub fn to_next_key_item(&mut self) -> MDBResult<()> {
+    pub fn to_next_key_item(&self) -> MDBResult<()> {
         self.move_to(None, MDB_NEXT_DUP)
     }
 
     /// Moves cursor to prev entry, i.e. skips items
     /// with duplicate keys
-    pub fn to_prev_key(&mut self) -> MDBResult<()> {
+    pub fn to_prev_key(&self) -> MDBResult<()> {
         self.move_to(None, MDB_PREV_NODUP)
     }
 
     /// Moves cursor to prev item with the same key as current
-    pub fn to_prev_key_item(&mut self) -> MDBResult<()> {
+    pub fn to_prev_key_item(&self) -> MDBResult<()> {
         self.move_to(None, MDB_PREV_DUP)
     }
 
     /// Moves cursor to first item with the same key as current
-    pub fn to_first_key_item(&mut self) -> MDBResult<()> {
+    pub fn to_first_key_item(&self) -> MDBResult<()> {
         self.move_to(None, MDB_FIRST_DUP)
     }
 
     /// Moves cursor to last item with the same key as current
-    pub fn to_last_key_item(&mut self) -> MDBResult<()> {
+    pub fn to_last_key_item(&self) -> MDBResult<()> {
         self.move_to(None, MDB_LAST_DUP)
     }
 
     /// Retrieves current key/value as tuple
-    pub fn get<T: MDBOutgoingValue, U: MDBOutgoingValue>(&mut self) -> MDBResult<(T, U)> {
+    pub fn get<T: MDBOutgoingValue, U: MDBOutgoingValue>(&self) -> MDBResult<(T, U)> {
         unsafe {
             let key_val: MDB_val = std::mem::init();
             let data_val: MDB_val = std::mem::init();
@@ -703,7 +703,7 @@ impl Cursor {
         }
     }
 
-    fn set_value<'a>(&mut self, key:Option<&'a MDBIncomingValue>, value: &MDBIncomingValue, flags: c_uint) -> MDBResult<()> {
+    fn set_value<'a>(&self, key:Option<&'a MDBIncomingValue>, value: &MDBIncomingValue, flags: c_uint) -> MDBResult<()> {
         let data_val = value.to_mdb_value();
         let key_val = unsafe {
             match  key {
@@ -717,26 +717,26 @@ impl Cursor {
 
     /// Overwrites value for current item
     /// Note: overwrites max cur_value.len() bytes
-    pub fn set(&mut self, value: &MDBIncomingValue) -> MDBResult<()> {
+    pub fn set(&self, value: &MDBIncomingValue) -> MDBResult<()> {
         self.set_value(None, value, MDB_CURRENT)
     }
 
     /// Adds a new value if it doesn't exist yet
-    pub fn upsert(&mut self, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
+    pub fn upsert(&self, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
         self.set_value(Some(key), value, MDB_NOOVERWRITE)
     }
 
-    fn del_value(&mut self, flags: c_uint) -> MDBResult<()> {
+    fn del_value(&self, flags: c_uint) -> MDBResult<()> {
         lift_noret(unsafe { mdb_cursor_del(self.handle, flags) })
     }
 
     /// Deletes only current item
-    pub fn del_single(&mut self) -> MDBResult<()> {
+    pub fn del_single(&self) -> MDBResult<()> {
         self.del_value(0)
     }
 
     /// Deletes all items with same key as current
-    pub fn del_all(&mut self) -> MDBResult<()> {
+    pub fn del_all(&self) -> MDBResult<()> {
         self.del_value(MDB_NODUPDATA)
     }
 
