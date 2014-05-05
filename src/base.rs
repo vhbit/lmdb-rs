@@ -172,7 +172,7 @@ impl Environment {
              || Environment {
                  env: env,
                  path: None,
-                 state: State::new(~"Env", EnvCreated),
+                 state: State::new("Env".to_owned(), EnvCreated),
                  flags: 0
              })
     }
@@ -403,7 +403,7 @@ impl<'a> NativeTransaction<'a> {
     fn new_with_handle(h: *MDB_txn) -> NativeTransaction {
         NativeTransaction {
             handle: h,
-            state: State::new(~"Txn", TxnStateNormal) }
+            state: State::new("Txn".to_owned(), TxnStateNormal) }
     }
 
     fn commit(&mut self) -> MDBResult<()> {
@@ -915,8 +915,8 @@ mod test {
 
                             match env.get_default_db(0) {
                                 Ok(db) => {
-                                    let key = ~"hello";
-                                    let value = ~"world";
+                                    let key = "hello".to_owned();
+                                    let value = "world".to_owned();
 
                                     match env.new_transaction() {
                                         Ok(tnx) => {
@@ -955,9 +955,9 @@ mod test {
             let db = env.get_default_db(0).unwrap();
             let txn = env.new_transaction().unwrap();
 
-            let test_key1 = ~"key1";
-            let test_data1 = ~"value1";
-            let test_data2 = ~"value2";
+            let test_key1 = "key1".to_owned();
+            let test_data1 = "value1".to_owned();
+            let test_data2 = "value2".to_owned();
 
             assert!(txn.get::<()>(&db, &test_key1).is_err(), "Key shouldn't exist yet");
 
@@ -985,9 +985,9 @@ mod test {
             let db = env.get_default_db(consts::MDB_DUPSORT).unwrap();
             let txn = env.new_transaction().unwrap();
 
-            let test_key1 = ~"key1";
-            let test_data1 = ~"value1";
-            let test_data2 = ~"value2";
+            let test_key1 = "key1".to_owned();
+            let test_data1 = "value1".to_owned();
+            let test_data2 = "value2".to_owned();
 
             assert!(txn.get::<()>(&db, &test_key1).is_err(), "Key shouldn't exist yet");
 
@@ -1021,9 +1021,9 @@ mod test {
             let db = env.get_default_db(consts::MDB_DUPSORT).unwrap();
             let txn = env.new_transaction().unwrap();
 
-            let test_key1 = ~"key1";
-            let test_key2 = ~"key2";
-            let test_values: Vec<~str> = vec!(~"value1", ~"value2", ~"value3", ~"value4");
+            let test_key1 = "key1".to_owned();
+            let test_key2 = "key2".to_owned();
+            let test_values: Vec<~str> = vec!("value1".to_owned(), "value2".to_owned(), "value3".to_owned(), "value4".to_owned());
 
             assert!(txn.get::<()>(&db, &test_key1).is_err(), "Key shouldn't exist yet");
 
@@ -1042,7 +1042,7 @@ mod test {
             assert!(cursor.item_count().unwrap() == 3);
 
             assert!(cursor.to_key(&test_key1).is_ok());
-            let new_value = ~"testme";
+            let new_value = "testme".to_owned();
 
             assert!(cursor.set(&new_value).is_ok());
             let (_, v): ((), ~str) = cursor.get().unwrap();
