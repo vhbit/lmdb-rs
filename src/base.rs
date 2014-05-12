@@ -367,7 +367,8 @@ impl Environment {
     /// Note: set_maxdbis should be called before
     pub fn get_or_create_db(&self, name: &str, flags: c_uint) -> MDBResult<Database> {
         name.with_c_str(|c_name| {
-            self.get_db_by_name(c_name, flags)
+            // FIXME: MDB_CREATE should be included only in read-write Environment
+            self.get_db_by_name(c_name, flags | MDB_CREATE)
         })
     }
 
@@ -1015,8 +1016,8 @@ mod test {
         let path = Path::new("cursors");
         test_db_in_path(&path, || {
             let mut env = Environment::new().unwrap();
-            let _ = env.open(&path, 0, 0o755);
             let _ = env.set_maxdbs(5);
+            let _ = env.open(&path, 0, 0o755);
 
             let db = env.get_default_db(consts::MDB_DUPSORT).unwrap();
             let txn = env.new_transaction().unwrap();
@@ -1055,6 +1056,17 @@ mod test {
             assert!(cursor.to_key(&test_key1).is_err());
 
             assert!(cursor.to_key(&test_key2).is_ok());
+        });
+    }
+
+    #[test]
+    fn test_db_creation() {
+        let path = Path::new("dbs");
+        test_db_in_path(&path, || {
+            let mut env = Environment::new().unwrap();
+            assert!(env.set_maxdbs(5).is_ok());
+            assert!(env.open(&path, 0, 0o755).is_ok());
+            assert!(env.get_or_create_db("test-db", 0).is_ok());
         });
     }
 }
