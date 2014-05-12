@@ -8,29 +8,36 @@ RUSTC_FLAGS = $(RUST_LIB_FLAGS) -g
 SRC = $(wildcard src/*.rs)
 CRATE_MAIN = src/lib.rs
 BUILD_DIR ?= build
-CRATE_NAME = $(RUSTC)
+LIBOUT = $(BUILD_DIR)/$(shell rustc --crate-file-name src/lib.rs)
+TEST_RUNNER = $(BUILD_DIR)/test_runner
+
+.PHONY: all mdb lib doc tests clean
 
 all: mdb lib tests doc
 
 mdb:
 	cd $(LMDB_ROOT) && make liblmdb.a
 
-lib: mdb $(SRC) dirs
+$(LIBOUT): $(SRC)
+	@mkdir -p $(BUILD_DIR)
 	$(RUSTC) $(RUSTC_FLAGS) --out-dir $(BUILD_DIR) $(CRATE_MAIN)
 
-doc: $(SRC) dirs
+lib: mdb $(LIBOUT)
+
+doc: $(SRC)
+	@mkdir -p doc
 	$(RUSTDOC) -o doc $(CRATE_MAIN)
 
-tests: mdb $(SRC) dirs
-	$(RUSTC) $(RUSTC_FLAGS) --test $(CRATE_MAIN) -o $(BUILD_DIR)/test_runner
+tests: $(TEST_RUNNER)
 	@echo "=============================================="
-	$(BUILD_DIR)/test_runner
+	$<
 	@echo "=============================================="
 
-dirs:
-	mkdir -p doc
-	mkdir -p $(BUILD_DIR)
+$(TEST_RUNNER): $(SRC)
+	@mkdir -p $(BUILD_DIR)
+	$(RUSTC) $(RUSTC_FLAGS) --test $(CRATE_MAIN) -o $@
 
 clean:
 	cd $(LMDB_ROOT) && make clean
 	rm -f *.a *.rlib test_runner
+	rm -rf doc $(BUILD_DIR)
