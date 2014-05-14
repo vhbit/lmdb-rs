@@ -33,7 +33,7 @@ tests: $(TEST_RUNNER)
 	$<
 	@echo "=============================================="
 
-$(TEST_RUNNER): $(SRC)
+$(TEST_RUNNER): $(SRC) mdb
 	@mkdir -p $(BUILD_DIR)
 	$(RUSTC) $(RUSTC_FLAGS) --test $(CRATE_MAIN) -o $@
 
