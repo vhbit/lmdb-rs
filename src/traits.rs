@@ -1,30 +1,30 @@
-use std;
 use libc::size_t;
 use mdb::types::MDB_val;
 
 pub trait MDBIncomingValue {
-    fn to_mdb_value(&self) -> MDB_val;
+    fn to_mdb_value<'a>(&'a self) -> MDB_val<'a>;
 }
 
 pub trait MDBOutgoingValue {
     fn from_mdb_value(value: &MDB_val) -> Self;
 }
 
-impl MDBIncomingValue for ~[u8] {
+
+impl MDBIncomingValue for Vec<u8> {
     fn to_mdb_value(&self) -> MDB_val {
         unsafe {
             MDB_val {
-                mv_data: std::cast::transmute(self.as_ptr()),
+                mv_data: std::mem::transmute(self.as_ptr()),
                 mv_size: self.len() as size_t
             }
         }
     }
 }
 
-impl MDBOutgoingValue for ~[u8] {
-    fn from_mdb_value(value: &MDB_val) -> ~[u8] {
+impl MDBOutgoingValue for Vec<u8> {
+    fn from_mdb_value(value: &MDB_val) -> Vec<u8> {
         unsafe {
-            std::slice::raw::from_buf_raw(value.mv_data as *u8, value.mv_size as uint)
+            std::vec::raw::from_buf(std::mem::transmute(value.mv_data), value.mv_size as uint)
         }
     }
 }
@@ -34,35 +34,38 @@ impl MDBIncomingValue for ~str {
         unsafe {
             let t = self.as_slice();
             MDB_val {
-                mv_data: std::cast::transmute(t.as_ptr()),
+                mv_data: std::mem::transmute(t.as_ptr()),
                 mv_size: t.len() as size_t
             }
         }
     }
 }
 
-impl MDBIncomingValue for &'static str {
+impl<'a> MDBIncomingValue for &'a str {
     fn to_mdb_value(&self) -> MDB_val {
         unsafe {
             let t = self.as_slice();
             MDB_val {
-                mv_data: std::cast::transmute(t.as_ptr()),
+                mv_data: std::mem::transmute(t.as_ptr()),
                 mv_size: t.len() as size_t
             }
         }
     }
 }
 
-impl MDBIncomingValue for MDB_val {
-    fn to_mdb_value(&self) -> MDB_val {
-        *self
+impl<'a> MDBIncomingValue for MDB_val<'a> {
+    fn to_mdb_value<'a>(&'a self) -> MDB_val<'a> {
+        MDB_val {
+            mv_data: (*self).mv_data,
+            mv_size: (*self).mv_size
+        }
     }
 }
 
 impl MDBOutgoingValue for ~str {
     fn from_mdb_value(value: &MDB_val) -> ~str {
         unsafe {
-            std::str::raw::from_buf_len(std::cast::transmute(value.mv_data), value.mv_size as uint)
+            std::str::raw::from_buf_len(std::mem::transmute(value.mv_data), value.mv_size as uint)
         }
     }
 }
@@ -72,7 +75,7 @@ impl MDBOutgoingValue for () {
     }
 }
 
-
 pub trait StateError {
     fn new_state_error(msg: ~str) -> Self;
 }
+

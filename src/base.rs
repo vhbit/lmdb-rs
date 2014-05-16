@@ -95,7 +95,7 @@ impl<S: Eq + Show + Clone> State<S> {
     */
 
     /// Invokes P if current state is equal to desired
-    fn then<T, E: StateError>(&self, desired: S, p: once || -> Result<T, E>) -> Result<T, E> {
+    fn then<T, E: StateError>(&self, desired: S, p: fn() -> Result<T, E>) -> Result<T, E> {
         if self.cur_state != desired {
             let msg = format!("{}: requires {}, is in {}", self.log_name, desired, self.cur_state);
             Err(StateError::new_state_error(msg))
@@ -104,7 +104,7 @@ impl<S: Eq + Show + Clone> State<S> {
         }
     }
 
-    fn then_not<T, E: StateError>(&self, unwanted: S, p: once || -> Result<T, E>) -> Result<T, E> {
+    fn then_not<T, E: StateError>(&self, unwanted: S, p: fn() -> Result<T, E>) -> Result<T, E> {
         if self.cur_state == unwanted {
             let msg = format!("{}: shouldn't be {}", self.log_name, self.cur_state);
             Err(StateError::new_state_error(msg))
@@ -113,7 +113,7 @@ impl<S: Eq + Show + Clone> State<S> {
         }
     }
 
-    fn silent_then<T: Default>(&self, desired: S, p: once || -> T) -> T {
+    fn silent_then<T: Default>(&self, desired: S, p: fn() -> T) -> T {
         if self.cur_state != desired {
             Default::default()
         } else {
@@ -121,7 +121,7 @@ impl<S: Eq + Show + Clone> State<S> {
         }
     }
 
-    fn silent_then_not<T: Default>(&self, unwanted: S, p: once || -> T) -> T {
+    fn silent_then_not<T: Default>(&self, unwanted: S, p: fn() -> T) -> T {
         if self.cur_state == unwanted {
             Default::default()
         } else {
@@ -129,7 +129,7 @@ impl<S: Eq + Show + Clone> State<S> {
         }
     }
 
-    fn change<T, E: StateError>(&mut self, desired: S, next: S, p: once || -> Result<T, E>) -> Result<T, E> {
+    fn change<T, E: StateError>(&mut self, desired: S, next: S, p: fn() -> Result<T, E>) -> Result<T, E> {
         self.then(desired, p)
             .and_then(|t| {
                 self.cur_state = next.clone(); // FIXME: try to find a cleaner way without cloning
@@ -154,7 +154,7 @@ enum EnvState {
 /// Environment
 pub struct Environment {
     env: *MDB_env,
-    path: Option<~Path>,
+    path: Option<Box<Path>>,
     state: State<EnvState>,
     flags: c_uint,
 }
@@ -167,7 +167,7 @@ impl Environment {
     pub fn new() -> MDBResult<Environment> {
         let env: *MDB_env = ptr::RawPtr::null();
         lift(unsafe {
-            let pEnv: **mut MDB_env = std::cast::transmute(&env);
+            let pEnv: **mut MDB_env = std::mem::transmute(&env);
             mdb_env_create(pEnv)},
              || Environment {
                  env: env,
@@ -217,7 +217,7 @@ impl Environment {
                                                     lift_noret(unsafe {mdb_env_open(t, c_path, flags, mode)})})})});
 
         if res.is_ok() {
-            self.path = Some(~path.clone());
+            self.path = Some(box path.clone());
             self.flags = flags;
         }
 
@@ -262,7 +262,7 @@ impl Environment {
     }
 
     /// Returns a copy of database path, if it was opened successfully
-    pub fn get_path(&self) -> Option<~Path> {
+    pub fn get_path(&self) -> Option<Box<Path>> {
         match self.path {
             Some(ref p) => Some(p.clone()),
             _ => None
@@ -626,8 +626,8 @@ impl<'a> Drop for ReadonlyTransaction<'a> {
 
 pub struct Cursor<'a> {
     handle: *MDB_cursor,
-    data_val: MDB_val,
-    key_val: MDB_val,
+    data_val: MDB_val<'a>,
+    key_val: MDB_val<'a>,
     txn: &'a NativeTransaction<'a>,
     db: &'a Database
 }
@@ -647,11 +647,11 @@ impl<'a> Cursor<'a> {
              })
     }
 
-    fn move_to<'b>(&self, key: Option<&'b MDBIncomingValue>, op: MDB_cursor_op) -> MDBResult<()> {
+    fn move_to(&self, key: Option<&'a MDBIncomingValue>, op: MDB_cursor_op) -> MDBResult<()> {
         // Even if we don't ask for any data and want only to set a position
         // MDB still insists in writing back key and data to provided pointers
         // it's actually not that big deal, considering no actual data copy happens
-        let t = unsafe {std::cast::transmute_mut(self)};
+        let t = unsafe {std::mem::transmute_mut(self)};
         t.data_val = unsafe {std::mem::init()};
         t.key_val = match key {
             Some(k) => k.to_mdb_value(),
@@ -672,13 +672,13 @@ impl<'a> Cursor<'a> {
     }
 
     /// Moves cursor to first entry for key if it exists
-    pub fn to_key(&self, key: &MDBIncomingValue) -> MDBResult<()> {
+    pub fn to_key(&self, key: &'a MDBIncomingValue) -> MDBResult<()> {
         self.move_to(Some(key), MDB_SET)
     }
 
     /// Moves cursor to first entry for key greater than
     /// or equal to ke
-    pub fn to_gte_key(&self, key: &MDBIncomingValue) -> MDBResult<()> {
+    pub fn to_gte_key(&self, key: &'a MDBIncomingValue) -> MDBResult<()> {
         self.move_to(Some(key), MDB_SET_RANGE)
     }
 
@@ -724,7 +724,7 @@ impl<'a> Cursor<'a> {
         }
     }
 
-    fn get_plain(&self) -> (MDB_val, MDB_val) {
+    fn get_plain(&'a self) -> (MDB_val<'a>, MDB_val<'a>) {
         (self.key_val, self.data_val)
     }
 
@@ -794,8 +794,8 @@ impl<'a> Drop for Cursor<'a> {
 }
 
 pub struct CursorValue<'a> {
-    key: MDB_val,
-    value: MDB_val,
+    key: MDB_val<'a>,
+    value: MDB_val<'a>,
 }
 
 /// CursorValue performs lazy data extraction from iterator
@@ -817,8 +817,8 @@ impl<'a> CursorValue<'a> {
 
 pub struct CursorKeyRangeIter<'a> {
     cursor: &'a Cursor<'a>,
-    start_key: MDB_val,
-    end_key: MDB_val,
+    start_key: MDB_val<'a>,
+    end_key: MDB_val<'a>,
     initialized: bool
 }
 

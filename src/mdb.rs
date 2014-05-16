@@ -1,5 +1,8 @@
+#![feature(globs)]
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
+
+extern crate libc;
 
 pub mod types {
     use self::os::{pthread_key_t, pthread_mutex_t, MDB_PID_T};
@@ -114,9 +117,9 @@ pub mod types {
 
     type MDB_ID2L = *MDB_ID2;
 
-    pub struct MDB_val {
+    pub struct MDB_val<'a> {
         pub mv_size: size_t,
-        pub mv_data: *c_void,
+        pub mv_data: &'a c_void,
     }
 
     struct MDB_rxbody {
@@ -200,7 +203,7 @@ enum MDB_page_pb {
         mm_txnid: txnid_t
     }
 
-    pub struct MDB_env {
+    pub struct MDB_env; /* {
         me_fd: HANDLE,
         me_lfd: HANDLE,
         me_mfd: HANDLE,
@@ -231,6 +234,7 @@ enum MDB_page_pb {
         me_maxfree_1pg: c_int,
         me_nodemax: c_uint
     }
+     */
 
     struct MDB_db {
         md_pad: u32,
@@ -243,13 +247,14 @@ enum MDB_page_pb {
         md_root: pgno_t
     }
 
-    struct MDB_dbx {
-        md_name: MDB_val,
+    struct MDB_dbx; /* {
+        md_name: MDB_val<'a>,
         md_cmp: *MDB_cmp_func,
         md_dcmp: *MDB_cmp_func,
         md_rel: *MDB_rel_func,
         md_relctx: c_void
     }
+    */
 
     pub struct MDB_txn {
         mt_parent: *MDB_txn,
