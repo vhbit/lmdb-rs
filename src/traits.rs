@@ -1,14 +1,15 @@
+use std;
+use libc;
 use libc::size_t;
 use mdb::types::MDB_val;
 
 pub trait MDBIncomingValue {
-    fn to_mdb_value<'a>(&'a self) -> MDB_val<'a>;
+    fn to_mdb_value(&self) -> MDB_val;
 }
 
 pub trait MDBOutgoingValue {
     fn from_mdb_value(value: &MDB_val) -> Self;
 }
-
 
 impl MDBIncomingValue for Vec<u8> {
     fn to_mdb_value(&self) -> MDB_val {
@@ -53,8 +54,8 @@ impl<'a> MDBIncomingValue for &'a str {
     }
 }
 
-impl<'a> MDBIncomingValue for MDB_val<'a> {
-    fn to_mdb_value<'a>(&'a self) -> MDB_val<'a> {
+impl MDBIncomingValue for MDB_val {
+    fn to_mdb_value(&self) -> MDB_val {
         MDB_val {
             mv_data: (*self).mv_data,
             mv_size: (*self).mv_size

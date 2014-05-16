@@ -57,7 +57,7 @@ impl StateError for MDBError {
 
 impl std::fmt::Show for MDBError {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        fmt.buf.write_str(self.message)
+        self.message.fmt(fmt)
     }
 }
 
@@ -95,25 +95,25 @@ impl<S: Eq + Show + Clone> State<S> {
     */
 
     /// Invokes P if current state is equal to desired
-    fn then<T, E: StateError>(&self, desired: S, p: fn() -> Result<T, E>) -> Result<T, E> {
+    fn then<E: StateError>(&self, desired: S) -> Result<(), E> {
         if self.cur_state != desired {
             let msg = format!("{}: requires {}, is in {}", self.log_name, desired, self.cur_state);
             Err(StateError::new_state_error(msg))
         } else {
-            p()
+            Ok(())
         }
     }
 
-    fn then_not<T, E: StateError>(&self, unwanted: S, p: fn() -> Result<T, E>) -> Result<T, E> {
+    fn then_not<E: StateError>(&self, unwanted: S) -> Result<(), E> {
         if self.cur_state == unwanted {
             let msg = format!("{}: shouldn't be {}", self.log_name, self.cur_state);
             Err(StateError::new_state_error(msg))
         } else {
-            p()
+            Ok(())
         }
     }
 
-    fn silent_then<T: Default>(&self, desired: S, p: fn() -> T) -> T {
+    fn silent_then<T: Default>(&self, desired: S, p: proc() -> T) -> T {
         if self.cur_state != desired {
             Default::default()
         } else {
@@ -121,7 +121,7 @@ impl<S: Eq + Show + Clone> State<S> {
         }
     }
 
-    fn silent_then_not<T: Default>(&self, unwanted: S, p: fn() -> T) -> T {
+    fn silent_then_not<T: Default>(&self, unwanted: S, p: proc() -> T) -> T {
         if self.cur_state == unwanted {
             Default::default()
         } else {
@@ -129,11 +129,12 @@ impl<S: Eq + Show + Clone> State<S> {
         }
     }
 
-    fn change<T, E: StateError>(&mut self, desired: S, next: S, p: fn() -> Result<T, E>) -> Result<T, E> {
-        self.then(desired, p)
-            .and_then(|t| {
-                self.cur_state = next.clone(); // FIXME: try to find a cleaner way without cloning
-            Ok(t)})
+    fn change<T, E: StateError>(&mut self, desired: S, next: S, p: proc() -> Result<T, E>) -> Result<T, E> {
+        try!(self.then(desired));
+        p().and_then(|t| {
+            self.cur_state = next.clone(); // FIXME: try to find a cleaner way without cloning
+            Ok(t)
+        })
     }
 
     fn force_change_to(&mut self, desired: S, p: ||) {
@@ -210,7 +211,7 @@ impl Environment {
         let t = self.env;
 
         let res = self.state.change(EnvCreated, EnvOpened,
-                                    || {
+                                    proc() {
                                         Environment::check_path(path, flags, mode)
                                             .and_then(|_| {
                                                 path.with_c_str(|c_path| {
@@ -225,40 +226,38 @@ impl Environment {
     }
 
     pub fn stat(&self) -> MDBResult<MDB_stat> {
-        self.state.then(EnvOpened, || {
-            let tmp: MDB_stat = unsafe { std::mem::init() };
-            lift(unsafe { mdb_env_stat(self.env, &tmp)},
-                 || tmp)
-        })
+        try!(self.state.then(EnvOpened));
+
+        let tmp: MDB_stat = unsafe { std::mem::init() };
+        lift(unsafe { mdb_env_stat(self.env, &tmp)},
+             || tmp)
     }
 
     pub fn info(&self) -> MDBResult<MDB_envinfo> {
-        self.state.then(EnvOpened, || {
-            let tmp: MDB_envinfo = unsafe { std::mem::init() };
-            lift(unsafe { mdb_env_info(self.env, &tmp)},
-                 || tmp)
-        })
+        try!(self.state.then(EnvOpened))
+        let tmp: MDB_envinfo = unsafe { std::mem::init() };
+        lift(unsafe { mdb_env_info(self.env, &tmp)},
+             || tmp)
     }
 
     /// Sync environment to disk
     pub fn sync(&mut self, force: bool) -> MDBResult<()> {
-        self.state.then(EnvOpened, || {
-            lift_noret(unsafe { mdb_env_sync(self.env, if force {1} else {0})})
-        })
+        try!(self.state.then(EnvOpened));
+        lift_noret(unsafe { mdb_env_sync(self.env, if force {1} else {0})})
     }
 
     pub fn set_flags(&mut self, flags: c_uint, turn_on: bool) -> MDBResult<()> {
-        self.state.then_not(EnvClosed, ||
-                            lift_noret(unsafe {
-                                mdb_env_set_flags(self.env, flags, if turn_on {1} else {0})}))
+        try!(self.state.then_not(EnvClosed));
+        lift_noret(unsafe {
+            mdb_env_set_flags(self.env, flags, if turn_on {1} else {0})
+        })
     }
 
     pub fn get_flags(&self) -> MDBResult<c_uint> {
-        self.state.then_not(EnvClosed, || {
-            let flags = 0;
-            lift(unsafe {mdb_env_get_flags(self.env, &flags)},
-                 || flags)
-        })
+        try!(self.state.then_not(EnvClosed));
+        let flags = 0;
+        lift(unsafe {mdb_env_get_flags(self.env, &flags)},
+            || flags)
     }
 
     /// Returns a copy of database path, if it was opened successfully
@@ -270,71 +269,65 @@ impl Environment {
     }
 
     pub fn set_mapsize(&mut self, size: size_t) -> MDBResult<()> {
-        self.state.then(EnvCreated,
-                        || lift_noret(unsafe { mdb_env_set_mapsize(self.env, size)})
-                        )
+        try!(self.state.then(EnvCreated));
+        lift_noret(unsafe { mdb_env_set_mapsize(self.env, size)})
     }
 
     pub fn set_maxreaders(&mut self, max_readers: c_uint) -> MDBResult<()> {
-        self.state.then(EnvCreated,
-                        || lift_noret(unsafe { mdb_env_set_maxreaders(self.env, max_readers)}))
+        try!(self.state.then(EnvCreated));
+        lift_noret(unsafe { mdb_env_set_maxreaders(self.env, max_readers)})
     }
 
     pub fn get_maxreaders(&self) -> MDBResult<c_uint> {
-        self.state.then_not(EnvClosed,
-                            || {
-                                let max_readers: c_uint = 0;
-                                lift(unsafe { mdb_env_get_maxreaders(self.env, &max_readers)},
-                                     || max_readers )})
+        try!(self.state.then_not(EnvClosed));
+        let max_readers: c_uint = 0;
+        lift(unsafe { mdb_env_get_maxreaders(self.env, &max_readers)},
+            || max_readers )
     }
 
     /// Sets number of max DBs open. Should be called before open.
     pub fn set_maxdbs(&mut self, max_dbs: c_uint) -> MDBResult<()> {
-        self.state.then(EnvCreated,
-                        || lift_noret(unsafe { mdb_env_set_maxdbs(self.env, max_dbs)}))
+        try!(self.state.then(EnvCreated));
+        lift_noret(unsafe { mdb_env_set_maxdbs(self.env, max_dbs)})
     }
 
     pub fn get_maxkeysize(&self) -> c_int {
         self.state.silent_then_not(EnvClosed,
-                                   ||  unsafe {mdb_env_get_maxkeysize(self.env)})
+                                   proc()  unsafe {mdb_env_get_maxkeysize(self.env)})
     }
 
     /// Creates a backup copy in specified file descriptor
     pub fn copy_to_fd(&self, fd: mdb_filehandle_t) -> MDBResult<()> {
-        self.state.then(EnvOpened,
-                        || lift_noret(unsafe { mdb_env_copyfd(self.env, fd) })
-                        )
+        try!(self.state.then(EnvOpened));
+        lift_noret(unsafe { mdb_env_copyfd(self.env, fd) })        
     }
 
     /// Gets file descriptor of this environment
     pub fn get_fd(&self) -> MDBResult<mdb_filehandle_t> {
-        self.state.then(EnvOpened,
-                        || {
-                            let fd = 0;
-                            lift({ unsafe { mdb_env_get_fd(self.env, &fd) }}, || fd)})
+        try!(self.state.then(EnvOpened));
+        let fd = 0;
+        lift({ unsafe { mdb_env_get_fd(self.env, &fd) }}, || fd)
     }
 
     /// Creates a backup copy in specified path
     // FIXME: check who is responsible for creating path: callee or caller
     pub fn copy_to_path(&self, path: &Path) -> MDBResult<()> {
-        self.state.then(EnvOpened,
-                        || {
-                            path.with_c_str(|c_path| unsafe {
-                                lift_noret(mdb_env_copy(self.env, c_path))
-                            })})
+        try!(self.state.then(EnvOpened));
+        path.with_c_str(|c_path| unsafe {
+            lift_noret(mdb_env_copy(self.env, c_path))
+        })
     }
 
     fn create_transaction(&self, parent: Option<NativeTransaction>, flags: c_uint) -> MDBResult<NativeTransaction> {
-        self.state.then(EnvOpened,
-                        || {
-                            let handle: *MDB_txn = ptr::RawPtr::null();
-                            let parent_handle = match parent {
-                                Some(t) => t.handle,
-                                _ => ptr::RawPtr::<MDB_txn>::null()
-                            };
+        try!(self.state.then(EnvOpened));
+        let handle: *MDB_txn = ptr::RawPtr::null();
+        let parent_handle = match parent {
+            Some(t) => t.handle,
+            _ => ptr::RawPtr::<MDB_txn>::null()
+        };
 
-                            lift(unsafe { mdb_txn_begin(self.env, parent_handle, flags, &handle) },
-                                 || NativeTransaction::new_with_handle(handle))})
+        lift(unsafe { mdb_txn_begin(self.env, parent_handle, flags, &handle) },
+             || NativeTransaction::new_with_handle(handle))
     }
 
     /// Creates a new read-write transaction
@@ -350,16 +343,16 @@ impl Environment {
     }
 
     fn get_db_by_name(&self, c_name: *c_char, flags: c_uint) -> MDBResult<Database> {
-        self.state.then(EnvOpened,
-                        || {
-                            let dbi: MDB_dbi = 0;
+        try!(self.state.then(EnvOpened));
 
-                            // FIXME: using macro to avoid capturing txn in closure
-                            // it's actually pretty awkward although reasonable from compiler view
-                            self.create_transaction(None, 0)
-                                .and_then(|txn| lift!(unsafe { mdb_dbi_open(txn.handle, c_name, flags, &dbi)}, txn) )
-                                .and_then(|mut t| t.commit() )
-                                .and_then(|_| Ok(Database::new_with_handle(dbi)))})
+        let dbi: MDB_dbi = 0;
+
+        // FIXME: using macro to avoid capturing txn in closure
+        // it's actually pretty awkward although reasonable from compiler view
+        self.create_transaction(None, 0)
+            .and_then(|txn| lift!(unsafe { mdb_dbi_open(txn.handle, c_name, flags, &dbi)}, txn) )
+            .and_then(|mut t| t.commit() )
+            .and_then(|_| Ok(Database::new_with_handle(dbi)))
     }
 
     /// Returns or creates database with name
@@ -386,8 +379,6 @@ impl Drop for Environment {
     }
 }
 
-
-
 #[deriving(Show, Eq, Clone)]
 enum TransactionState {
     TxnStateNormal,   // Normal, any operation possible
@@ -410,14 +401,14 @@ impl<'a> NativeTransaction<'a> {
     fn commit(&mut self) -> MDBResult<()> {
         let t = self.handle;
         self.state.change(TxnStateNormal, TxnStateInvalid,
-                          || lift_noret(unsafe { mdb_txn_commit(t) } ))
+                          proc() lift_noret(unsafe { mdb_txn_commit(t) } ))
     }
 
     #[allow(unused_must_use)]
     fn abort(&mut self) {
         let t = self.handle;
         self.state.change(TxnStateNormal, TxnStateInvalid,
-                          || lift_noret(unsafe { mdb_txn_abort(t); MDB_SUCCESS }));
+                          proc() lift_noret(unsafe { mdb_txn_abort(t); MDB_SUCCESS }));
     }
 
     /// Resets read only transaction, handle is kept. Must be followed
@@ -426,15 +417,16 @@ impl<'a> NativeTransaction<'a> {
     fn reset(&mut self) {
         let t = self.handle;
         self.state.change(TxnStateNormal, TxnStateReleased,
-                          || lift_noret(unsafe { mdb_txn_reset(t); MDB_SUCCESS }));
+                          proc() lift_noret(unsafe { mdb_txn_reset(t); MDB_SUCCESS }));
     }
 
     /// Acquires a new reader lock after it was released by reset
     fn renew(&mut self) -> MDBResult<()> {
         let t = self.handle;
         self.state.change(TxnStateReleased, TxnStateNormal,
-                          || lift_noret(unsafe {mdb_txn_renew(t)}))
+                          proc() lift_noret(unsafe {mdb_txn_renew(t)}))
     }
+
 
     fn create_child(&self, flags: c_uint) -> MDBResult<NativeTransaction> {
         let out: *MDB_txn = ptr::RawPtr::null();
@@ -460,8 +452,8 @@ impl<'a> NativeTransaction<'a> {
     }
 
     pub fn get<T: MDBOutgoingValue>(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<T> {
-        self.state.then(TxnStateNormal,
-                        || self.get_value(db, key))
+        try!(self.state.then(TxnStateNormal));
+        self.get_value(db, key)
     }
 
     fn set_value(&self, db: &Database, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
@@ -483,8 +475,8 @@ impl<'a> NativeTransaction<'a> {
     // FIXME: think about creating explicit separation of
     // all traits for databases with dup keys
     pub fn set(&self, db: &Database, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
-        self.state.then(TxnStateNormal,
-                        || self.set_value(db, key, value))
+        try!(self.state.then(TxnStateNormal))
+        self.set_value(db, key, value)
     }
 
     /// Deletes all values by key
@@ -497,19 +489,19 @@ impl<'a> NativeTransaction<'a> {
 
     /// If duplicate keys are allowed deletes value for key which is equal to data
     pub fn del_exact_value(&self, db: &Database, key: &MDBIncomingValue, data: &MDBIncomingValue) -> MDBResult<()> {
-        self.state.then(TxnStateNormal,
-                        || unsafe {
-                            let key_val = key.to_mdb_value();
-                            let data_val = data.to_mdb_value();
+        try!(self.state.then(TxnStateNormal));
+        unsafe {
+            let key_val = key.to_mdb_value();
+            let data_val = data.to_mdb_value();
 
-                            lift_noret(mdb_del(self.handle, db.handle, &key_val, &data_val))
-                        })
+            lift_noret(mdb_del(self.handle, db.handle, &key_val, &data_val))
+        }
     }
 
     /// Deletes all values for key
     pub fn del(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<()> {
-        self.state.then(TxnStateNormal,
-                        || self.del_value(db, key))
+        try!(self.state.then(TxnStateNormal));
+        self.del_value(db, key)
     }
 
     /// creates a new cursor in current transaction tied to db
@@ -574,10 +566,11 @@ impl<'a> Transaction<'a> {
     }
 }
 
-impl<'a> Drop for Transaction<'a> {
+#[unsafe_destructor]
+impl<'a> Drop for Transaction<'a> {    
     fn drop(&mut self) {
         self.inner.silent_abort();
-    }
+    }    
 }
 
 impl<'a> ReadonlyTransaction<'a> {
@@ -611,23 +604,41 @@ impl<'a> ReadonlyTransaction<'a> {
 
     pub fn get<T: MDBOutgoingValue>(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<T> {
         self.inner.get(db, key)
-    }
+    }    
 
+    /*
     pub fn new_cursor(&'a self, db: &'a Database) -> MDBResult<Cursor<'a>> {
         self.inner.new_cursor(db)
     }
-}
+    */
 
-impl<'a> Drop for ReadonlyTransaction<'a> {
-    fn drop(&mut self) {
-        self.inner.silent_abort();
+    /// Returns an iterator for values between start_key and end_key.
+    /// Currently it works only for unique keys (i.e. it will skip
+    /// multiple items when DB created with MDB_DUPSORT).
+    /// Iterator is valid while cursor is valid
+    pub fn iter_in_keyrange<'a, T: MDBIncomingValue+Clone>(&'a self, db: &'a Database, start_key: &T, end_key: &T) -> MDBResult<CursorKeyRangeIter<'a>> {
+        self.inner.new_cursor(db)
+            .and_then(|c| Ok(CursorKeyRangeIter {
+                                cursor: c,
+                                start_key: start_key.clone().to_mdb_value(),
+                                end_key: end_key.clone().to_mdb_value(),
+                                initialized: false,}))
     }
 }
 
-pub struct Cursor<'a> {
+
+#[unsafe_destructor]
+impl<'a> Drop for ReadonlyTransaction<'a> {    
+    fn drop(&mut self) {
+        self.inner.silent_abort();
+    }    
+}
+
+
+struct Cursor<'a> {
     handle: *MDB_cursor,
-    data_val: MDB_val<'a>,
-    key_val: MDB_val<'a>,
+    data_val: MDB_val,
+    key_val: MDB_val,
     txn: &'a NativeTransaction<'a>,
     db: &'a Database
 }
@@ -647,75 +658,74 @@ impl<'a> Cursor<'a> {
              })
     }
 
-    fn move_to(&self, key: Option<&'a MDBIncomingValue>, op: MDB_cursor_op) -> MDBResult<()> {
+    fn move_to<T: MDBIncomingValue+Clone>(&mut self, key: Option<&T>, op: MDB_cursor_op) -> MDBResult<()> {
         // Even if we don't ask for any data and want only to set a position
         // MDB still insists in writing back key and data to provided pointers
         // it's actually not that big deal, considering no actual data copy happens
-        let t = unsafe {std::mem::transmute_mut(self)};
-        t.data_val = unsafe {std::mem::init()};
-        t.key_val = match key {
-            Some(k) => k.to_mdb_value(),
+        self.data_val = unsafe {std::mem::init()};
+        self.key_val = match key {
+            Some(k) => k.clone().to_mdb_value(),
             _ => unsafe {std::mem::init()}
         };
 
-        lift_noret(unsafe { mdb_cursor_get(t.handle, &t.key_val, &t.data_val, op) })
+        lift_noret(unsafe { mdb_cursor_get(self.handle, &self.key_val, &self.data_val, op) })
     }
 
     /// Moves cursor to first entry
-    pub fn to_first(&self) -> MDBResult<()> {
-        self.move_to(None, MDB_FIRST)
+    pub fn to_first(&mut self) -> MDBResult<()> {
+        self.move_to(None::<&~str>, MDB_FIRST)
     }
 
     /// Moves cursor to last entry
-    pub fn to_last(&self) -> MDBResult<()> {
-        self.move_to(None, MDB_LAST)
+    pub fn to_last(&mut self) -> MDBResult<()> {
+        self.move_to(None::<&~str>, MDB_LAST)
     }
 
     /// Moves cursor to first entry for key if it exists
-    pub fn to_key(&self, key: &'a MDBIncomingValue) -> MDBResult<()> {
+    pub fn to_key<T:MDBIncomingValue+Clone>(&mut self, key: &T) -> MDBResult<()> {
         self.move_to(Some(key), MDB_SET)
     }
 
     /// Moves cursor to first entry for key greater than
     /// or equal to ke
-    pub fn to_gte_key(&self, key: &'a MDBIncomingValue) -> MDBResult<()> {
+    pub fn to_gte_key<T:MDBIncomingValue+Clone>(&mut self, key: &T) -> MDBResult<()> {
         self.move_to(Some(key), MDB_SET_RANGE)
     }
 
     /// Moves cursor to next key, i.e. skip items
     /// with duplicate keys
-    pub fn to_next_key(&self) -> MDBResult<()> {
-        self.move_to(None, MDB_NEXT_NODUP)
+    pub fn to_next_key(&mut self) -> MDBResult<()> {
+        self.move_to(None::<&~str>, MDB_NEXT_NODUP)
     }
 
     /// Moves cursor to next item with the same key as current
-    pub fn to_next_key_item(&self) -> MDBResult<()> {
-        self.move_to(None, MDB_NEXT_DUP)
+    pub fn to_next_key_item(&mut self) -> MDBResult<()> {
+        self.move_to(None::<&~str>, MDB_NEXT_DUP)
     }
 
     /// Moves cursor to prev entry, i.e. skips items
     /// with duplicate keys
-    pub fn to_prev_key(&self) -> MDBResult<()> {
-        self.move_to(None, MDB_PREV_NODUP)
+    pub fn to_prev_key(&mut self) -> MDBResult<()> {
+        self.move_to(None::<&~str>, MDB_PREV_NODUP)
     }
 
     /// Moves cursor to prev item with the same key as current
-    pub fn to_prev_key_item(&self) -> MDBResult<()> {
-        self.move_to(None, MDB_PREV_DUP)
+    pub fn to_prev_key_item(&mut self) -> MDBResult<()> {
+        self.move_to(None::<&~str>, MDB_PREV_DUP)
     }
 
     /// Moves cursor to first item with the same key as current
-    pub fn to_first_key_item(&self) -> MDBResult<()> {
-        self.move_to(None, MDB_FIRST_DUP)
+    pub fn to_first_key_item(&mut self) -> MDBResult<()> {
+        self.move_to(None::<&~str>, MDB_FIRST_DUP)
     }
 
     /// Moves cursor to last item with the same key as current
-    pub fn to_last_key_item(&self) -> MDBResult<()> {
-        self.move_to(None, MDB_LAST_DUP)
+    pub fn to_last_key_item(&mut self) -> MDBResult<()> {
+        self.move_to(None::<&~str>, MDB_LAST_DUP)
     }
 
     /// Retrieves current key/value as tuple
-    pub fn get<T: MDBOutgoingValue, U: MDBOutgoingValue>(&self) -> MDBResult<(T, U)> {
+    pub fn get<T: MDBOutgoingValue, U: MDBOutgoingValue>(&mut self) -> MDBResult<(T, U)> {
         unsafe {
             let key_val: MDB_val = std::mem::init();
             let data_val: MDB_val = std::mem::init();
@@ -724,11 +734,11 @@ impl<'a> Cursor<'a> {
         }
     }
 
-    fn get_plain(&'a self) -> (MDB_val<'a>, MDB_val<'a>) {
+    fn get_plain(&self) -> (MDB_val, MDB_val) {
         (self.key_val, self.data_val)
     }
 
-    fn set_value<'a>(&self, key:Option<&'a MDBIncomingValue>, value: &MDBIncomingValue, flags: c_uint) -> MDBResult<()> {
+    fn set_value<'a>(&mut self, key:Option<&'a MDBIncomingValue>, value: &MDBIncomingValue, flags: c_uint) -> MDBResult<()> {
         let data_val = value.to_mdb_value();
         let key_val = unsafe {
             match  key {
@@ -742,26 +752,26 @@ impl<'a> Cursor<'a> {
 
     /// Overwrites value for current item
     /// Note: overwrites max cur_value.len() bytes
-    pub fn set(&self, value: &MDBIncomingValue) -> MDBResult<()> {
+    pub fn set(&mut self, value: &MDBIncomingValue) -> MDBResult<()> {
         self.set_value(None, value, MDB_CURRENT)
     }
 
     /// Adds a new value if it doesn't exist yet
-    pub fn upsert(&self, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
+    pub fn upsert(&mut self, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
         self.set_value(Some(key), value, MDB_NOOVERWRITE)
     }
 
-    fn del_value(&self, flags: c_uint) -> MDBResult<()> {
+    fn del_value(&mut self, flags: c_uint) -> MDBResult<()> {
         lift_noret(unsafe { mdb_cursor_del(self.handle, flags) })
     }
 
     /// Deletes only current item
-    pub fn del_single(&self) -> MDBResult<()> {
+    pub fn del_single(&mut self) -> MDBResult<()> {
         self.del_value(0)
     }
 
     /// Deletes all items with same key as current
-    pub fn del_all(&self) -> MDBResult<()> {
+    pub fn del_all(&mut self) -> MDBResult<()> {
         self.del_value(MDB_NODUPDATA)
     }
 
@@ -770,19 +780,6 @@ impl<'a> Cursor<'a> {
         let tmp: size_t = 0;
         lift(unsafe {mdb_cursor_count(self.handle, &tmp)},
              || tmp)
-    }
-
-    /// Returns an iterator for values between start_key and end_key.
-    /// Currently it works only for unique keys (i.e. it will skip
-    /// multiple items when DB created with MDB_DUPSORT).
-    /// Iterator is valid while cursor is valid
-    pub fn iter_in_keyrange<'a, T: MDBIncomingValue>(&'a self, start_key: &'a T, end_key: &'a T) -> CursorKeyRangeIter<'a> {
-        CursorKeyRangeIter {
-            cursor: self,
-            start_key: start_key.to_mdb_value(),
-            end_key: end_key.to_mdb_value(),
-            initialized: false,
-        }
     }
 }
 
@@ -793,15 +790,15 @@ impl<'a> Drop for Cursor<'a> {
     }
 }
 
-pub struct CursorValue<'a> {
-    key: MDB_val<'a>,
-    value: MDB_val<'a>,
+pub struct CursorValue {
+    key: MDB_val,
+    value: MDB_val,
 }
 
 /// CursorValue performs lazy data extraction from iterator
 /// avoiding any data conversions and memory copy. Lifetime
 /// is limited to iterator lifetime
-impl<'a> CursorValue<'a> {
+impl CursorValue {
     pub fn get_key<T: MDBOutgoingValue>(&self) -> T {
         MDBOutgoingValue::from_mdb_value(&self.key)
     }
@@ -816,14 +813,14 @@ impl<'a> CursorValue<'a> {
 }
 
 pub struct CursorKeyRangeIter<'a> {
-    cursor: &'a Cursor<'a>,
-    start_key: MDB_val<'a>,
-    end_key: MDB_val<'a>,
+    cursor: Cursor<'a>,
+    start_key: MDB_val,
+    end_key: MDB_val,
     initialized: bool
 }
 
-impl<'a> Iterator<CursorValue<'a>> for CursorKeyRangeIter<'a> {
-    fn next(&mut self) -> Option<CursorValue<'a>> {
+impl<'a> Iterator<CursorValue> for CursorKeyRangeIter<'a> {
+    fn next(&mut self) -> Option<CursorValue> {
         let move_res = if !self.initialized {
             self.initialized = true;
             self.cursor.to_gte_key(&self.start_key)
@@ -846,6 +843,13 @@ impl<'a> Iterator<CursorValue<'a>> for CursorKeyRangeIter<'a> {
                 None
             }
         }
+    }
+
+    fn size_hint(&self) -> (uint, Option<uint>) {
+        match self.cursor.item_count() {
+            Err(_) => (0, None),
+            Ok(x) => (x as uint, None)
+        }        
     }
 }
 

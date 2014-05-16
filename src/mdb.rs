@@ -1,8 +1,3 @@
-#![feature(globs)]
-#![allow(non_camel_case_types)]
-#![allow(dead_code)]
-
-extern crate libc;
 
 pub mod types {
     use self::os::{pthread_key_t, pthread_mutex_t, MDB_PID_T};
@@ -117,9 +112,10 @@ pub mod types {
 
     type MDB_ID2L = *MDB_ID2;
 
-    pub struct MDB_val<'a> {
+    #[deriving(Clone)]
+    pub struct MDB_val {
         pub mv_size: size_t,
-        pub mv_data: &'a c_void,
+        pub mv_data: *c_void,
     }
 
     struct MDB_rxbody {
