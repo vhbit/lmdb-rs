@@ -564,6 +564,19 @@ impl<'a> Transaction<'a> {
     pub fn new_cursor(&'a self, db: &'a Database) -> MDBResult<Cursor<'a>> {
         self.inner.new_cursor(db)
     }
+
+    /// Returns an iterator for values between start_key and end_key.
+    /// Currently it works only for unique keys (i.e. it will skip
+    /// multiple items when DB created with MDB_DUPSORT).
+    /// Iterator is valid while cursor is valid
+    pub fn iter_in_keyrange<'a, T: MDBIncomingValue+Clone>(&'a self, db: &'a Database, start_key: &T, end_key: &T) -> MDBResult<CursorKeyRangeIter<'a>> {
+        self.inner.new_cursor(db)
+            .and_then(|c| Ok(CursorKeyRangeIter {
+                                cursor: c,
+                                start_key: start_key.clone().to_mdb_value(),
+                                end_key: end_key.clone().to_mdb_value(),
+                                initialized: false,}))
+    }    
 }
 
 #[unsafe_destructor]
@@ -606,11 +619,9 @@ impl<'a> ReadonlyTransaction<'a> {
         self.inner.get(db, key)
     }    
 
-    /*
     pub fn new_cursor(&'a self, db: &'a Database) -> MDBResult<Cursor<'a>> {
         self.inner.new_cursor(db)
     }
-    */
 
     /// Returns an iterator for values between start_key and end_key.
     /// Currently it works only for unique keys (i.e. it will skip
@@ -635,7 +646,7 @@ impl<'a> Drop for ReadonlyTransaction<'a> {
 }
 
 
-struct Cursor<'a> {
+pub struct Cursor<'a> {
     handle: *MDB_cursor,
     data_val: MDB_val,
     key_val: MDB_val,
