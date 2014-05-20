@@ -42,6 +42,18 @@ impl MDBIncomingValue for ~str {
     }
 }
 
+impl MDBIncomingValue for StrBuf {
+    fn to_mdb_value(&self) -> MDB_val {
+        unsafe {
+            let t = self.as_slice();
+            MDB_val {
+                mv_data: std::mem::transmute(t.as_ptr()),
+                mv_size: t.len() as size_t
+            }
+        }
+    }
+}
+
 impl<'a> MDBIncomingValue for &'a str {
     fn to_mdb_value(&self) -> MDB_val {
         unsafe {
@@ -71,6 +83,14 @@ impl MDBOutgoingValue for ~str {
     }
 }
 
+impl MDBOutgoingValue for StrBuf {
+    fn from_mdb_value(value: &MDB_val) -> StrBuf {
+        unsafe {
+            std::str::raw::from_buf_len(std::mem::transmute(value.mv_data), value.mv_size as uint).to_strbuf()
+        }
+    }
+}
+
 impl MDBOutgoingValue for () {
     fn from_mdb_value(_: &MDB_val) {
     }
@@ -79,4 +99,3 @@ impl MDBOutgoingValue for () {
 pub trait StateError {
     fn new_state_error(msg: ~str) -> Self;
 }
-
