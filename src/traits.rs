@@ -1,5 +1,4 @@
 use std;
-use libc;
 use libc::size_t;
 use mdb::types::MDB_val;
 
@@ -30,7 +29,7 @@ impl MDBOutgoingValue for Vec<u8> {
     }
 }
 
-impl MDBIncomingValue for ~str {
+impl MDBIncomingValue for Box<String> {
     fn to_mdb_value(&self) -> MDB_val {
         unsafe {
             let t = self.as_slice();
@@ -42,7 +41,7 @@ impl MDBIncomingValue for ~str {
     }
 }
 
-impl MDBIncomingValue for StrBuf {
+impl MDBIncomingValue for String {
     fn to_mdb_value(&self) -> MDB_val {
         unsafe {
             let t = self.as_slice();
@@ -75,18 +74,18 @@ impl MDBIncomingValue for MDB_val {
     }
 }
 
-impl MDBOutgoingValue for ~str {
-    fn from_mdb_value(value: &MDB_val) -> ~str {
+impl MDBOutgoingValue for Box<String> {
+    fn from_mdb_value(value: &MDB_val) -> Box<String> {
         unsafe {
-            std::str::raw::from_buf_len(std::mem::transmute(value.mv_data), value.mv_size as uint)
+            box std::str::raw::from_buf_len(std::mem::transmute(value.mv_data), value.mv_size as uint)
         }
     }
 }
 
-impl MDBOutgoingValue for StrBuf {
-    fn from_mdb_value(value: &MDB_val) -> StrBuf {
+impl MDBOutgoingValue for String {
+    fn from_mdb_value(value: &MDB_val) -> String {
         unsafe {
-            std::str::raw::from_buf_len(std::mem::transmute(value.mv_data), value.mv_size as uint).to_strbuf()
+            std::str::raw::from_buf_len(std::mem::transmute(value.mv_data), value.mv_size as uint).to_string()
         }
     }
 }
@@ -97,5 +96,5 @@ impl MDBOutgoingValue for () {
 }
 
 pub trait StateError {
-    fn new_state_error(msg: ~str) -> Self;
+    fn new_state_error(msg: Box<String>) -> Self;
 }

@@ -4,9 +4,9 @@ use mdb::consts::MDB_SUCCESS;
 use mdb::funcs::mdb_strerror;
 use base::{MDBResult, MDBError};
 
-pub fn error_msg(code: c_int) -> ~str {
+pub fn error_msg(code: c_int) -> Box<String> {
     unsafe {
-        str::raw::from_c_str(mdb_strerror(code))
+        box str::raw::from_c_str(mdb_strerror(code))
     }
 }
 

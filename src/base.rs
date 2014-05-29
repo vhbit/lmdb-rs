@@ -29,7 +29,7 @@ macro_rules! lift(
 /// MDBError wraps information about LMDB error
 pub struct MDBError {
     code: c_int,
-    message: ~str
+    message: Box<String>
 }
 
 impl MDBError {
@@ -47,7 +47,7 @@ impl MDBError {
 }
 
 impl StateError for MDBError {
-    fn new_state_error(msg: ~str) -> MDBError {
+    fn new_state_error(msg: Box<String>) -> MDBError {
         MDBError {
             code: MDB_INVALID_STATE,
             message: msg
@@ -75,12 +75,12 @@ impl Database {
 }
 
 struct State<S> {
-    log_name: ~str,
+    log_name: Box<String>,
     cur_state: S,
 }
 
 impl<S: Eq + Show + Clone> State<S> {
-    fn new(name: ~str, initial: S) -> State<S> {
+    fn new(name: Box<String>, initial: S) -> State<S> {
         State {
             log_name: name,
             cur_state: initial,
@@ -98,7 +98,7 @@ impl<S: Eq + Show + Clone> State<S> {
     fn then<E: StateError>(&self, desired: S) -> Result<(), E> {
         if self.cur_state != desired {
             let msg = format!("{}: requires {}, is in {}", self.log_name, desired, self.cur_state);
-            Err(StateError::new_state_error(msg))
+            Err(StateError::new_state_error(box msg))
         } else {
             Ok(())
         }
@@ -107,7 +107,7 @@ impl<S: Eq + Show + Clone> State<S> {
     fn then_not<E: StateError>(&self, unwanted: S) -> Result<(), E> {
         if self.cur_state == unwanted {
             let msg = format!("{}: shouldn't be {}", self.log_name, self.cur_state);
-            Err(StateError::new_state_error(msg))
+            Err(StateError::new_state_error(box msg))
         } else {
             Ok(())
         }
@@ -173,7 +173,7 @@ impl Environment {
              || Environment {
                  env: env,
                  path: None,
-                 state: State::new("Env".to_owned(), EnvCreated),
+                 state: State::new(box "Env".to_string(), EnvCreated),
                  flags: 0
              })
     }
@@ -228,14 +228,14 @@ impl Environment {
     pub fn stat(&self) -> MDBResult<MDB_stat> {
         try!(self.state.then(EnvOpened));
 
-        let tmp: MDB_stat = unsafe { std::mem::init() };
+        let tmp: MDB_stat = unsafe { std::mem::zeroed() };
         lift(unsafe { mdb_env_stat(self.env, &tmp)},
              || tmp)
     }
 
     pub fn info(&self) -> MDBResult<MDB_envinfo> {
         try!(self.state.then(EnvOpened))
-        let tmp: MDB_envinfo = unsafe { std::mem::init() };
+        let tmp: MDB_envinfo = unsafe { std::mem::zeroed() };
         lift(unsafe { mdb_env_info(self.env, &tmp)},
              || tmp)
     }
@@ -299,7 +299,7 @@ impl Environment {
     /// Creates a backup copy in specified file descriptor
     pub fn copy_to_fd(&self, fd: mdb_filehandle_t) -> MDBResult<()> {
         try!(self.state.then(EnvOpened));
-        lift_noret(unsafe { mdb_env_copyfd(self.env, fd) })        
+        lift_noret(unsafe { mdb_env_copyfd(self.env, fd) })
     }
 
     /// Gets file descriptor of this environment
@@ -395,7 +395,7 @@ impl<'a> NativeTransaction<'a> {
     fn new_with_handle(h: *MDB_txn) -> NativeTransaction {
         NativeTransaction {
             handle: h,
-            state: State::new("Txn".to_owned(), TxnStateNormal) }
+            state: State::new(box "Txn".to_string(), TxnStateNormal) }
     }
 
     fn commit(&mut self) -> MDBResult<()> {
@@ -444,7 +444,7 @@ impl<'a> NativeTransaction<'a> {
     fn get_value<T: MDBOutgoingValue>(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<T> {
         unsafe {
             let key_val = key.to_mdb_value();
-            let data_val: MDB_val = std::mem::init();
+            let data_val: MDB_val = std::mem::zeroed();
 
             lift(mdb_get(self.handle, db.handle, &key_val, &data_val),
                  || MDBOutgoingValue::from_mdb_value(&data_val))
@@ -576,14 +576,14 @@ impl<'a> Transaction<'a> {
                                 start_key: start_key.clone().to_mdb_value(),
                                 end_key: end_key.clone().to_mdb_value(),
                                 initialized: false,}))
-    }    
+    }
 }
 
 #[unsafe_destructor]
-impl<'a> Drop for Transaction<'a> {    
+impl<'a> Drop for Transaction<'a> {
     fn drop(&mut self) {
         self.inner.silent_abort();
-    }    
+    }
 }
 
 impl<'a> ReadonlyTransaction<'a> {
@@ -617,7 +617,7 @@ impl<'a> ReadonlyTransaction<'a> {
 
     pub fn get<T: MDBOutgoingValue>(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<T> {
         self.inner.get(db, key)
-    }    
+    }
 
     pub fn new_cursor(&'a self, db: &'a Database) -> MDBResult<Cursor<'a>> {
         self.inner.new_cursor(db)
@@ -639,10 +639,10 @@ impl<'a> ReadonlyTransaction<'a> {
 
 
 #[unsafe_destructor]
-impl<'a> Drop for ReadonlyTransaction<'a> {    
+impl<'a> Drop for ReadonlyTransaction<'a> {
     fn drop(&mut self) {
         self.inner.silent_abort();
-    }    
+    }
 }
 
 
@@ -661,8 +661,8 @@ impl<'a> Cursor<'a> {
              || unsafe {
                  Cursor {
                      handle: tmp,
-                     data_val: std::mem::init(),
-                     key_val: std::mem::init(),
+                     data_val: std::mem::zeroed(),
+                     key_val: std::mem::zeroed(),
                      txn: txn,
                      db: db,
                  }
@@ -673,10 +673,10 @@ impl<'a> Cursor<'a> {
         // Even if we don't ask for any data and want only to set a position
         // MDB still insists in writing back key and data to provided pointers
         // it's actually not that big deal, considering no actual data copy happens
-        self.data_val = unsafe {std::mem::init()};
+        self.data_val = unsafe {std::mem::zeroed()};
         self.key_val = match key {
             Some(k) => k.clone().to_mdb_value(),
-            _ => unsafe {std::mem::init()}
+            _ => unsafe {std::mem::zeroed()}
         };
 
         lift_noret(unsafe { mdb_cursor_get(self.handle, &self.key_val, &self.data_val, op) })
@@ -684,12 +684,12 @@ impl<'a> Cursor<'a> {
 
     /// Moves cursor to first entry
     pub fn to_first(&mut self) -> MDBResult<()> {
-        self.move_to(None::<&~str>, MDB_FIRST)
+        self.move_to(None::<&Box<String>>, MDB_FIRST)
     }
 
     /// Moves cursor to last entry
     pub fn to_last(&mut self) -> MDBResult<()> {
-        self.move_to(None::<&~str>, MDB_LAST)
+        self.move_to(None::<&Box<String>>, MDB_LAST)
     }
 
     /// Moves cursor to first entry for key if it exists
@@ -706,40 +706,40 @@ impl<'a> Cursor<'a> {
     /// Moves cursor to next key, i.e. skip items
     /// with duplicate keys
     pub fn to_next_key(&mut self) -> MDBResult<()> {
-        self.move_to(None::<&~str>, MDB_NEXT_NODUP)
+        self.move_to(None::<&Box<String>>, MDB_NEXT_NODUP)
     }
 
     /// Moves cursor to next item with the same key as current
     pub fn to_next_key_item(&mut self) -> MDBResult<()> {
-        self.move_to(None::<&~str>, MDB_NEXT_DUP)
+        self.move_to(None::<&Box<String>>, MDB_NEXT_DUP)
     }
 
     /// Moves cursor to prev entry, i.e. skips items
     /// with duplicate keys
     pub fn to_prev_key(&mut self) -> MDBResult<()> {
-        self.move_to(None::<&~str>, MDB_PREV_NODUP)
+        self.move_to(None::<&Box<String>>, MDB_PREV_NODUP)
     }
 
     /// Moves cursor to prev item with the same key as current
     pub fn to_prev_key_item(&mut self) -> MDBResult<()> {
-        self.move_to(None::<&~str>, MDB_PREV_DUP)
+        self.move_to(None::<&Box<String>>, MDB_PREV_DUP)
     }
 
     /// Moves cursor to first item with the same key as current
     pub fn to_first_key_item(&mut self) -> MDBResult<()> {
-        self.move_to(None::<&~str>, MDB_FIRST_DUP)
+        self.move_to(None::<&Box<String>>, MDB_FIRST_DUP)
     }
 
     /// Moves cursor to last item with the same key as current
     pub fn to_last_key_item(&mut self) -> MDBResult<()> {
-        self.move_to(None::<&~str>, MDB_LAST_DUP)
+        self.move_to(None::<&Box<String>>, MDB_LAST_DUP)
     }
 
     /// Retrieves current key/value as tuple
     pub fn get<T: MDBOutgoingValue, U: MDBOutgoingValue>(&mut self) -> MDBResult<(T, U)> {
         unsafe {
-            let key_val: MDB_val = std::mem::init();
-            let data_val: MDB_val = std::mem::init();
+            let key_val: MDB_val = std::mem::zeroed();
+            let data_val: MDB_val = std::mem::zeroed();
             lift(mdb_cursor_get(self.handle, &key_val, &data_val, MDB_GET_CURRENT),
                  || (MDBOutgoingValue::from_mdb_value(&key_val), MDBOutgoingValue::from_mdb_value(&data_val)))
         }
@@ -754,7 +754,7 @@ impl<'a> Cursor<'a> {
         let key_val = unsafe {
             match  key {
                 Some(k) => k.to_mdb_value(),
-                _ => std::mem::init()
+                _ => std::mem::zeroed()
             }
         };
 
@@ -860,7 +860,7 @@ impl<'a> Iterator<CursorValue> for CursorKeyRangeIter<'a> {
         match self.cursor.item_count() {
             Err(_) => (0, None),
             Ok(x) => (x as uint, None)
-        }        
+        }
     }
 }
 
@@ -931,15 +931,15 @@ mod test {
 
                             match env.get_default_db(0) {
                                 Ok(db) => {
-                                    let key = "hello".to_owned();
-                                    let value = "world".to_owned();
+                                    let key = "hello";
+                                    let value = "world";
 
                                     match env.new_transaction() {
                                         Ok(tnx) => {
                                             match tnx.set(&db, &key, &value) {
                                                 Ok(_) => {
-                                                    match tnx.get::<~str>(&db, &key) {
-                                                        Ok(v) => assert!(v == value, "Written {:?} and read {:?}", value.as_slice(), v.as_slice()),
+                                                    match tnx.get::<Box<String>>(&db, &key) {
+                                                        Ok(v) => assert!(v.as_slice() == value, "Written {:?} and read {:?}", value.as_slice(), v.as_slice()),
                                                         Err(err) => fail!("Failed to read value: {}", err.message)
                                                     }
                                                 },
@@ -971,19 +971,19 @@ mod test {
             let db = env.get_default_db(0).unwrap();
             let txn = env.new_transaction().unwrap();
 
-            let test_key1 = "key1".to_owned();
-            let test_data1 = "value1".to_owned();
-            let test_data2 = "value2".to_owned();
+            let test_key1 = "key1";
+            let test_data1 = "value1";
+            let test_data2 = "value2";
 
             assert!(txn.get::<()>(&db, &test_key1).is_err(), "Key shouldn't exist yet");
 
             let _ = txn.set(&db, &test_key1, &test_data1);
-            let v: ~str = txn.get(&db, &test_key1).unwrap();
-            assert!(v == test_data1, "Data written differs from data read");
+            let v: Box<String> = txn.get(&db, &test_key1).unwrap();
+            assert!(v.as_slice() == test_data1, "Data written differs from data read");
 
             let _ = txn.set(&db, &test_key1, &test_data2);
-            let v: ~str = txn.get(&db, &test_key1).unwrap();
-            assert!(v == test_data2, "Data written differs from data read");
+            let v: Box<String> = txn.get(&db, &test_key1).unwrap();
+            assert!(v.as_slice() == test_data2, "Data written differs from data read");
 
             let _ = txn.del(&db, &test_key1);
             assert!(txn.get::<()>(&db, &test_key1).is_err(), "Key should be deleted");
@@ -1001,24 +1001,24 @@ mod test {
             let db = env.get_default_db(consts::MDB_DUPSORT).unwrap();
             let txn = env.new_transaction().unwrap();
 
-            let test_key1 = "key1".to_owned();
-            let test_data1 = "value1".to_owned();
-            let test_data2 = "value2".to_owned();
+            let test_key1 = "key1";
+            let test_data1 = "value1";
+            let test_data2 = "value2";
 
             assert!(txn.get::<()>(&db, &test_key1).is_err(), "Key shouldn't exist yet");
 
             let _ = txn.set(&db, &test_key1, &test_data1);
-            let v: ~str = txn.get(&db, &test_key1).unwrap();
-            assert!(v == test_data1, "Data written differs from data read");
+            let v: Box<String> = txn.get(&db, &test_key1).unwrap();
+            assert!(v.as_slice() == test_data1, "Data written differs from data read");
 
             let _ = txn.set(&db, &test_key1, &test_data2);
-            let v: ~str = txn.get(&db, &test_key1).unwrap();
-            assert!(v == test_data1, "It should still return first value");
+            let v: Box<String> = txn.get(&db, &test_key1).unwrap();
+            assert!(v.as_slice() == test_data1, "It should still return first value");
 
             let _ = txn.del_exact(&db, &test_key1, &test_data1);
 
-            let v: ~str = txn.get(&db, &test_key1).unwrap();
-            assert!(v == test_data2, "It should return second value");
+            let v: Box<String> = txn.get(&db, &test_key1).unwrap();
+            assert!(v.as_slice() == test_data2, "It should return second value");
             let _ = txn.del(&db, &test_key1);
 
             assert!(txn.get::<()>(&db, &test_key1).is_err(), "Key shouldn't exist anymore!");
@@ -1037,9 +1037,9 @@ mod test {
             let db = env.get_default_db(consts::MDB_DUPSORT).unwrap();
             let txn = env.new_transaction().unwrap();
 
-            let test_key1 = "key1".to_owned();
-            let test_key2 = "key2".to_owned();
-            let test_values: Vec<~str> = vec!("value1".to_owned(), "value2".to_owned(), "value3".to_owned(), "value4".to_owned());
+            let test_key1 = "key1";
+            let test_key2 = "key2";
+            let test_values: Vec<String> = vec!("value1".to_string(), "value2".to_string(), "value3".to_string(), "value4".to_string());
 
             assert!(txn.get::<()>(&db, &test_key1).is_err(), "Key shouldn't exist yet");
 
@@ -1058,14 +1058,14 @@ mod test {
             assert!(cursor.item_count().unwrap() == 3);
 
             assert!(cursor.to_key(&test_key1).is_ok());
-            let new_value = "testme".to_owned();
+            let new_value = "testme";
 
             assert!(cursor.set(&new_value).is_ok());
-            let (_, v): ((), ~str) = cursor.get().unwrap();
+            let (_, v): ((), Box<String>) = cursor.get().unwrap();
 
             // NOTE: this asserting will work once new_value is
             // of the same length as it is inplace change
-            assert!(v == new_value);
+            assert!(v.as_slice() == new_value);
 
             assert!(cursor.del_all().is_ok());
             assert!(cursor.to_key(&test_key1).is_err());

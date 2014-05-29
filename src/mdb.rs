@@ -1,4 +1,5 @@
-
+#[allow(non_camel_case_types)]
+#[allow(dead_code)]
 pub mod types {
     use self::os::{pthread_key_t, pthread_mutex_t, MDB_PID_T};
     pub use self::os::{mdb_mode_t, mdb_filehandle_t};
@@ -401,6 +402,7 @@ pub mod consts {
 }
 
 
+#[allow(dead_code)]
 pub mod funcs {
     use libc::{c_int, c_void, c_char, c_uint, size_t};
     //use super::{MDB_val, MDB_env, MDB_txn, MDB_dbi, MDB_cursor, MDB_cursor_op, MDB_stat, MDB_envinfo};
