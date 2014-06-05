@@ -146,7 +146,7 @@ impl<S: Eq + Show + Clone> State<S> {
     }
 }
 
-#[deriving(Eq, Show, Clone)]
+#[deriving(PartialEq, Eq, Show, Clone)]
 enum EnvState {
     EnvCreated,
     EnvOpened,
@@ -380,7 +380,7 @@ impl Drop for Environment {
     }
 }
 
-#[deriving(Show, Eq, Clone)]
+#[deriving(PartialEq, Show, Eq, Clone)]
 enum TransactionState {
     TxnStateNormal,   // Normal, any operation possible
     TxnStateReleased, // Released (reset on readonly), has to be renewed
