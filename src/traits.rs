@@ -2,15 +2,15 @@ use std;
 use libc::size_t;
 use mdb::types::MDB_val;
 
-pub trait MDBIncomingValue {
+pub trait ToMdbValue {
     fn to_mdb_value(&self) -> MDB_val;
 }
 
-pub trait MDBOutgoingValue {
+pub trait FromMdbValue {
     fn from_mdb_value(value: &MDB_val) -> Self;
 }
 
-impl MDBIncomingValue for Vec<u8> {
+impl ToMdbValue for Vec<u8> {
     fn to_mdb_value(&self) -> MDB_val {
         unsafe {
             MDB_val {
@@ -21,7 +21,7 @@ impl MDBIncomingValue for Vec<u8> {
     }
 }
 
-impl MDBOutgoingValue for Vec<u8> {
+impl FromMdbValue for Vec<u8> {
     fn from_mdb_value(value: &MDB_val) -> Vec<u8> {
         unsafe {
             std::vec::raw::from_buf(std::mem::transmute(value.mv_data), value.mv_size as uint)
@@ -29,7 +29,7 @@ impl MDBOutgoingValue for Vec<u8> {
     }
 }
 
-impl MDBIncomingValue for String {
+impl ToMdbValue for String {
     fn to_mdb_value(&self) -> MDB_val {
         unsafe {
             let t = self.as_slice();
@@ -41,7 +41,7 @@ impl MDBIncomingValue for String {
     }
 }
 
-impl<'a> MDBIncomingValue for &'a str {
+impl<'a> ToMdbValue for &'a str {
     fn to_mdb_value(&self) -> MDB_val {
         unsafe {
             let t = self.as_slice();
@@ -53,7 +53,7 @@ impl<'a> MDBIncomingValue for &'a str {
     }
 }
 
-impl MDBIncomingValue for MDB_val {
+impl ToMdbValue for MDB_val {
     fn to_mdb_value(&self) -> MDB_val {
         MDB_val {
             mv_data: (*self).mv_data,
@@ -62,7 +62,7 @@ impl MDBIncomingValue for MDB_val {
     }
 }
 
-impl MDBOutgoingValue for String {
+impl FromMdbValue for String {
     fn from_mdb_value(value: &MDB_val) -> String {
         unsafe {
             std::str::raw::from_buf_len(std::mem::transmute(value.mv_data), value.mv_size as uint).to_string()
@@ -70,7 +70,7 @@ impl MDBOutgoingValue for String {
     }
 }
 
-impl MDBOutgoingValue for () {
+impl FromMdbValue for () {
     fn from_mdb_value(_: &MDB_val) {
     }
 }

@@ -8,7 +8,7 @@ use mdb::consts::*;
 use mdb::funcs::*;
 use mdb::types::*;
 
-use traits::{MDBIncomingValue, MDBOutgoingValue, StateError};
+use traits::{ToMdbValue, FromMdbValue, StateError};
 use utils::{error_msg, lift, lift_noret};
 
 use std::fmt::Show;
@@ -442,26 +442,26 @@ impl<'a> NativeTransaction<'a> {
                                    || unsafe {mdb_txn_abort(t)})
     }
 
-    fn get_value<T: MDBOutgoingValue>(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<T> {
+    fn get_value<T: FromMdbValue>(&self, db: &Database, key: &ToMdbValue) -> MDBResult<T> {
         unsafe {
             let key_val = key.to_mdb_value();
             let data_val: MDB_val = std::mem::zeroed();
 
             lift(mdb_get(self.handle, db.handle, &key_val, &data_val),
-                 || MDBOutgoingValue::from_mdb_value(&data_val))
+                 || FromMdbValue::from_mdb_value(&data_val))
         }
     }
 
-    pub fn get<T: MDBOutgoingValue>(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<T> {
+    pub fn get<T: FromMdbValue>(&self, db: &Database, key: &ToMdbValue) -> MDBResult<T> {
         try!(self.state.then(TxnStateNormal));
         self.get_value(db, key)
     }
 
-    fn set_value(&self, db: &Database, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
+    fn set_value(&self, db: &Database, key: &ToMdbValue, value: &ToMdbValue) -> MDBResult<()> {
         self.set_value_with_flags(db, key, value, 0)
     }
 
-    fn set_value_with_flags(&self, db: &Database, key: &MDBIncomingValue, value: &MDBIncomingValue, flags: c_uint) -> MDBResult<()> {
+    fn set_value_with_flags(&self, db: &Database, key: &ToMdbValue, value: &ToMdbValue, flags: c_uint) -> MDBResult<()> {
         unsafe {
             let key_val = key.to_mdb_value();
             let data_val = value.to_mdb_value();
@@ -475,13 +475,13 @@ impl<'a> NativeTransaction<'a> {
     // FIXME: add explicit append function
     // FIXME: think about creating explicit separation of
     // all traits for databases with dup keys
-    pub fn set(&self, db: &Database, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
+    pub fn set(&self, db: &Database, key: &ToMdbValue, value: &ToMdbValue) -> MDBResult<()> {
         try!(self.state.then(TxnStateNormal))
         self.set_value(db, key, value)
     }
 
     /// Deletes all values by key
-    fn del_value(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<()> {
+    fn del_value(&self, db: &Database, key: &ToMdbValue) -> MDBResult<()> {
         unsafe {
             let key_val = key.to_mdb_value();
             lift_noret(mdb_del(self.handle, db.handle, &key_val, std::ptr::RawPtr::null()))
@@ -489,7 +489,7 @@ impl<'a> NativeTransaction<'a> {
     }
 
     /// If duplicate keys are allowed deletes value for key which is equal to data
-    pub fn del_exact_value(&self, db: &Database, key: &MDBIncomingValue, data: &MDBIncomingValue) -> MDBResult<()> {
+    pub fn del_exact_value(&self, db: &Database, key: &ToMdbValue, data: &ToMdbValue) -> MDBResult<()> {
         try!(self.state.then(TxnStateNormal));
         unsafe {
             let key_val = key.to_mdb_value();
@@ -500,7 +500,7 @@ impl<'a> NativeTransaction<'a> {
     }
 
     /// Deletes all values for key
-    pub fn del(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<()> {
+    pub fn del(&self, db: &Database, key: &ToMdbValue) -> MDBResult<()> {
         try!(self.state.then(TxnStateNormal));
         self.del_value(db, key)
     }
@@ -546,19 +546,19 @@ impl<'a> Transaction<'a> {
         self.inner.abort();
     }
 
-    pub fn get<T: MDBOutgoingValue>(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<T> {
+    pub fn get<T: FromMdbValue>(&self, db: &Database, key: &ToMdbValue) -> MDBResult<T> {
         self.inner.get(db, key)
     }
 
-    pub fn set(&self, db: &Database, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
+    pub fn set(&self, db: &Database, key: &ToMdbValue, value: &ToMdbValue) -> MDBResult<()> {
         self.inner.set(db, key, value)
     }
 
-    pub fn del(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<()> {
+    pub fn del(&self, db: &Database, key: &ToMdbValue) -> MDBResult<()> {
         self.inner.del(db, key)
     }
 
-    pub fn del_exact(&self, db: &Database, key: &MDBIncomingValue, data: &MDBIncomingValue) -> MDBResult<()> {
+    pub fn del_exact(&self, db: &Database, key: &ToMdbValue, data: &ToMdbValue) -> MDBResult<()> {
         self.inner.del_exact_value(db, key, data)
     }
 
@@ -570,7 +570,7 @@ impl<'a> Transaction<'a> {
     /// Currently it works only for unique keys (i.e. it will skip
     /// multiple items when DB created with MDB_DUPSORT).
     /// Iterator is valid while cursor is valid
-    pub fn iter_in_keyrange<'a, T: MDBIncomingValue+Clone>(&'a self, db: &'a Database, start_key: &T, end_key: &T) -> MDBResult<CursorKeyRangeIter<'a>> {
+    pub fn iter_in_keyrange<'a, T: ToMdbValue+Clone>(&'a self, db: &'a Database, start_key: &T, end_key: &T) -> MDBResult<CursorKeyRangeIter<'a>> {
         self.inner.new_cursor(db)
             .and_then(|c| Ok(CursorKeyRangeIter {
                                 cursor: c,
@@ -616,7 +616,7 @@ impl<'a> ReadonlyTransaction<'a> {
         self.inner.renew()
     }
 
-    pub fn get<T: MDBOutgoingValue>(&self, db: &Database, key: &MDBIncomingValue) -> MDBResult<T> {
+    pub fn get<T: FromMdbValue>(&self, db: &Database, key: &ToMdbValue) -> MDBResult<T> {
         self.inner.get(db, key)
     }
 
@@ -628,7 +628,7 @@ impl<'a> ReadonlyTransaction<'a> {
     /// Currently it works only for unique keys (i.e. it will skip
     /// multiple items when DB created with MDB_DUPSORT).
     /// Iterator is valid while cursor is valid
-    pub fn iter_in_keyrange<'a, T: MDBIncomingValue+Clone>(&'a self, db: &'a Database, start_key: &T, end_key: &T) -> MDBResult<CursorKeyRangeIter<'a>> {
+    pub fn iter_in_keyrange<'a, T: ToMdbValue+Clone>(&'a self, db: &'a Database, start_key: &T, end_key: &T) -> MDBResult<CursorKeyRangeIter<'a>> {
         self.inner.new_cursor(db)
             .and_then(|c| Ok(CursorKeyRangeIter {
                                 cursor: c,
@@ -670,7 +670,7 @@ impl<'a> Cursor<'a> {
              })
     }
 
-    fn move_to<T: MDBIncomingValue+Clone>(&mut self, key: Option<&T>, op: MDB_cursor_op) -> MDBResult<()> {
+    fn move_to<T: ToMdbValue+Clone>(&mut self, key: Option<&T>, op: MDB_cursor_op) -> MDBResult<()> {
         // Even if we don't ask for any data and want only to set a position
         // MDB still insists in writing back key and data to provided pointers
         // it's actually not that big deal, considering no actual data copy happens
@@ -694,13 +694,13 @@ impl<'a> Cursor<'a> {
     }
 
     /// Moves cursor to first entry for key if it exists
-    pub fn to_key<T:MDBIncomingValue+Clone>(&mut self, key: &T) -> MDBResult<()> {
+    pub fn to_key<T:ToMdbValue+Clone>(&mut self, key: &T) -> MDBResult<()> {
         self.move_to(Some(key), MDB_SET)
     }
 
     /// Moves cursor to first entry for key greater than
     /// or equal to ke
-    pub fn to_gte_key<T:MDBIncomingValue+Clone>(&mut self, key: &T) -> MDBResult<()> {
+    pub fn to_gte_key<T:ToMdbValue+Clone>(&mut self, key: &T) -> MDBResult<()> {
         self.move_to(Some(key), MDB_SET_RANGE)
     }
 
@@ -737,12 +737,12 @@ impl<'a> Cursor<'a> {
     }
 
     /// Retrieves current key/value as tuple
-    pub fn get<T: MDBOutgoingValue, U: MDBOutgoingValue>(&mut self) -> MDBResult<(T, U)> {
+    pub fn get<T: FromMdbValue, U: FromMdbValue>(&mut self) -> MDBResult<(T, U)> {
         unsafe {
             let key_val: MDB_val = std::mem::zeroed();
             let data_val: MDB_val = std::mem::zeroed();
             lift(mdb_cursor_get(self.handle, &key_val, &data_val, MDB_GET_CURRENT),
-                 || (MDBOutgoingValue::from_mdb_value(&key_val), MDBOutgoingValue::from_mdb_value(&data_val)))
+                 || (FromMdbValue::from_mdb_value(&key_val), FromMdbValue::from_mdb_value(&data_val)))
         }
     }
 
@@ -750,7 +750,7 @@ impl<'a> Cursor<'a> {
         (self.key_val, self.data_val)
     }
 
-    fn set_value<'a>(&mut self, key:Option<&'a MDBIncomingValue>, value: &MDBIncomingValue, flags: c_uint) -> MDBResult<()> {
+    fn set_value<'a>(&mut self, key:Option<&'a ToMdbValue>, value: &ToMdbValue, flags: c_uint) -> MDBResult<()> {
         let data_val = value.to_mdb_value();
         let key_val = unsafe {
             match  key {
@@ -764,12 +764,12 @@ impl<'a> Cursor<'a> {
 
     /// Overwrites value for current item
     /// Note: overwrites max cur_value.len() bytes
-    pub fn set(&mut self, value: &MDBIncomingValue) -> MDBResult<()> {
+    pub fn set(&mut self, value: &ToMdbValue) -> MDBResult<()> {
         self.set_value(None, value, MDB_CURRENT)
     }
 
     /// Adds a new value if it doesn't exist yet
-    pub fn upsert(&mut self, key: &MDBIncomingValue, value: &MDBIncomingValue) -> MDBResult<()> {
+    pub fn upsert(&mut self, key: &ToMdbValue, value: &ToMdbValue) -> MDBResult<()> {
         self.set_value(Some(key), value, MDB_NOOVERWRITE)
     }
 
@@ -811,16 +811,16 @@ pub struct CursorValue {
 /// avoiding any data conversions and memory copy. Lifetime
 /// is limited to iterator lifetime
 impl CursorValue {
-    pub fn get_key<T: MDBOutgoingValue>(&self) -> T {
-        MDBOutgoingValue::from_mdb_value(&self.key)
+    pub fn get_key<T: FromMdbValue>(&self) -> T {
+        FromMdbValue::from_mdb_value(&self.key)
     }
 
-    pub fn get_value<T: MDBOutgoingValue>(&self) -> T {
-        MDBOutgoingValue::from_mdb_value(&self.value)
+    pub fn get_value<T: FromMdbValue>(&self) -> T {
+        FromMdbValue::from_mdb_value(&self.value)
     }
 
-    pub fn get<T: MDBOutgoingValue, U: MDBOutgoingValue>(&self) -> (T, U) {
-        (MDBOutgoingValue::from_mdb_value(&self.key),  MDBOutgoingValue::from_mdb_value(&self.value))
+    pub fn get<T: FromMdbValue, U: FromMdbValue>(&self) -> (T, U) {
+        (FromMdbValue::from_mdb_value(&self.key),  FromMdbValue::from_mdb_value(&self.value))
     }
 }
 
