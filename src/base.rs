@@ -13,6 +13,7 @@ use utils::{error_msg, lift, lift_noret};
 
 use std::fmt::Show;
 use std::default::Default;
+use std::str::{MaybeOwned, Slice, Owned};
 
 macro_rules! lift(
     ($e:expr, $r:expr) => (
@@ -29,7 +30,7 @@ macro_rules! lift(
 /// MDBError wraps information about LMDB error
 pub struct MDBError {
     code: c_int,
-    message: Box<String>
+    message: String
 }
 
 impl MDBError {
@@ -47,7 +48,7 @@ impl MDBError {
 }
 
 impl StateError for MDBError {
-    fn new_state_error(msg: Box<String>) -> MDBError {
+    fn new_state_error(msg: String) -> MDBError {
         MDBError {
             code: MDB_INVALID_STATE,
             message: msg
@@ -75,12 +76,12 @@ impl Database {
 }
 
 struct State<S> {
-    log_name: Box<String>,
+    log_name: MaybeOwned<'static>,
     cur_state: S,
 }
 
 impl<S: Eq + Show + Clone> State<S> {
-    fn new(name: Box<String>, initial: S) -> State<S> {
+    fn new(name: MaybeOwned<'static>, initial: S) -> State<S> {
         State {
             log_name: name,
             cur_state: initial,
@@ -98,7 +99,7 @@ impl<S: Eq + Show + Clone> State<S> {
     fn then<E: StateError>(&self, desired: S) -> Result<(), E> {
         if self.cur_state != desired {
             let msg = format!("{}: requires {}, is in {}", self.log_name, desired, self.cur_state);
-            Err(StateError::new_state_error(box msg))
+            Err(StateError::new_state_error(msg))
         } else {
             Ok(())
         }
@@ -107,7 +108,7 @@ impl<S: Eq + Show + Clone> State<S> {
     fn then_not<E: StateError>(&self, unwanted: S) -> Result<(), E> {
         if self.cur_state == unwanted {
             let msg = format!("{}: shouldn't be {}", self.log_name, self.cur_state);
-            Err(StateError::new_state_error(box msg))
+            Err(StateError::new_state_error(msg))
         } else {
             Ok(())
         }
@@ -173,7 +174,7 @@ impl Environment {
              || Environment {
                  env: env,
                  path: None,
-                 state: State::new(box "Env".to_string(), EnvCreated),
+                 state: State::new(Slice("Env"), EnvCreated),
                  flags: 0
              })
     }
@@ -395,7 +396,7 @@ impl<'a> NativeTransaction<'a> {
     fn new_with_handle(h: *MDB_txn) -> NativeTransaction {
         NativeTransaction {
             handle: h,
-            state: State::new(box "Txn".to_string(), TxnStateNormal) }
+            state: State::new(Slice("Txn"), TxnStateNormal) }
     }
 
     fn commit(&mut self) -> MDBResult<()> {
@@ -684,12 +685,12 @@ impl<'a> Cursor<'a> {
 
     /// Moves cursor to first entry
     pub fn to_first(&mut self) -> MDBResult<()> {
-        self.move_to(None::<&Box<String>>, MDB_FIRST)
+        self.move_to(None::<&String>, MDB_FIRST)
     }
 
     /// Moves cursor to last entry
     pub fn to_last(&mut self) -> MDBResult<()> {
-        self.move_to(None::<&Box<String>>, MDB_LAST)
+        self.move_to(None::<&String>, MDB_LAST)
     }
 
     /// Moves cursor to first entry for key if it exists
@@ -706,33 +707,33 @@ impl<'a> Cursor<'a> {
     /// Moves cursor to next key, i.e. skip items
     /// with duplicate keys
     pub fn to_next_key(&mut self) -> MDBResult<()> {
-        self.move_to(None::<&Box<String>>, MDB_NEXT_NODUP)
+        self.move_to(None::<&String>, MDB_NEXT_NODUP)
     }
 
     /// Moves cursor to next item with the same key as current
     pub fn to_next_key_item(&mut self) -> MDBResult<()> {
-        self.move_to(None::<&Box<String>>, MDB_NEXT_DUP)
+        self.move_to(None::<&String>, MDB_NEXT_DUP)
     }
 
     /// Moves cursor to prev entry, i.e. skips items
     /// with duplicate keys
     pub fn to_prev_key(&mut self) -> MDBResult<()> {
-        self.move_to(None::<&Box<String>>, MDB_PREV_NODUP)
+        self.move_to(None::<&String>, MDB_PREV_NODUP)
     }
 
     /// Moves cursor to prev item with the same key as current
     pub fn to_prev_key_item(&mut self) -> MDBResult<()> {
-        self.move_to(None::<&Box<String>>, MDB_PREV_DUP)
+        self.move_to(None::<&String>, MDB_PREV_DUP)
     }
 
     /// Moves cursor to first item with the same key as current
     pub fn to_first_key_item(&mut self) -> MDBResult<()> {
-        self.move_to(None::<&Box<String>>, MDB_FIRST_DUP)
+        self.move_to(None::<&String>, MDB_FIRST_DUP)
     }
 
     /// Moves cursor to last item with the same key as current
     pub fn to_last_key_item(&mut self) -> MDBResult<()> {
-        self.move_to(None::<&Box<String>>, MDB_LAST_DUP)
+        self.move_to(None::<&String>, MDB_LAST_DUP)
     }
 
     /// Retrieves current key/value as tuple
@@ -938,7 +939,7 @@ mod test {
                                         Ok(tnx) => {
                                             match tnx.set(&db, &key, &value) {
                                                 Ok(_) => {
-                                                    match tnx.get::<Box<String>>(&db, &key) {
+                                                    match tnx.get::<String>(&db, &key) {
                                                         Ok(v) => assert!(v.as_slice() == value, "Written {:?} and read {:?}", value.as_slice(), v.as_slice()),
                                                         Err(err) => fail!("Failed to read value: {}", err.message)
                                                     }
@@ -978,11 +979,11 @@ mod test {
             assert!(txn.get::<()>(&db, &test_key1).is_err(), "Key shouldn't exist yet");
 
             let _ = txn.set(&db, &test_key1, &test_data1);
-            let v: Box<String> = txn.get(&db, &test_key1).unwrap();
+            let v: String = txn.get(&db, &test_key1).unwrap();
             assert!(v.as_slice() == test_data1, "Data written differs from data read");
 
             let _ = txn.set(&db, &test_key1, &test_data2);
-            let v: Box<String> = txn.get(&db, &test_key1).unwrap();
+            let v: String = txn.get(&db, &test_key1).unwrap();
             assert!(v.as_slice() == test_data2, "Data written differs from data read");
 
             let _ = txn.del(&db, &test_key1);
@@ -1008,16 +1009,16 @@ mod test {
             assert!(txn.get::<()>(&db, &test_key1).is_err(), "Key shouldn't exist yet");
 
             let _ = txn.set(&db, &test_key1, &test_data1);
-            let v: Box<String> = txn.get(&db, &test_key1).unwrap();
+            let v: String = txn.get(&db, &test_key1).unwrap();
             assert!(v.as_slice() == test_data1, "Data written differs from data read");
 
             let _ = txn.set(&db, &test_key1, &test_data2);
-            let v: Box<String> = txn.get(&db, &test_key1).unwrap();
+            let v: String = txn.get(&db, &test_key1).unwrap();
             assert!(v.as_slice() == test_data1, "It should still return first value");
 
             let _ = txn.del_exact(&db, &test_key1, &test_data1);
 
-            let v: Box<String> = txn.get(&db, &test_key1).unwrap();
+            let v: String = txn.get(&db, &test_key1).unwrap();
             assert!(v.as_slice() == test_data2, "It should return second value");
             let _ = txn.del(&db, &test_key1);
 
@@ -1061,7 +1062,7 @@ mod test {
             let new_value = "testme";
 
             assert!(cursor.set(&new_value).is_ok());
-            let (_, v): ((), Box<String>) = cursor.get().unwrap();
+            let (_, v): ((), String) = cursor.get().unwrap();
 
             // NOTE: this asserting will work once new_value is
             // of the same length as it is inplace change

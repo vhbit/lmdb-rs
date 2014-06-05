@@ -29,18 +29,6 @@ impl MDBOutgoingValue for Vec<u8> {
     }
 }
 
-impl MDBIncomingValue for Box<String> {
-    fn to_mdb_value(&self) -> MDB_val {
-        unsafe {
-            let t = self.as_slice();
-            MDB_val {
-                mv_data: std::mem::transmute(t.as_ptr()),
-                mv_size: t.len() as size_t
-            }
-        }
-    }
-}
-
 impl MDBIncomingValue for String {
     fn to_mdb_value(&self) -> MDB_val {
         unsafe {
@@ -74,14 +62,6 @@ impl MDBIncomingValue for MDB_val {
     }
 }
 
-impl MDBOutgoingValue for Box<String> {
-    fn from_mdb_value(value: &MDB_val) -> Box<String> {
-        unsafe {
-            box std::str::raw::from_buf_len(std::mem::transmute(value.mv_data), value.mv_size as uint)
-        }
-    }
-}
-
 impl MDBOutgoingValue for String {
     fn from_mdb_value(value: &MDB_val) -> String {
         unsafe {
@@ -96,5 +76,5 @@ impl MDBOutgoingValue for () {
 }
 
 pub trait StateError {
-    fn new_state_error(msg: Box<String>) -> Self;
+    fn new_state_error(msg: String) -> Self;
 }
