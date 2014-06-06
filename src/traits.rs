@@ -75,6 +75,18 @@ impl FromMdbValue for () {
     }
 }
 
+
+impl<'a> FromMdbValue for &'a str {
+    fn from_mdb_value(value: &MDB_val) -> &'a str {
+        unsafe {
+            std::mem::transmute(std::raw::Slice {
+                data: value.mv_data,
+                len: value.mv_size as uint,
+            })
+        }
+    }
+}
+
 pub trait StateError {
     fn new_state_error(msg: String) -> Self;
 }
