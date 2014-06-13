@@ -13,7 +13,7 @@ use utils::{error_msg, lift, lift_noret};
 
 use std::fmt::Show;
 use std::default::Default;
-use std::str::{MaybeOwned, Slice, Owned};
+use std::str::{MaybeOwned, Slice };
 
 macro_rules! lift(
     ($e:expr, $r:expr) => (
@@ -114,6 +114,7 @@ impl<S: Eq + Show + Clone> State<S> {
         }
     }
 
+    #[allow(dead_code)]
     fn silent_then<T: Default>(&self, desired: S, p: proc() -> T) -> T {
         if self.cur_state != desired {
             Default::default()

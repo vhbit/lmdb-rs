@@ -1,9 +1,9 @@
 #[allow(non_camel_case_types)]
 #[allow(dead_code)]
 pub mod types {
-    use self::os::{pthread_key_t, pthread_mutex_t, MDB_PID_T};
+    use self::os::{pthread_mutex_t, MDB_PID_T};
     pub use self::os::{mdb_mode_t, mdb_filehandle_t};
-    use libc::{c_int, c_uint, c_void, c_char, size_t, pthread_t, off_t, c_uchar, c_ushort};
+    use libc::{c_int, c_uint, c_void, c_char, size_t, pthread_t, c_uchar, c_ushort};
 
     #[cfg(target_os = "macos")]
     #[cfg(target_os = "ios")]
@@ -14,11 +14,6 @@ pub mod types {
         use libc;
 
         pub use pthread_mutex_t = self::mutex::pthread_mutex_t;
-
-        #[cfg(target_os = "macos")]
-        pub type pthread_key_t = libc::c_ulong;
-        #[cfg(not(target_os = "macos"))]
-        pub type pthread_key_t = libc::c_uint;
 
         pub type mdb_mode_t = libc::mode_t;
         pub type mdb_filehandle_t = libc::c_int;
@@ -114,6 +109,7 @@ pub mod types {
     type MDB_ID2L = *MDB_ID2;
 
     #[deriving(Clone)]
+    #[allow(raw_pointer_deriving)]
     pub struct MDB_val {
         pub mv_size: size_t,
         pub mv_data: *c_void,
