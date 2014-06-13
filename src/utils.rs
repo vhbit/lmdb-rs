@@ -1,7 +1,7 @@
 use std::str;
 use libc::c_int;
-use mdb::consts::MDB_SUCCESS;
-use mdb::funcs::mdb_strerror;
+use ffi::consts::MDB_SUCCESS;
+use ffi::funcs::mdb_strerror;
 use base::{MDBResult, MDBError};
 
 pub fn error_msg(code: c_int) -> String {

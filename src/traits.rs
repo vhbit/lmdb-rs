@@ -1,6 +1,6 @@
 use std;
 use libc::size_t;
-use mdb::types::MDB_val;
+use ffi::types::MDB_val;
 
 pub trait ToMdbValue {
     fn to_mdb_value(&self) -> MDB_val;

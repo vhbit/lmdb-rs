@@ -4,9 +4,9 @@ use libc;
 use libc::{c_int, c_uint, size_t, c_char};
 use std::result::Result;
 
-use mdb::consts::*;
-use mdb::funcs::*;
-use mdb::types::*;
+use ffi::consts::*;
+use ffi::funcs::*;
+use ffi::types::*;
 
 use traits::{ToMdbValue, FromMdbValue, StateError};
 use utils::{error_msg, lift, lift_noret};
@@ -872,7 +872,7 @@ mod test {
     use std::rt::unwind::Unwinder;
     use std::path::Path;
 
-    use mdb::consts;
+    use ffi::consts;
     use super::{Environment};
 
     #[allow(unused_must_use)]
