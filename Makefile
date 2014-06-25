@@ -18,6 +18,12 @@ all: mdb lib tests doc
 mdb:
 	cd $(LMDB_ROOT) && make liblmdb.a
 
+# Pretty fragile as actual cargot "target" dir
+# isn't known
+mdb_for_cargo: mdb
+	@mkdir -p target
+	@cp $(LMDB_ROOT)/liblmdb.a target
+
 $(LIBOUT): $(SRC)
 	@mkdir -p $(BUILD_DIR)
 	$(RUSTC) $(RUSTC_FLAGS) --out-dir $(BUILD_DIR) $(CRATE_MAIN)
