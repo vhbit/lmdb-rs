@@ -2,7 +2,7 @@ use std::str;
 use libc::c_int;
 use ffi::consts::MDB_SUCCESS;
 use ffi::funcs::mdb_strerror;
-use base::{MDBResult, MDBError};
+use base::{MdbResult, MdbError};
 
 pub fn error_msg(code: c_int) -> String {
     unsafe {
@@ -11,17 +11,17 @@ pub fn error_msg(code: c_int) -> String {
 }
 
 #[inline]
-pub fn lift<U>(code: c_int, res: || -> U) -> MDBResult<U> {
+pub fn lift<U>(code: c_int, res: || -> U) -> MdbResult<U> {
     match code {
         MDB_SUCCESS => Ok(res() ),
-        _ => Err(MDBError::new_with_code(code))
+        _ => Err(MdbError::new_with_code(code))
     }
 }
 
 #[inline]
-pub fn lift_noret(code: c_int) -> MDBResult<()> {
+pub fn lift_noret(code: c_int) -> MdbResult<()> {
     match code {
         MDB_SUCCESS => Ok(()),
-        _ => Err(MDBError::new_with_code(code))
+        _ => Err(MdbError::new_with_code(code))
     }
 }
