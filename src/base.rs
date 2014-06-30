@@ -123,7 +123,7 @@ impl<S: Eq + Show + Clone> State<S> {
         }
     }
 
-    fn silent_then_not<T: Default>(&self, unwanted: S, p: proc() -> T) -> T {
+    fn silent_then_not<T: Default>(&self, unwanted: S, p: || -> T) -> T {
         if self.cur_state == unwanted {
             Default::default()
         } else {
@@ -131,7 +131,7 @@ impl<S: Eq + Show + Clone> State<S> {
         }
     }
 
-    fn change<T, E: StateError>(&mut self, desired: S, next: S, p: proc() -> Result<T, E>) -> Result<T, E> {
+    fn change<T, E: StateError>(&mut self, desired: S, next: S, p: || -> Result<T, E>) -> Result<T, E> {
         try!(self.then(desired));
         p().and_then(|t| {
             self.cur_state = next.clone(); // FIXME: try to find a cleaner way without cloning
@@ -156,7 +156,7 @@ enum EnvState {
 
 /// Environment
 pub struct Environment {
-    env: *MDB_env,
+    env: *const MDB_env,
     path: Option<Box<Path>>,
     state: State<EnvState>,
     flags: c_uint,
@@ -168,9 +168,9 @@ impl Environment {
     /// Note that for using named databases, it should be followed by set_maxdbs()
     /// before opening
     pub fn new() -> MdbResult<Environment> {
-        let env: *MDB_env = ptr::RawPtr::null();
+        let env: *const MDB_env = ptr::null();
         lift(unsafe {
-            let pEnv: **mut MDB_env = std::mem::transmute(&env);
+            let pEnv: *mut *const MDB_env = std::mem::transmute(&env);
             mdb_env_create(pEnv)},
              || Environment {
                  env: env,
@@ -213,11 +213,11 @@ impl Environment {
         let t = self.env;
 
         let res = self.state.change(EnvCreated, EnvOpened,
-                                    proc() {
+                                    || {
                                         Environment::check_path(path, flags, mode)
                                             .and_then(|_| {
                                                 path.with_c_str(|c_path| {
-                                                    lift_noret(unsafe {mdb_env_open(t, c_path, flags, mode)})})})});
+                                                    lift_noret(unsafe {mdb_env_open(std::mem::transmute(t), c_path, flags, mode)})})})});
 
         if res.is_ok() {
             self.path = Some(box path.clone());
@@ -230,15 +230,15 @@ impl Environment {
     pub fn stat(&self) -> MdbResult<MDB_stat> {
         try!(self.state.then(EnvOpened));
 
-        let tmp: MDB_stat = unsafe { std::mem::zeroed() };
-        lift(unsafe { mdb_env_stat(self.env, &tmp)},
+        let mut tmp: MDB_stat = unsafe { std::mem::zeroed() };
+        lift(unsafe { mdb_env_stat(self.env, &mut tmp)},
              || tmp)
     }
 
     pub fn info(&self) -> MdbResult<MDB_envinfo> {
         try!(self.state.then(EnvOpened))
-        let tmp: MDB_envinfo = unsafe { std::mem::zeroed() };
-        lift(unsafe { mdb_env_info(self.env, &tmp)},
+        let mut tmp: MDB_envinfo = unsafe { std::mem::zeroed() };
+        lift(unsafe { mdb_env_info(self.env, &mut tmp)},
              || tmp)
     }
 
@@ -257,8 +257,8 @@ impl Environment {
 
     pub fn get_flags(&self) -> MdbResult<c_uint> {
         try!(self.state.then_not(EnvClosed));
-        let flags = 0;
-        lift(unsafe {mdb_env_get_flags(self.env, &flags)},
+        let mut flags = 0;
+        lift(unsafe {mdb_env_get_flags(self.env, &mut flags)},
             || flags)
     }
 
@@ -282,8 +282,8 @@ impl Environment {
 
     pub fn get_maxreaders(&self) -> MdbResult<c_uint> {
         try!(self.state.then_not(EnvClosed));
-        let max_readers: c_uint = 0;
-        lift(unsafe { mdb_env_get_maxreaders(self.env, &max_readers)},
+        let mut max_readers: c_uint = 0;
+        lift(unsafe { mdb_env_get_maxreaders(self.env, &mut max_readers)},
             || max_readers )
     }
 
@@ -295,7 +295,7 @@ impl Environment {
 
     pub fn get_maxkeysize(&self) -> c_int {
         self.state.silent_then_not(EnvClosed,
-                                   proc()  unsafe {mdb_env_get_maxkeysize(self.env)})
+                                   || unsafe {mdb_env_get_maxkeysize(self.env)})
     }
 
     /// Creates a backup copy in specified file descriptor
@@ -307,8 +307,8 @@ impl Environment {
     /// Gets file descriptor of this environment
     pub fn get_fd(&self) -> MdbResult<mdb_filehandle_t> {
         try!(self.state.then(EnvOpened));
-        let fd = 0;
-        lift({ unsafe { mdb_env_get_fd(self.env, &fd) }}, || fd)
+        let mut fd = 0;
+        lift({ unsafe { mdb_env_get_fd(self.env, &mut fd) }}, || fd)
     }
 
     /// Creates a backup copy in specified path
@@ -322,13 +322,13 @@ impl Environment {
 
     fn create_transaction(&self, parent: Option<NativeTransaction>, flags: c_uint) -> MdbResult<NativeTransaction> {
         try!(self.state.then(EnvOpened));
-        let handle: *MDB_txn = ptr::RawPtr::null();
+        let mut handle: *const MDB_txn = ptr::null();
         let parent_handle = match parent {
             Some(t) => t.handle,
             _ => ptr::RawPtr::<MDB_txn>::null()
         };
 
-        lift(unsafe { mdb_txn_begin(self.env, parent_handle, flags, &handle) },
+        lift(unsafe { mdb_txn_begin(self.env, parent_handle, flags, &mut handle) },
              || NativeTransaction::new_with_handle(handle))
     }
 
@@ -344,15 +344,15 @@ impl Environment {
             .and_then(|txn| Ok(ReadonlyTransaction::new_with_native(txn)))
     }
 
-    fn get_db_by_name(&self, c_name: *c_char, flags: c_uint) -> MdbResult<Database> {
+    fn get_db_by_name(&self, c_name: *const c_char, flags: c_uint) -> MdbResult<Database> {
         try!(self.state.then(EnvOpened));
 
-        let dbi: MDB_dbi = 0;
+        let mut dbi: MDB_dbi = 0;
 
         // FIXME: using macro to avoid capturing txn in closure
         // it's actually pretty awkward although reasonable from compiler view
         self.create_transaction(None, 0)
-            .and_then(|txn| lift!(unsafe { mdb_dbi_open(txn.handle, c_name, flags, &dbi)}, txn) )
+            .and_then(|txn| lift!(unsafe { mdb_dbi_open(txn.handle, c_name, flags, &mut dbi)}, txn) )
             .and_then(|mut t| t.commit() )
             .and_then(|_| Ok(Database::new_with_handle(dbi)))
     }
@@ -376,7 +376,7 @@ impl Environment {
 impl Drop for Environment {
     fn drop(&mut self) {
         unsafe {
-            mdb_env_close(self.env);
+            mdb_env_close(std::mem::transmute(self.env));
         }
     }
 }
@@ -389,12 +389,12 @@ enum TransactionState {
 }
 
 struct NativeTransaction<'a> {
-    handle: *MDB_txn,
+    handle: *const MDB_txn,
     state: State<TransactionState>,
 }
 
 impl<'a> NativeTransaction<'a> {
-    fn new_with_handle(h: *MDB_txn) -> NativeTransaction {
+    fn new_with_handle(h: *const MDB_txn) -> NativeTransaction {
         NativeTransaction {
             handle: h,
             state: State::new(Slice("Txn"), TxnStateNormal) }
@@ -403,14 +403,14 @@ impl<'a> NativeTransaction<'a> {
     fn commit(&mut self) -> MdbResult<()> {
         let t = self.handle;
         self.state.change(TxnStateNormal, TxnStateInvalid,
-                          proc() lift_noret(unsafe { mdb_txn_commit(t) } ))
+                          || lift_noret(unsafe { mdb_txn_commit(t) } ))
     }
 
     #[allow(unused_must_use)]
     fn abort(&mut self) {
         let t = self.handle;
         self.state.change(TxnStateNormal, TxnStateInvalid,
-                          proc() lift_noret(unsafe { mdb_txn_abort(t); MDB_SUCCESS }));
+                          || lift_noret(unsafe { mdb_txn_abort(t); MDB_SUCCESS }));
     }
 
     /// Resets read only transaction, handle is kept. Must be followed
@@ -419,20 +419,20 @@ impl<'a> NativeTransaction<'a> {
     fn reset(&mut self) {
         let t = self.handle;
         self.state.change(TxnStateNormal, TxnStateReleased,
-                          proc() lift_noret(unsafe { mdb_txn_reset(t); MDB_SUCCESS }));
+                          || lift_noret(unsafe { mdb_txn_reset(t); MDB_SUCCESS }));
     }
 
     /// Acquires a new reader lock after it was released by reset
     fn renew(&mut self) -> MdbResult<()> {
         let t = self.handle;
         self.state.change(TxnStateReleased, TxnStateNormal,
-                          proc() lift_noret(unsafe {mdb_txn_renew(t)}))
+                          || lift_noret(unsafe {mdb_txn_renew(t)}))
     }
 
 
     fn create_child(&self, flags: c_uint) -> MdbResult<NativeTransaction> {
-        let out: *MDB_txn = ptr::RawPtr::null();
-        lift(unsafe { mdb_txn_begin(mdb_txn_env(self.handle), self.handle, flags, &out) },
+        let mut out: *const MDB_txn = ptr::null();
+        lift(unsafe { mdb_txn_begin(mdb_txn_env(self.handle), self.handle, flags, &mut out) },
              || NativeTransaction::new_with_handle(out))
     }
 
@@ -446,9 +446,9 @@ impl<'a> NativeTransaction<'a> {
     fn get_value<T: FromMdbValue>(&self, db: &Database, key: &ToMdbValue) -> MdbResult<T> {
         unsafe {
             let key_val = key.to_mdb_value();
-            let data_val: MDB_val = std::mem::zeroed();
+            let mut data_val: MDB_val = std::mem::zeroed();
 
-            lift(mdb_get(self.handle, db.handle, &key_val, &data_val),
+            lift(mdb_get(self.handle, db.handle, &key_val, &mut data_val),
                  || FromMdbValue::from_mdb_value(&data_val))
         }
     }
@@ -485,7 +485,7 @@ impl<'a> NativeTransaction<'a> {
     fn del_value(&self, db: &Database, key: &ToMdbValue) -> MdbResult<()> {
         unsafe {
             let key_val = key.to_mdb_value();
-            lift_noret(mdb_del(self.handle, db.handle, &key_val, std::ptr::RawPtr::null()))
+            lift_noret(mdb_del(self.handle, db.handle, &key_val, std::ptr::null()))
         }
     }
 
@@ -649,7 +649,7 @@ impl<'a> Drop for ReadonlyTransaction<'a> {
 
 
 pub struct Cursor<'a> {
-    handle: *MDB_cursor,
+    handle: *const MDB_cursor,
     data_val: MDB_val,
     key_val: MDB_val,
     txn: &'a NativeTransaction<'a>,
@@ -658,8 +658,8 @@ pub struct Cursor<'a> {
 
 impl<'a> Cursor<'a> {
     fn new(txn: &'a NativeTransaction, db: &'a Database) -> MdbResult<Cursor<'a>> {
-        let tmp: *MDB_cursor = std::ptr::RawPtr::null();
-        lift(unsafe { mdb_cursor_open(txn.handle, db.handle, &tmp) },
+        let mut tmp: *const MDB_cursor = std::ptr::null();
+        lift(unsafe { mdb_cursor_open(txn.handle, db.handle, &mut tmp) },
              || unsafe {
                  Cursor {
                      handle: tmp,
@@ -681,7 +681,7 @@ impl<'a> Cursor<'a> {
             _ => unsafe {std::mem::zeroed()}
         };
 
-        lift_noret(unsafe { mdb_cursor_get(self.handle, &self.key_val, &self.data_val, op) })
+        lift_noret(unsafe { mdb_cursor_get(self.handle, &mut self.key_val, &mut self.data_val, op) })
     }
 
     /// Moves cursor to first entry
@@ -740,9 +740,9 @@ impl<'a> Cursor<'a> {
     /// Retrieves current key/value as tuple
     pub fn get<T: FromMdbValue, U: FromMdbValue>(&mut self) -> MdbResult<(T, U)> {
         unsafe {
-            let key_val: MDB_val = std::mem::zeroed();
-            let data_val: MDB_val = std::mem::zeroed();
-            lift(mdb_cursor_get(self.handle, &key_val, &data_val, MDB_GET_CURRENT),
+            let mut key_val: MDB_val = std::mem::zeroed();
+            let mut data_val: MDB_val = std::mem::zeroed();
+            lift(mdb_cursor_get(self.handle, &mut key_val, &mut data_val, MDB_GET_CURRENT),
                  || (FromMdbValue::from_mdb_value(&key_val), FromMdbValue::from_mdb_value(&data_val)))
         }
     }
@@ -790,8 +790,8 @@ impl<'a> Cursor<'a> {
 
     /// Returns count of items with the same key as current
     pub fn item_count(&self) -> MdbResult<size_t> {
-        let tmp: size_t = 0;
-        lift(unsafe {mdb_cursor_count(self.handle, &tmp)},
+        let mut tmp: size_t = 0;
+        lift(unsafe {mdb_cursor_count(self.handle, &mut tmp)},
              || tmp)
     }
 }
@@ -799,7 +799,7 @@ impl<'a> Cursor<'a> {
 #[unsafe_destructor]
 impl<'a> Drop for Cursor<'a> {
     fn drop(&mut self) {
-        unsafe { mdb_cursor_close(self.handle) };
+        unsafe { mdb_cursor_close(std::mem::transmute(self.handle)) };
     }
 }
 
@@ -869,7 +869,7 @@ impl<'a> Iterator<CursorValue> for CursorKeyRangeIter<'a> {
 #[cfg(test)]
 mod test {
     use std::io::fs;
-    use std::rt::unwind::Unwinder;
+    use std::rt::unwind;
     use std::path::Path;
 
     use ffi::consts;
@@ -882,8 +882,7 @@ mod test {
             fs::rmdir_recursive(path);
         };
 
-        let mut unwinder = Unwinder::new();
-        unwinder.try(f);
+        let _ = unsafe { unwind::try(f) };
 
         fs::rmdir_recursive(path);
     }

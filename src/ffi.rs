@@ -24,7 +24,7 @@ pub mod types {
         #[cfg(target_os = "freebsd")]
         mod mutex {
             use libc;
-            pub type pthread_mutex_t = *libc::c_void;
+            pub type pthread_mutex_t = *const libc::c_void;
         }
 
         #[cfg(target_os = "macos")]
@@ -78,7 +78,7 @@ pub mod types {
         use libc::{c_int, c_void};
 
         pub type mdb_mode_t = c_int;
-        pub type mdb_filehandle_t = *c_void;
+        pub type mdb_filehandle_t = *const c_void;
         pub type pthread_key_t = u32;
         pub type MDB_PID_T = c_uint;
 
@@ -93,26 +93,26 @@ pub mod types {
 
     pub type MDB_dbi = c_uint;
     type MDB_ID = size_t;
-    type MDB_IDL = *MDB_ID;
+    type MDB_IDL = *const MDB_ID;
 
-    pub type MDB_rel_func = fn(*MDB_val, *c_void, *c_void, *c_void);
-    pub type MDB_msg_func = fn(*c_char, *c_void) -> c_int;
-    pub type MDB_cmp_func = fn(*MDB_val, *MDB_val) -> c_int;
+    pub type MDB_rel_func = fn(*const MDB_val, *const c_void, *const c_void, *const c_void);
+    pub type MDB_msg_func = fn(*const c_char, *const c_void) -> c_int;
+    pub type MDB_cmp_func = fn(*const MDB_val, *const MDB_val) -> c_int;
 
     type HANDLE = c_int;
 
     struct MDB_ID2 {
         mid: MDB_ID,
-        mptr: *c_void
+        mptr: *const c_void
     }
 
-    type MDB_ID2L = *MDB_ID2;
+    type MDB_ID2L = *const MDB_ID2;
 
     #[deriving(Clone)]
     #[allow(raw_pointer_deriving)]
     pub struct MDB_val {
         pub mv_size: size_t,
-        pub mv_data: *c_void,
+        pub mv_data: *const c_void,
     }
 
     struct MDB_rxbody {
@@ -159,7 +159,7 @@ struct MDB_txninfo {
 */
 
     struct MDB_pgstate {
-        mf_pghead: *pgno_t,
+        mf_pghead: *const pgno_t,
         mf_pglast: txnid_t
     }
 
@@ -189,7 +189,7 @@ enum MDB_page_pb {
     struct MDB_meta {
         mm_magic: u32,
         mm_version: u32,
-        mm_address: *c_void,
+        mm_address: *const c_void,
         mm_mapsize: size_t,
         mm_dbs: [MDB_db, ..2],
         mm_last_pg: pgno_t,
@@ -250,21 +250,21 @@ enum MDB_page_pb {
     */
 
     pub struct MDB_txn {
-        mt_parent: *MDB_txn,
-        mt_child: *MDB_txn,
+        mt_parent: *const MDB_txn,
+        mt_child: *const MDB_txn,
         mt_next_pgno: pgno_t,
         mt_txnid: txnid_t,
-        mt_env: *MDB_env,
+        mt_env: *const MDB_env,
         mt_free_pgs: MDB_IDL,
         mt_spill_pgs: MDB_IDL,
-        mt_u: *c_void, /*enum {
+        mt_u: *const c_void, /*enum {
             dirty_list: MDB_ID2L,
             reader: *MDB_reader
         },*/
-        mt_dbxs: *MDB_dbx,
-        mt_dbs: *MDB_db,
-        mt_cursors: **MDB_cursor,
-        mt_dbflags: *c_uchar,
+        mt_dbxs: *const MDB_dbx,
+        mt_dbs: *const MDB_db,
+        mt_cursors: *const *const MDB_cursor,
+        mt_dbflags: *const c_uchar,
         mt_numdbs: MDB_dbi,
         mt_flags: c_uint,
         mt_dirty_room: c_uint
@@ -280,7 +280,7 @@ enum MDB_page_pb {
     }
 
     pub struct MDB_envinfo {
-        pub me_mapaddr: *c_void,
+        pub me_mapaddr: *const c_void,
         pub me_mapsize: size_t,
         pub me_last_pgno: size_t,
         pub me_last_txnid: size_t,
@@ -311,18 +311,18 @@ enum MDB_page_pb {
     }
 
     pub struct MDB_cursor {
-        mc_next: *MDB_cursor,
-        mc_backup: *MDB_cursor,
-        mc_xcursor: *MDB_xcursor,
-        mc_txn: *MDB_txn,
+        mc_next: *const MDB_cursor,
+        mc_backup: *const MDB_cursor,
+        mc_xcursor: *const MDB_xcursor,
+        mc_txn: *const MDB_txn,
         mc_dbi: MDB_dbi,
-        mc_db: *MDB_db,
-        mc_dbx: *MDB_dbx,
-        mc_dbflag: *c_uchar,
+        mc_db: *const MDB_db,
+        mc_dbx: *const MDB_dbx,
+        mc_dbflag: *const c_uchar,
         mc_snum: c_ushort,
         mc_top: c_ushort,
         mc_flags: c_uint,
-        mp_pg: *MDB_page,
+        mp_pg: *const MDB_page,
         mc_ki: indx_t
     }
 
@@ -409,55 +409,55 @@ pub mod funcs {
     // Embedding should work better for now
     #[link(name = "lmdb", kind = "static")]
     extern "C" {
-        pub fn mdb_version(major: *c_int, minor: *c_int, patch: *c_int) -> *c_char;
-        pub fn mdb_strerror(err: c_int) -> *c_char;
-        pub fn mdb_env_create(env: **mut MDB_env) -> c_int;
-        pub fn mdb_env_open(env: *MDB_env, path: *c_char, flags: c_uint, mode: mdb_mode_t) -> c_int;
-        pub fn mdb_env_copy(env: *MDB_env, path: *c_char) -> c_int;
-        pub fn mdb_env_copyfd(env: *MDB_env, fd: mdb_filehandle_t) -> c_int;
-        pub fn mdb_env_stat(env: *MDB_env, stat: *MDB_stat) -> c_int;
-        pub fn mdb_env_info(env: *MDB_env, info: *MDB_envinfo) -> c_int;
-        pub fn mdb_env_sync(env: *MDB_env, force: c_int) -> c_int;
-        pub fn mdb_env_close(env: *MDB_env);
-        pub fn mdb_env_set_flags(env: *MDB_env, flags: c_uint, onoff: c_int) -> c_int;
-        pub fn mdb_env_get_flags(env: *MDB_env, flags: *c_uint) -> c_int;
-        pub fn mdb_env_get_path(env: *MDB_env, path: **c_char) -> c_int;
-        pub fn mdb_env_get_fd(env: *MDB_env, fd: *mdb_filehandle_t) -> c_int;
-        pub fn mdb_env_set_mapsize(env: *MDB_env, size: size_t) -> c_int;
-        pub fn mdb_env_set_maxreaders(env: *MDB_env, readers: c_uint) -> c_int;
-        pub fn mdb_env_get_maxreaders(env: *MDB_env, readers: *c_uint) -> c_int;
-        pub fn mdb_env_set_maxdbs(env: *MDB_env, dbs: MDB_dbi) -> c_int;
-        pub fn mdb_env_get_maxkeysize(env: *MDB_env) -> c_int;
-        pub fn mdb_txn_begin(env: *MDB_env, parent: *MDB_txn, flags: c_uint, txn: **MDB_txn) -> c_int;
-        pub fn mdb_txn_env(txn: *MDB_txn) -> *MDB_env;
-        pub fn mdb_txn_commit(txn: *MDB_txn) -> c_int;
-        pub fn mdb_txn_abort(txn: *MDB_txn);
-        pub fn mdb_txn_reset(txn: *MDB_txn);
-        pub fn mdb_txn_renew(txn: *MDB_txn) -> c_int;
-        pub fn mdb_dbi_open(txn: *MDB_txn, name: *c_char, flags: c_uint, dbi: *MDB_dbi) -> c_int;
-        pub fn mdb_stat(txn: *MDB_txn, dbi: MDB_dbi, stat: *MDB_stat) -> c_int;
-        pub fn mdb_dbi_flags(txn: *MDB_txn, dbi: MDB_dbi, flags: *c_uint) -> c_int;
-        pub fn mdb_dbi_close(txn: *MDB_txn, dbi: MDB_dbi);
-        pub fn mdb_drop(txn: *MDB_txn, dbi: MDB_dbi, del: c_int) -> c_int;
-        pub fn mdb_set_compare(txn: *MDB_txn, dbi: MDB_dbi, cmp: MDB_cmp_func) -> c_int;
-        pub fn mdb_set_dupsort(txn: *MDB_txn, dbi: MDB_dbi, cmp: MDB_cmp_func) -> c_int;
-        pub fn mdb_set_relfunc(txn: *MDB_txn, dbi: MDB_dbi, rel: MDB_rel_func) -> c_int;
-        pub fn mdb_set_relctx(txn: *MDB_txn, dbi: MDB_dbi, ctx: *c_void) -> c_int;
-        pub fn mdb_get(txn: *MDB_txn, dbi: MDB_dbi, key: *MDB_val, data: *MDB_val) -> c_int;
-        pub fn mdb_put(txn: *MDB_txn, dbi: MDB_dbi, key: *MDB_val, data: *MDB_val, flags: c_uint) -> c_int;
-        pub fn mdb_del(txn: *MDB_txn, dbi: MDB_dbi, key: *MDB_val, data: *MDB_val) -> c_int;
-        pub fn mdb_cursor_open(txn: *MDB_txn, dbi: MDB_dbi, cursor: **MDB_cursor) -> c_int;
-        pub fn mdb_cursor_close(cursor: *MDB_cursor) -> c_int;
-        pub fn mdb_cursor_renew(txn: *MDB_txn, cursor: *MDB_cursor) -> c_int;
-        pub fn mdb_cursor_txn(cursor: *MDB_cursor) -> *MDB_txn;
-        pub fn mdb_cursor_dbi(cursor: *MDB_cursor) -> *MDB_dbi;
-        pub fn mdb_cursor_get(cursor: *MDB_cursor, key: *MDB_val, data: *MDB_val, op: MDB_cursor_op) -> c_int;
-        pub fn mdb_cursor_put(cursor: *MDB_cursor, key: *MDB_val, data: *MDB_val, flags: c_uint) -> c_int;
-        pub fn mdb_cursor_del(cursor: *MDB_cursor, flags: c_uint) -> c_int;
-        pub fn mdb_cursor_count(cursor: *MDB_cursor, countp: *size_t) -> c_int;
-        pub fn mdb_cmp(txn: *MDB_txn, dbi: MDB_dbi, a: *MDB_val, b: *MDB_val) -> c_int;
-        pub fn mdb_dcmp(txn: *MDB_txn, dbi: MDB_dbi, a: *MDB_val, b: *MDB_val) -> c_int;
-        pub fn mdb_reader_list(env: *MDB_env, func: MDB_msg_func, ctx: *c_void) -> c_int;
-        pub fn mdb_reader_check(env: *MDB_env, dead: *c_int) -> c_int;
+        pub fn mdb_version(major: *mut c_int, minor: *mut c_int, patch: *mut c_int) -> *const c_char;
+        pub fn mdb_strerror(err: c_int) -> *const c_char;
+        pub fn mdb_env_create(env: *mut *const MDB_env) -> c_int;
+        pub fn mdb_env_open(env: *const MDB_env, path: *const c_char, flags: c_uint, mode: mdb_mode_t) -> c_int;
+        pub fn mdb_env_copy(env: *const MDB_env, path: *const c_char) -> c_int;
+        pub fn mdb_env_copyfd(env: *const MDB_env, fd: mdb_filehandle_t) -> c_int;
+        pub fn mdb_env_stat(env: *const MDB_env, stat: *mut MDB_stat) -> c_int;
+        pub fn mdb_env_info(env: *const MDB_env, info: *mut MDB_envinfo) -> c_int;
+        pub fn mdb_env_sync(env: *const MDB_env, force: c_int) -> c_int;
+        pub fn mdb_env_close(env: *mut MDB_env);
+        pub fn mdb_env_set_flags(env: *const MDB_env, flags: c_uint, onoff: c_int) -> c_int;
+        pub fn mdb_env_get_flags(env: *const MDB_env, flags: *mut c_uint) -> c_int;
+        pub fn mdb_env_get_path(env: *const MDB_env, path: *mut *mut c_char) -> c_int;
+        pub fn mdb_env_get_fd(env: *const MDB_env, fd: *mut mdb_filehandle_t) -> c_int;
+        pub fn mdb_env_set_mapsize(env: *const MDB_env, size: size_t) -> c_int;
+        pub fn mdb_env_set_maxreaders(env: *const MDB_env, readers: c_uint) -> c_int;
+        pub fn mdb_env_get_maxreaders(env: *const MDB_env, readers: *mut c_uint) -> c_int;
+        pub fn mdb_env_set_maxdbs(env: *const MDB_env, dbs: MDB_dbi) -> c_int;
+        pub fn mdb_env_get_maxkeysize(env: *const MDB_env) -> c_int;
+        pub fn mdb_txn_begin(env: *const MDB_env, parent: *const MDB_txn, flags: c_uint, txn: *mut *const MDB_txn) -> c_int;
+        pub fn mdb_txn_env(txn: *const MDB_txn) -> *const MDB_env;
+        pub fn mdb_txn_commit(txn: *const MDB_txn) -> c_int;
+        pub fn mdb_txn_abort(txn: *const MDB_txn);
+        pub fn mdb_txn_reset(txn: *const MDB_txn);
+        pub fn mdb_txn_renew(txn: *const MDB_txn) -> c_int;
+        pub fn mdb_dbi_open(txn: *const MDB_txn, name: *const c_char, flags: c_uint, dbi: *mut MDB_dbi) -> c_int;
+        pub fn mdb_stat(txn: *const MDB_txn, dbi: MDB_dbi, stat: *mut MDB_stat) -> c_int;
+        pub fn mdb_dbi_flags(txn: *const MDB_txn, dbi: MDB_dbi, flags: *mut c_uint) -> c_int;
+        pub fn mdb_dbi_close(txn: *const MDB_txn, dbi: MDB_dbi);
+        pub fn mdb_drop(txn: *mut MDB_txn, dbi: MDB_dbi, del: c_int) -> c_int;
+        pub fn mdb_set_compare(txn: *const MDB_txn, dbi: MDB_dbi, cmp: MDB_cmp_func) -> c_int;
+        pub fn mdb_set_dupsort(txn: *const MDB_txn, dbi: MDB_dbi, cmp: MDB_cmp_func) -> c_int;
+        pub fn mdb_set_relfunc(txn: *const MDB_txn, dbi: MDB_dbi, rel: MDB_rel_func) -> c_int;
+        pub fn mdb_set_relctx(txn: *const MDB_txn, dbi: MDB_dbi, ctx: *const c_void) -> c_int;
+        pub fn mdb_get(txn: *const MDB_txn, dbi: MDB_dbi, key: *const MDB_val, data: *mut MDB_val) -> c_int;
+        pub fn mdb_put(txn: *const MDB_txn, dbi: MDB_dbi, key: *const MDB_val, data: *const MDB_val, flags: c_uint) -> c_int;
+        pub fn mdb_del(txn: *const MDB_txn, dbi: MDB_dbi, key: *const MDB_val, data: *const MDB_val) -> c_int;
+        pub fn mdb_cursor_open(txn: *const MDB_txn, dbi: MDB_dbi, cursor: *mut *const MDB_cursor) -> c_int;
+        pub fn mdb_cursor_close(cursor: *mut MDB_cursor) -> c_int;
+        pub fn mdb_cursor_renew(txn: *const MDB_txn, cursor: *const MDB_cursor) -> c_int;
+        pub fn mdb_cursor_txn(cursor: *const MDB_cursor) -> *const MDB_txn;
+        pub fn mdb_cursor_dbi(cursor: *const MDB_cursor) -> *const MDB_dbi;
+        pub fn mdb_cursor_get(cursor: *const MDB_cursor, key: *mut MDB_val, data: *mut MDB_val, op: MDB_cursor_op) -> c_int;
+        pub fn mdb_cursor_put(cursor: *const MDB_cursor, key: *const MDB_val, data: *const MDB_val, flags: c_uint) -> c_int;
+        pub fn mdb_cursor_del(cursor: *const MDB_cursor, flags: c_uint) -> c_int;
+        pub fn mdb_cursor_count(cursor: *const MDB_cursor, countp: *mut size_t) -> c_int;
+        pub fn mdb_cmp(txn: *const MDB_txn, dbi: MDB_dbi, a: *const MDB_val, b: *const MDB_val) -> c_int;
+        pub fn mdb_dcmp(txn: *const MDB_txn, dbi: MDB_dbi, a: *const MDB_val, b: *const MDB_val) -> c_int;
+        pub fn mdb_reader_list(env: *const MDB_env, func: MDB_msg_func, ctx: *const c_void) -> c_int;
+        pub fn mdb_reader_check(env: *const MDB_env, dead: *mut c_int) -> c_int;
     }
 }
