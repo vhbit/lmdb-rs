@@ -1,18 +1,5 @@
-# Pretty fragile setup as mdb_for_cargo
-# simply assumes that cargo will work
-# with "target" dir, while there are
-# no guarantees
 [package]
 build = "make mdb_for_cargo"
 name = "lmdb-rs"
 version = "0.0.2"
 authors = ["valerii.hiora@gmail.com"]
-
-[[lib]]
-name = "lmdb"
-path = "src/lib.rs"
-
-# Test runner is disabled for a while
-#[[bin]]
-#name = "lmdb_test"
-#path = "src/lib.rs"

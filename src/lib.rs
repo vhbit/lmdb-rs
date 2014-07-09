@@ -1,4 +1,4 @@
-#![crate_id = "github.com/vhbit/lmdb-rs#lmdb:0.2"]
+#![crate_name = "lmdb"]
 #![crate_type = "rlib"]
 
 #![feature(phase)]
