@@ -394,7 +394,7 @@ struct NativeTransaction<'a> {
 }
 
 impl<'a> NativeTransaction<'a> {
-    fn new_with_handle(h: *const MDB_txn) -> NativeTransaction {
+    fn new_with_handle(h: *const MDB_txn) -> NativeTransaction<'a> {
         NativeTransaction {
             handle: h,
             state: State::new(Slice("Txn"), TxnStateNormal) }
