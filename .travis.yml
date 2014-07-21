@@ -3,7 +3,9 @@ language: c
 env:
   global:
     - secure: edQRoXsRT78rbDxWTW8JFDVBBcb1IoUxOGe117OCAX9SC38dFIXZ6q67GQZ+IvNPUJTSquwI/zj93nC/w/t4z4LATKp9cAevfeB1BqE7UxbxFj5/YioYiZUq6iNA2DSFXSvV3bqtvuV0i43Imkk+1dyLqhBM7QniISVhUUugA70=
-
+    - LD_LIBRARY_PATH=/usr/lib/rust/rust-nightly/lib
+    - DYLD_LIBRARY_PATH=/usr/local/lib
+    
 before_install:
   - yes | sudo add-apt-repository ppa:hansjorg/rust
   - yes | sudo add-apt-repository ppa:cmrx64/cargo
