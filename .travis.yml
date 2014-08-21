@@ -5,7 +5,7 @@ env:
     - secure: edQRoXsRT78rbDxWTW8JFDVBBcb1IoUxOGe117OCAX9SC38dFIXZ6q67GQZ+IvNPUJTSquwI/zj93nC/w/t4z4LATKp9cAevfeB1BqE7UxbxFj5/YioYiZUq6iNA2DSFXSvV3bqtvuV0i43Imkk+1dyLqhBM7QniISVhUUugA70=
 
 script:
-  - cargo test && make doc
+  - cargo test && cargo doc
 
 after_script:
-  - curl http://www.rust-ci.org/artifacts/put?t=$RUSTCI_TOKEN | sh
+  - cd target && curl http://www.rust-ci.org/artifacts/put?t=$RUSTCI_TOKEN | sh
