@@ -1,4 +1,4 @@
-use std::str;
+use std::string;
 use libc::c_int;
 use ffi::consts::MDB_SUCCESS;
 use ffi::funcs::mdb_strerror;
@@ -6,7 +6,7 @@ use base::{MdbResult, MdbError};
 
 pub fn error_msg(code: c_int) -> String {
     unsafe {
-        str::raw::from_c_str(mdb_strerror(code))
+        string::raw::from_buf(mdb_strerror(code) as *const u8)
     }
 }
 

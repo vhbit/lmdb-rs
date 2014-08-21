@@ -1,4 +1,5 @@
 use std;
+use std::string;
 use libc::size_t;
 use ffi::types::MDB_val;
 
@@ -65,7 +66,7 @@ impl ToMdbValue for MDB_val {
 impl FromMdbValue for String {
     fn from_mdb_value(value: &MDB_val) -> String {
         unsafe {
-            std::str::raw::from_buf_len(std::mem::transmute(value.mv_data), value.mv_size as uint).to_string()
+            string::raw::from_buf_len(std::mem::transmute(value.mv_data), value.mv_size as uint).to_string()
         }
     }
 }

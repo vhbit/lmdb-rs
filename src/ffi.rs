@@ -13,7 +13,7 @@ pub mod types {
     mod os {
         use libc;
 
-        pub use pthread_mutex_t = self::mutex::pthread_mutex_t;
+        pub use self::mutex::pthread_mutex_t as pthread_mutex_t;
 
         pub type mdb_mode_t = libc::mode_t;
         pub type mdb_filehandle_t = libc::c_int;
