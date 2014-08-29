@@ -39,6 +39,7 @@ pub mod types {
             #[cfg(target_arch = "arm")]
             static __PTHREAD_MUTEX_SIZE__: uint = 40;
 
+            #[repr(C)]
             pub struct pthread_mutex_t {
                 __sig: libc::c_long,
                 __opaque: [u8, ..__PTHREAD_MUTEX_SIZE__],
@@ -59,6 +60,7 @@ pub mod types {
             #[cfg(target_arch = "mips")]
             static __SIZEOF_PTHREAD_MUTEX_T: uint = 24 - 8;
 
+            #[repr(C)]
             pub struct pthread_mutex_t {
                 __align: libc::c_longlong,
                 size: [u8, ..__SIZEOF_PTHREAD_MUTEX_T],
@@ -69,6 +71,7 @@ pub mod types {
         mod mutex {
             use libc;
 
+            #[repr(C)]
             pub struct pthread_mutex_t { value: libc::c_int }
         }
     }
@@ -101,6 +104,7 @@ pub mod types {
 
     type HANDLE = c_int;
 
+    #[repr(C)]
     struct MDB_ID2 {
         mid: MDB_ID,
         mptr: *const c_void
@@ -110,11 +114,13 @@ pub mod types {
 
     #[deriving(Clone)]
     #[allow(raw_pointer_deriving)]
+    #[repr(C)]
     pub struct MDB_val {
         pub mv_size: size_t,
         pub mv_data: *const c_void,
     }
 
+    #[repr(C)]
     struct MDB_rxbody {
         mrb_txnid: txnid_t,
         mrb_pid: MDB_PID_T,
@@ -131,7 +137,7 @@ struct MDB_reader {
     mru: MDB_reader_mru
 }
 */
-
+    #[repr(C)]
     struct MDB_txbody {
         mtb_magic: u32,
         mtb_format: u32,
@@ -157,7 +163,7 @@ struct MDB_txninfo {
     mti_readers: [MDB_reader, ..1]
 }
 */
-
+    #[repr(C)]
     struct MDB_pgstate {
         mf_pghead: *const pgno_t,
         mf_pglast: txnid_t
@@ -177,7 +183,7 @@ enum MDB_page_pb {
     pb_pages: u32
 }
 */
-
+    #[repr(C)]
     struct MDB_page {
         mp_p: size_t,
         mp_pad: u16,
@@ -186,6 +192,7 @@ enum MDB_page_pb {
         mp_ptrs: [indx_t, ..1]
     }
 
+    #[repr(C)]
     struct MDB_meta {
         mm_magic: u32,
         mm_version: u32,
@@ -196,6 +203,7 @@ enum MDB_page_pb {
         mm_txnid: txnid_t
     }
 
+    #[repr(C)]
     pub struct MDB_env; /* {
         me_fd: HANDLE,
         me_lfd: HANDLE,
@@ -229,6 +237,7 @@ enum MDB_page_pb {
     }
      */
 
+    #[repr(C)]
     struct MDB_db {
         md_pad: u32,
         md_flags: u16,
@@ -240,6 +249,7 @@ enum MDB_page_pb {
         md_root: pgno_t
     }
 
+    #[repr(C)] 
     struct MDB_dbx; /* {
         md_name: MDB_val<'a>,
         md_cmp: *MDB_cmp_func,
@@ -249,6 +259,7 @@ enum MDB_page_pb {
     }
     */
 
+    #[repr(C)]  
     pub struct MDB_txn {
         mt_parent: *const MDB_txn,
         mt_child: *const MDB_txn,
@@ -270,6 +281,7 @@ enum MDB_page_pb {
         mt_dirty_room: c_uint
     }
 
+    #[repr(C)]
     pub struct MDB_stat {
         pub ms_psize: c_uint,
         pub ms_depth: c_uint,
@@ -279,6 +291,7 @@ enum MDB_page_pb {
         pub ms_entries: size_t
     }
 
+    #[repr(C)]
     pub struct MDB_envinfo {
         pub me_mapaddr: *const c_void,
         pub me_mapsize: size_t,
@@ -310,6 +323,7 @@ enum MDB_page_pb {
         MDB_SET_RANGE
     }
 
+    #[repr(C)]
     pub struct MDB_cursor {
         mc_next: *const MDB_cursor,
         mc_backup: *const MDB_cursor,
@@ -326,6 +340,7 @@ enum MDB_page_pb {
         mc_ki: indx_t
     }
 
+    #[repr(C)]
     struct MDB_xcursor {
         mx_cursor: MDB_cursor,
         mx_db: MDB_db,
