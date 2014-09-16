@@ -168,8 +168,8 @@ impl Environment {
     pub fn new() -> MdbResult<Environment> {
         let env: *const MDB_env = ptr::null();
         lift(unsafe {
-            let pEnv: *mut *const MDB_env = std::mem::transmute(&env);
-            mdb_env_create(pEnv)},
+            let p_env: *mut *const MDB_env = std::mem::transmute(&env);
+            mdb_env_create(p_env)},
              || Environment {
                  env: env,
                  path: None,
