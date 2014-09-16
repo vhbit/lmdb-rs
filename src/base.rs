@@ -337,7 +337,7 @@ impl Environment {
     }
 
     /// Creates a readonly transaction
-    pub fn new_readonly_transaction(& self) -> MdbResult<ReadonlyTransaction> {
+    pub fn new_ro_transaction(& self) -> MdbResult<ReadonlyTransaction> {
         self.create_transaction(None, MDB_RDONLY)
             .and_then(|txn| Ok(ReadonlyTransaction::new_with_native(txn)))
     }
@@ -428,7 +428,7 @@ impl<'a> NativeTransaction<'a> {
     }
 
 
-    fn create_child(&self, flags: c_uint) -> MdbResult<NativeTransaction> {
+    fn new_child(&self, flags: c_uint) -> MdbResult<NativeTransaction> {
         let mut out: *const MDB_txn = ptr::null();
         lift(unsafe { mdb_txn_begin(mdb_txn_env(self.handle), self.handle, flags, &mut out) },
              || NativeTransaction::new_with_handle(out))
@@ -508,6 +508,22 @@ impl<'a> NativeTransaction<'a> {
     pub fn new_cursor(&'a self, db: &'a Database) -> MdbResult<Cursor<'a>> {
         Cursor::<'a>::new(self, db)
     }
+
+    /// Deletes provided database completely
+    pub fn del_db(&self, db: &Database) -> MdbResult<()> {
+        try!(self.state.then(TxnStateNormal));
+        unsafe {
+            lift_noret(mdb_drop(self.handle, db.handle, 1))
+        }
+    }
+
+    /// Empties provided database
+    pub fn empty_db(&self, db: &Database) -> MdbResult<()> {
+        try!(self.state.then(TxnStateNormal));
+        unsafe {
+            lift_noret(mdb_drop(self.handle, db.handle, 0))
+        }
+    }
 }
 
 pub struct Transaction<'a> {
@@ -525,13 +541,13 @@ impl<'a> Transaction<'a> {
         }
     }
 
-    pub fn create_child(&self) -> MdbResult<Transaction> {
-        self.inner.create_child(0)
+    pub fn new_child(&self) -> MdbResult<Transaction> {
+        self.inner.new_child(0)
             .and_then(|txn| Ok(Transaction::new_with_native(txn)))
     }
 
-    pub fn create_ro_child(&self) -> MdbResult<ReadonlyTransaction> {
-        self.inner.create_child(MDB_RDONLY)
+    pub fn new_ro_child(&self) -> MdbResult<ReadonlyTransaction> {
+        self.inner.new_child(MDB_RDONLY)
             .and_then(|txn| Ok(ReadonlyTransaction::new_with_native(txn)))
     }
 
@@ -565,11 +581,19 @@ impl<'a> Transaction<'a> {
         self.inner.new_cursor(db)
     }
 
+    pub fn del_db(&self, db: &Database) -> MdbResult<()> {
+        self.inner.del_db(db)
+    }
+
+    pub fn empty_db(&self, db: &Database) -> MdbResult<()> {
+        self.inner.empty_db(db)
+    }
+
     /// Returns an iterator for values between start_key and end_key.
     /// Currently it works only for unique keys (i.e. it will skip
     /// multiple items when DB created with MDB_DUPSORT).
     /// Iterator is valid while cursor is valid
-    pub fn iter_in_keyrange<'a, T: ToMdbValue+Clone>(&'a self, db: &'a Database, start_key: &T, end_key: &T) -> MdbResult<CursorKeyRangeIter<'a>> {
+    pub fn keyrange<'a, T: ToMdbValue+Clone>(&'a self, db: &'a Database, start_key: &T, end_key: &T) -> MdbResult<CursorKeyRangeIter<'a>> {
         self.inner.new_cursor(db)
             .and_then(|c| Ok(CursorKeyRangeIter {
                                 cursor: c,
@@ -593,8 +617,8 @@ impl<'a> ReadonlyTransaction<'a> {
         }
     }
 
-    pub fn create_ro_child(&self) -> MdbResult<ReadonlyTransaction> {
-        self.inner.create_child(MDB_RDONLY)
+    pub fn new_ro_child(&self) -> MdbResult<ReadonlyTransaction> {
+        self.inner.new_child(MDB_RDONLY)
             .and_then(|txn| Ok(ReadonlyTransaction::new_with_native(txn)))
 
     }
@@ -627,7 +651,7 @@ impl<'a> ReadonlyTransaction<'a> {
     /// Currently it works only for unique keys (i.e. it will skip
     /// multiple items when DB created with MDB_DUPSORT).
     /// Iterator is valid while cursor is valid
-    pub fn iter_in_keyrange<'a, T: ToMdbValue+Clone>(&'a self, db: &'a Database, start_key: &T, end_key: &T) -> MdbResult<CursorKeyRangeIter<'a>> {
+    pub fn keyrange<'a, T: ToMdbValue+Clone>(&'a self, db: &'a Database, start_key: &T, end_key: &T) -> MdbResult<CursorKeyRangeIter<'a>> {
         self.inner.new_cursor(db)
             .and_then(|c| Ok(CursorKeyRangeIter {
                                 cursor: c,

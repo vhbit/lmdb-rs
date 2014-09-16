@@ -249,7 +249,7 @@ enum MDB_page_pb {
         md_root: pgno_t
     }
 
-    #[repr(C)] 
+    #[repr(C)]
     struct MDB_dbx; /* {
         md_name: MDB_val<'a>,
         md_cmp: *MDB_cmp_func,
@@ -259,7 +259,7 @@ enum MDB_page_pb {
     }
     */
 
-    #[repr(C)]  
+    #[repr(C)]
     pub struct MDB_txn {
         mt_parent: *const MDB_txn,
         mt_child: *const MDB_txn,
@@ -453,7 +453,7 @@ pub mod funcs {
         pub fn mdb_stat(txn: *const MDB_txn, dbi: MDB_dbi, stat: *mut MDB_stat) -> c_int;
         pub fn mdb_dbi_flags(txn: *const MDB_txn, dbi: MDB_dbi, flags: *mut c_uint) -> c_int;
         pub fn mdb_dbi_close(txn: *const MDB_txn, dbi: MDB_dbi);
-        pub fn mdb_drop(txn: *mut MDB_txn, dbi: MDB_dbi, del: c_int) -> c_int;
+        pub fn mdb_drop(txn: *const MDB_txn, dbi: MDB_dbi, del: c_int) -> c_int;
         pub fn mdb_set_compare(txn: *const MDB_txn, dbi: MDB_dbi, cmp: MDB_cmp_func) -> c_int;
         pub fn mdb_set_dupsort(txn: *const MDB_txn, dbi: MDB_dbi, cmp: MDB_cmp_func) -> c_int;
         pub fn mdb_set_relfunc(txn: *const MDB_txn, dbi: MDB_dbi, rel: MDB_rel_func) -> c_int;
