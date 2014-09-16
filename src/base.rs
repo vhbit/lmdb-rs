@@ -1,19 +1,17 @@
 use std;
+use libc::{mod, c_int, c_uint, size_t, c_char};
+use std::default::Default;
+use std::fmt::Show;
+use std::io::fs::PathExtensions;
 use std::ptr;
-use libc;
-use libc::{c_int, c_uint, size_t, c_char};
 use std::result::Result;
+use std::str::{MaybeOwned, Slice };
 
 use ffi::consts::*;
 use ffi::funcs::*;
 use ffi::types::*;
-
 use traits::{ToMdbValue, FromMdbValue, StateError};
 use utils::{error_msg, lift, lift_noret};
-
-use std::fmt::Show;
-use std::default::Default;
-use std::str::{MaybeOwned, Slice };
 
 macro_rules! lift(
     ($e:expr, $r:expr) => (
@@ -868,7 +866,7 @@ impl<'a> Iterator<CursorValue> for CursorKeyRangeIter<'a> {
 
 #[cfg(test)]
 mod test {
-    use std::io::fs;
+    use std::io::fs::{mod, PathExtensions};
     use std::rt::unwind;
     use std::path::Path;
 
