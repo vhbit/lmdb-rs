@@ -589,6 +589,12 @@ impl<'a> Transaction<'a> {
         self.inner.empty_db(db)
     }
 
+    /// Returns an iterator for all values in database
+    pub fn iter<'a>(&'a self, db: &'a Database) -> MdbResult<CursorIter<'a>> {
+        self.inner.new_cursor(db)
+            .and_then(|c| Ok(CursorIter { cursor: c, initialized: false}))
+    }
+
     /// Returns an iterator for values between start_key and end_key.
     /// Currently it works only for unique keys (i.e. it will skip
     /// multiple items when DB created with MDB_DUPSORT).
@@ -645,6 +651,12 @@ impl<'a> ReadonlyTransaction<'a> {
 
     pub fn new_cursor(&'a self, db: &'a Database) -> MdbResult<Cursor<'a>> {
         self.inner.new_cursor(db)
+    }
+
+    /// Returns an iterator for all values in database
+    pub fn iter<'a>(&'a self, db: &'a Database) -> MdbResult<CursorIter<'a>> {
+        self.inner.new_cursor(db)
+            .and_then(|c| Ok(CursorIter { cursor: c, initialized: false}))
     }
 
     /// Returns an iterator for values between start_key and end_key.
@@ -888,6 +900,40 @@ impl<'a> Iterator<CursorValue> for CursorKeyRangeIter<'a> {
     }
 }
 
+pub struct CursorIter<'a> {
+    cursor: Cursor<'a>,
+    initialized: bool
+}
+
+impl<'a> Iterator<CursorValue> for CursorIter<'a> {
+    fn next(&mut self) -> Option<CursorValue> {
+        let move_res = if !self.initialized {
+            self.initialized = true;
+            self.cursor.to_first()
+        } else {
+            self.cursor.to_next_key()
+        };
+
+        if move_res.is_err() {
+            None
+        } else {
+            let (k, v): (MDB_val, MDB_val) = self.cursor.get_plain();
+            Some(CursorValue {
+                key: k,
+                value: v
+            })
+        }
+    }
+
+    fn size_hint(&self) -> (uint, Option<uint>) {
+        match self.cursor.item_count() {
+            Err(_) => (0, None),
+            Ok(x) => (x as uint, None)
+        }
+    }
+}
+
+
 #[cfg(test)]
 mod test {
     use std::io::fs::{mod, PathExtensions};
@@ -897,16 +943,15 @@ mod test {
     use ffi::consts;
     use super::{Environment};
 
-    #[allow(unused_must_use)]
     fn test_db_in_path(path: &Path, f: ||) {
         // Delete dir to be sure nothing existed before test
         if path.exists() {
-            fs::rmdir_recursive(path);
+            let _ = fs::rmdir_recursive(path);
         };
 
         let _ = unsafe { unwind::try(f) };
 
-        fs::rmdir_recursive(path);
+        let _ = fs::rmdir_recursive(path);
     }
 
     #[test]
