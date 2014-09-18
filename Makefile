@@ -16,6 +16,7 @@ TEST_RUNNER = $(BUILD_DIR)/test_runner
 all: mdb lib tests doc
 
 mdb:
+	@git submodule update --init --recursive
 	cd $(LMDB_ROOT) && make liblmdb.a
 
 mdb_for_cargo: mdb
