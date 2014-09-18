@@ -7,11 +7,13 @@ use std::ptr;
 use std::result::Result;
 use std::str::{MaybeOwned, Slice };
 
+pub use self::errors::*;
 use ffi::consts::*;
 use ffi::funcs::*;
 use ffi::types::*;
 use traits::{ToMdbValue, FromMdbValue, StateError};
-use utils::{error_msg, lift, lift_noret};
+use utils::{lift, lift_noret};
+
 
 macro_rules! lift(
     ($e:expr, $r:expr) => (
@@ -21,42 +23,65 @@ macro_rules! lift(
                 MDB_SUCCESS => Ok($r),
                 _ => Err(MdbError::new_with_code(t))
             }
-        }
-    )
-)
+        }))
 
 /// MdbError wraps information about LMDB error
-pub struct MdbError {
-    code: c_int,
-    message: String
-}
 
-impl MdbError {
-    pub fn new_with_code(code: c_int) -> MdbError {
-        MdbError {
-            code: code,
-            message: error_msg(code)
+pub mod errors {
+    use ffi::consts::*;
+    use libc::{c_int};
+    use std;
+    use traits::StateError;
+    use utils::{error_msg};
+
+    pub enum MdbError {
+        NotFound,
+        KeyExists,
+        TxnFull,
+        CursorFull,
+        PageFull,
+        Corrupted,
+        Panic,
+        StateError(String),
+        Custom(c_int, String)
+    }
+
+    impl StateError for MdbError {
+        fn new_state_error(msg: String) -> MdbError {
+            StateError(msg)
         }
     }
 
-    #[inline]
-    pub fn get_code(&self) -> c_int {
-        self.code
-    }
-}
-
-impl StateError for MdbError {
-    fn new_state_error(msg: String) -> MdbError {
-        MdbError {
-            code: MDB_INVALID_STATE,
-            message: msg
+    impl MdbError {
+        pub fn new_with_code(code: c_int) -> MdbError {
+            match code {
+                MDB_NOTFOUND    => NotFound,
+                MDB_KEYEXIST    => KeyExists,
+                MDB_TXN_FULL    => TxnFull,
+                MDB_CURSOR_FULL => CursorFull,
+                MDB_PAGE_FULL   => PageFull,
+                MDB_CORRUPTED   => Corrupted,
+                MDB_PANIC       => Panic,
+                _               => Custom(code, error_msg(code))
+            }
         }
     }
-}
 
-impl std::fmt::Show for MdbError {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        self.message.fmt(fmt)
+
+    impl std::fmt::Show for MdbError {
+        fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+            match self {
+                &NotFound => write!(fmt, "not found"),
+                &KeyExists => write!(fmt, "key exists"),
+                &TxnFull => write!(fmt, "txn full"),
+                &CursorFull => write!(fmt, "cursor full"),
+                &PageFull => write!(fmt, "page full"),
+                &Corrupted => write!(fmt, "corrupted"),
+                &Panic => write!(fmt, "panic"),
+                &StateError(ref msg) => write!(fmt, "{}", msg),
+                &Custom(code, ref msg) => write!(fmt, "{}: {}", code, msg)
+            }
+        }
     }
 }
 
@@ -964,7 +989,7 @@ mod test {
                 Ok(mut env) => {
                     match env.get_maxreaders() {
                         Ok(readers) => assert!(readers != 0, "Max number of readers couldn't be 0"),
-                        Err(err) => fail!("Failed to get max number of readers: {}", err.message)
+                        Err(err) => fail!("Failed to get max number of readers: {}", err)
                     };
 
                     let test_readers = 33;
@@ -972,17 +997,17 @@ mod test {
                         Ok(_) => {
                             match env.get_maxreaders() {
                                 Ok(readers) => assert!(readers == test_readers, "Get readers != set readers"),
-                                Err(err) => fail!("Failed to get max number of readers: {}", err.message)
+                                Err(err) => fail!("Failed to get max number of readers: {}", err)
                             }
                         },
-                        Err(err) => fail!("Failed to set max number of readers: {}", err.message)
+                        Err(err) => fail!("Failed to set max number of readers: {}", err)
                     };
 
                     match env.open(&path, 0, 0o755) {
                         Ok(..) => {
                             match env.sync(true) {
                                 Ok(..) => (),
-                                Err(err) => fail!("Failed to sync: {}", err.message)
+                                Err(err) => fail!("Failed to sync: {}", err)
                             };
 
                             let test_flags = consts::MDB_NOMEMINIT | consts::MDB_NOMETASYNC;
@@ -991,10 +1016,10 @@ mod test {
                                 Ok(_) => {
                                     match env.get_flags() {
                                         Ok(new_flags) => assert!((new_flags & test_flags) == test_flags, "Get flags != set flags"),
-                                        Err(err) => fail!("Failed to get flags: {}", err.message)
+                                        Err(err) => fail!("Failed to get flags: {}", err)
                                     }
                                 },
-                                Err(err) => fail!("Failed to set flags: {}", err.message)
+                                Err(err) => fail!("Failed to set flags: {}", err)
                             };
 
                             match env.get_default_db(0) {
@@ -1008,22 +1033,22 @@ mod test {
                                                 Ok(_) => {
                                                     match tnx.get::<String>(&db, &key) {
                                                         Ok(v) => assert!(v.as_slice() == value, "Written {:?} and read {:?}", value.as_slice(), v.as_slice()),
-                                                        Err(err) => fail!("Failed to read value: {}", err.message)
+                                                        Err(err) => fail!("Failed to read value: {}", err)
                                                     }
                                                 },
-                                                Err(err) => fail!("Failed to write value: {}", err.message)
+                                                Err(err) => fail!("Failed to write value: {}", err)
                                             }
                                         },
-                                        Err(err) => fail!("Failed to create transaction: {}", err.message)
+                                        Err(err) => fail!("Failed to create transaction: {}", err)
                                     }
                                 },
-                                Err(err) => fail!("Failed to get default database: {}", err.message)
+                                Err(err) => fail!("Failed to get default database: {}", err)
                             }
                         },
-                        Err(err) => fail!("Failed to open path {}: {}", path.display(), err.message)
+                        Err(err) => fail!("Failed to open path {}: {}", path.display(), err)
                     }
                 },
-                Err(err) => fail!("Failed to initialize environment: {}", err.message)
+                Err(err) => fail!("Failed to initialize environment: {}", err)
             };
         });
     }

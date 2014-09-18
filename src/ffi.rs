@@ -374,12 +374,6 @@ pub mod consts {
     pub static MDB_BAD_TXN: c_int = -30782;
     pub static MDB_BAD_VALSIZE: c_int = -30781;
 
-    /// It's internal error code if operation is
-    /// being preformed from invalid initial state
-    /// for example, trying to commit transaction,
-    /// which was already freed
-    pub static MDB_INVALID_STATE: c_int = -30000;
-
     // Write flags
     pub static MDB_NOOVERWRITE: c_uint = 0x10;
     pub static MDB_NODUPDATA: c_uint = 0x20;
