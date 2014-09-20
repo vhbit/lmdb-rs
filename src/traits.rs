@@ -87,7 +87,3 @@ impl<'a> FromMdbValue for &'a str {
         }
     }
 }
-
-pub trait StateError {
-    fn new_state_error(msg: String) -> Self;
-}
