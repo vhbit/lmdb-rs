@@ -360,7 +360,7 @@ impl Environment {
             .and_then(|txn| Ok(ReadonlyTransaction::new_with_native(txn)))
     }
 
-    fn get_db_by_name<'a>(&'a mut self, db_name: &'a str, flags: c_uint) -> MdbResult<CachedDatabase> {
+    fn get_db_by_name<'a>(&'a self, db_name: &'a str, flags: c_uint) -> MdbResult<CachedDatabase> {
         assert_state_eq!(env, self.state, EnvOpened);
 
         let guard = self.db_cache.lock();
@@ -393,13 +393,13 @@ impl Environment {
     /// Returns or creates a named database
     ///
     /// Note: set_maxdbis should be called before
-    pub fn get_or_create_db<'a>(&'a mut self, name: &'a str, flags: c_uint) -> MdbResult<CachedDatabase> {
+    pub fn get_or_create_db<'a>(&'a self, name: &'a str, flags: c_uint) -> MdbResult<CachedDatabase> {
         // FIXME: MDB_CREATE should be included only in read-write Environment
         self.get_db_by_name(name, flags | MDB_CREATE)
     }
 
     /// Returns default database
-    pub fn get_default_db<'a>(&'a mut self, flags: c_uint) -> MdbResult<CachedDatabase> {
+    pub fn get_default_db<'a>(&'a self, flags: c_uint) -> MdbResult<CachedDatabase> {
         self.get_db_by_name("", flags)
     }
 }
