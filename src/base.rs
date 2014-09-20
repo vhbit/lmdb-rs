@@ -304,10 +304,11 @@ impl Environment {
         let mut handle: *const MDB_txn = ptr::null();
         let parent_handle = match parent {
             Some(t) => t.handle,
-            _ => ptr::RawPtr::<MDB_txn>::null()
+            _ => ptr::null()
         };
 
-        try_mdb!(unsafe { mdb_txn_begin(self.env, parent_handle, flags, &mut handle) }, NativeTransaction::new_with_handle(handle))
+        try_mdb!(unsafe { mdb_txn_begin(self.env, parent_handle, flags, &mut handle) },
+                 NativeTransaction::new_with_handle(handle, flags as uint))
     }
 
     /// Creates a new read-write transaction
@@ -331,7 +332,7 @@ impl Environment {
             .and_then(|_| Ok(Database::new_with_handle(dbi)))
     }
 
-    /// Returns or creates database with name
+    /// Returns or creates a named database
     ///
     /// Note: set_maxdbis should be called before
     pub fn get_or_create_db(&self, name: &str, flags: c_uint) -> MdbResult<Database> {
@@ -343,7 +344,7 @@ impl Environment {
 
     /// Returns default database
     pub fn get_default_db(&self, flags: c_uint) -> MdbResult<Database> {
-        self.get_db_by_name(std::ptr::RawPtr::null(), flags)
+        self.get_db_by_name(ptr::null(), flags)
     }
 }
 
@@ -364,20 +365,30 @@ enum TransactionState {
 
 struct NativeTransaction<'a> {
     handle: *const MDB_txn,
+    flags: uint,
     state: TransactionState,
 }
 
 impl<'a> NativeTransaction<'a> {
-    fn new_with_handle(h: *const MDB_txn) -> NativeTransaction<'a> {
+    fn new_with_handle(h: *const MDB_txn, flags: uint) -> NativeTransaction<'a> {
         NativeTransaction {
             handle: h,
+            flags: flags,
             state: TxnStateNormal }
+    }
+
+    fn is_readonly(&self) -> bool {
+        (self.flags as u32 & MDB_RDONLY) == MDB_RDONLY
     }
 
     fn commit(&mut self) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         try_mdb!(unsafe { mdb_txn_commit(self.handle) } );
-        self.state = TxnStateInvalid;
+        self.state = if self.is_readonly() {
+            TxnStateReleased
+        } else {
+            TxnStateInvalid
+        };
         Ok(())
     }
 
@@ -386,7 +397,11 @@ impl<'a> NativeTransaction<'a> {
             debug!("Can't abort transaction: current state {}", self.state)
         } else {
             unsafe { mdb_txn_abort(self.handle); }
-            self.state = TxnStateInvalid;
+            self.state = if self.is_readonly() {
+                TxnStateReleased
+            } else {
+                TxnStateInvalid
+            };
         }
     }
 
@@ -412,7 +427,7 @@ impl<'a> NativeTransaction<'a> {
     fn new_child(&self, flags: c_uint) -> MdbResult<NativeTransaction> {
         let mut out: *const MDB_txn = ptr::null();
         try_mdb!(unsafe { mdb_txn_begin(mdb_txn_env(self.handle), self.handle, flags, &mut out) });
-        Ok(NativeTransaction::new_with_handle(out))
+        Ok(NativeTransaction::new_with_handle(out, flags as uint))
     }
 
     /// Used in Drop to switch state
@@ -780,10 +795,12 @@ impl<'a> Cursor<'a> {
         self.set_value(None, value, MDB_CURRENT)
     }
 
+    /*
     /// Adds a new value if it doesn't exist yet
     pub fn upsert(&mut self, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
         self.set_value(Some(key), value, MDB_NOOVERWRITE)
     }
+    */
 
     fn del_value(&mut self, flags: c_uint) -> MdbResult<()> {
         lift_mdb!(unsafe { mdb_cursor_del(self.handle, flags) })
