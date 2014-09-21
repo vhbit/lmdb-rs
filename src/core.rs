@@ -592,14 +592,17 @@ impl<'a> Transaction<'a> {
             .and_then(|txn| Ok(ReadonlyTransaction::new_with_native(txn)))
     }
 
-    /// Aborts transaction, handle is freed
-    pub fn commit(&mut self) -> MdbResult<()> {
-        self.inner.commit()
+    /// Commits transaction, moves it out
+    pub fn commit(self) -> MdbResult<()> {
+        //self.inner.commit()
+        let mut t = self;
+        t.inner.commit()
     }
 
-    /// Aborts transaction, handle is freed
-    pub fn abort(&mut self) {
-        self.inner.abort();
+    /// Aborts transaction, moves it out
+    pub fn abort(self) {
+        let mut t = self;
+        t.inner.abort();
     }
 
     pub fn get<T: FromMdbValue>(&self, db: &DatabaseHandle, key: &ToMdbValue) -> MdbResult<T> {
@@ -667,18 +670,20 @@ impl<'a> ReadonlyTransaction<'a> {
 
     }
 
-    /// Aborts transaction, handle is freed
+    /// Aborts transaction. But readonly transaction could be
+    /// reused later by calling `renew`
     pub fn abort(&mut self) {
         self.inner.abort();
     }
 
     /// Resets read only transaction, handle is kept. Must be followed
-    /// by call to renew
+    /// by call to `renew`
     pub fn reset(&mut self) {
         self.inner.reset();
     }
 
-    /// Acquires a new reader lock after it was released by reset
+    /// Acquires a new reader lock after transaction
+    /// `abort` or `reset`
     pub fn renew(&mut self) -> MdbResult<()> {
         self.inner.renew()
     }
@@ -1218,4 +1223,26 @@ mod test {
             assert!(env.get_or_create_db("test-db", 0).is_ok());
         });
     }
+
+    /*
+    #[test]
+    fn test_compilation_of_moved_items() {
+        let path = Path::new("dbcom");
+        test_db_in_path(&path, || {
+            let mut env = Environment::new().unwrap();
+            assert!(env.set_maxdbs(5).is_ok());
+            assert!(env.open(&path, 0, 0o755).is_ok());
+
+            let db = env.get_default_db(0).unwrap();
+            let mut txn = env.new_transaction().unwrap();
+
+            txn.commit();
+
+            let test_key1 = "key1";
+            let test_data1 = "value1";
+
+            assert!(txn.get::<()>(&db, &test_key1).is_err(), "Key shouldn't exist yet");
+        })
+    }
+    */
 }
