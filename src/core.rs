@@ -873,7 +873,7 @@ impl<'a, Db: DatabaseHandle> Drop for Cursor<'a, Db> {
     }
 }
 
-pub struct CursorValue {
+pub struct CursorValue<'cursor> {
     key: MDB_val,
     value: MDB_val,
 }
@@ -881,7 +881,7 @@ pub struct CursorValue {
 /// CursorValue performs lazy data extraction from iterator
 /// avoiding any data conversions and memory copy. Lifetime
 /// is limited to iterator lifetime
-impl CursorValue {
+impl<'cursor> CursorValue<'cursor> {
     pub fn get_key<T: FromMdbValue>(&self) -> T {
         FromMdbValue::from_mdb_value(&self.key)
     }
@@ -918,8 +918,8 @@ impl<'a, Db: DatabaseHandle> CursorKeyRangeIter<'a, Db> {
     }
 }
 
-impl<'a, Db: DatabaseHandle> Iterator<CursorValue> for CursorKeyRangeIter<'a, Db> {
-    fn next(&mut self) -> Option<CursorValue> {
+impl<'a, Db: DatabaseHandle> Iterator<CursorValue<'a>> for CursorKeyRangeIter<'a, Db> {
+    fn next(&mut self) -> Option<CursorValue<'a>> {
         let move_res = if !self.initialized {
             self.initialized = true;
             self.cursor.to_gte_key(&self.start_key)
@@ -971,8 +971,8 @@ impl<'a, Db: DatabaseHandle> CursorIter<'a, Db> {
     }
 }
 
-impl<'a, Db: DatabaseHandle> Iterator<CursorValue> for CursorIter<'a, Db> {
-    fn next(&mut self) -> Option<CursorValue> {
+impl<'a, Db: DatabaseHandle> Iterator<CursorValue<'a>> for CursorIter<'a, Db> {
+    fn next(&mut self) -> Option<CursorValue<'a>> {
         let move_res = if !self.initialized {
             self.initialized = true;
             self.cursor.to_first()
