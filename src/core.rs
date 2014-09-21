@@ -119,15 +119,79 @@ trait DatabaseHandle {
     fn get_handle(&self) -> MDB_dbi;
 }
 
+trait WriteTransaction<'a> {
+    fn get_write_transaction(&'a self) -> &'a NativeTransaction;
+}
+
+trait ReadTransaction<'a> {
+    fn get_read_transaction(&'a self) -> &'a NativeTransaction;
+}
+
 /// Database
 pub struct Database {
     handle: MDB_dbi,
+    owns: bool
 }
 
 impl Database {
-    fn new_with_handle(handle: MDB_dbi) -> Database {
-        Database { handle: handle }
+    fn new_with_handle(handle: MDB_dbi, owns: bool) -> Database {
+        Database { handle: handle, owns: owns }
     }
+
+    pub fn get<'a, T: FromMdbValue>(&self, txn: &'a ReadTransaction<'a>, key: &ToMdbValue) -> MdbResult<T> {
+        let reader = txn.get_read_transaction();
+        reader.get(self, key)
+    }
+
+    pub fn set<'a>(&self, txn: &'a WriteTransaction<'a>, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
+        txn.get_write_transaction().set(self, key, value)
+    }
+
+    pub fn del<'a>(&self, txn: &'a WriteTransaction<'a>, key: &ToMdbValue) -> MdbResult<()> {
+        txn.get_write_transaction().del(self, key)
+    }
+
+    pub fn del_exact<'a>(&self, txn: &'a WriteTransaction<'a>, key: &ToMdbValue, data: &ToMdbValue) -> MdbResult<()> {
+        txn.get_write_transaction().del_exact_value(self, key, data)
+    }
+
+    pub fn new_cursor<'a>(&'a self, txn: &'a ReadTransaction<'a>) -> MdbResult<Cursor<'a>> {
+        txn.get_read_transaction().new_cursor(self)
+    }
+
+    pub fn del_db<'a>(&self, txn: &'a WriteTransaction<'a>) -> MdbResult<()> {
+        txn.get_write_transaction().del_db(self)
+    }
+
+    pub fn clear<'a>(&self, txn: &'a WriteTransaction<'a>) -> MdbResult<()> {
+        txn.get_write_transaction().empty_db(self)
+    }
+
+    /// Returns an iterator for all values in database
+    pub fn iter<'a>(&'a self, txn: &'a ReadTransaction<'a>) -> MdbResult<CursorIter<'a>> {
+        txn.get_read_transaction().new_cursor(self)
+            .and_then(|c| Ok(CursorIter::new(c)))
+    }
+
+    /// Returns an iterator for values between start_key and end_key.
+    /// Currently it works only for unique keys (i.e. it will skip
+    /// multiple items when DB created with MDB_DUPSORT).
+    /// Iterator is valid while cursor is valid
+    pub fn keyrange<'a, T: ToMdbValue+Clone>(&'a self, txn: &'a ReadTransaction<'a>, start_key: &T, end_key: &T)
+                                             -> MdbResult<CursorKeyRangeIter<'a>> {
+        txn.get_read_transaction().new_cursor(self)
+            .and_then(|c| Ok(CursorKeyRangeIter::new(c, start_key.clone().to_mdb_value(), end_key.clone().to_mdb_value())))
+    }
+}
+
+impl Drop for Database {
+    fn drop(&mut self) {
+        if self.owns {
+            // FIXME: drop dbi handle
+            // unsafe { mdb_dbi_close(self.handle) }
+        }
+    }
+
 }
 
 impl DatabaseHandle for Database {
@@ -351,7 +415,7 @@ impl Environment {
             .and_then(|txn| Ok(ReadonlyTransaction::new_with_native(txn)))
     }
 
-    fn get_db_by_name<'a>(&'a self, db_name: &'a str, flags: c_uint) -> MdbResult<CachedDatabase> {
+    fn get_db_by_name<'a>(&'a self, db_name: &'a str, flags: c_uint) -> MdbResult<Database> {
         assert_state_eq!(env, self.state, EnvOpened);
 
         let guard = self.db_cache.lock();
@@ -361,7 +425,7 @@ impl Environment {
         unsafe {
             let tmp = (*cache).find_equiv(&db_name);
             if tmp.is_some() {
-                return Ok(CachedDatabase::new_with_handle(tmp.unwrap().handle))
+                return Ok(Database::new_with_handle(tmp.unwrap().handle, false))
             }
         }
 
@@ -372,11 +436,11 @@ impl Environment {
         }));
         try!(txn.commit());
 
-        let db = Database::new_with_handle(dbi);
+        let db = Database::new_with_handle(dbi, true);
         unsafe { (*cache).insert(db_name.to_string(), db) };
 
         match unsafe { (*cache).find_equiv(&db_name) } {
-            Some(db) => Ok(CachedDatabase::new_with_handle(db.handle)),
+            Some(db) => Ok(Database::new_with_handle(db.handle, false)),
             _ => Err(InvalidPath)
         }
     }
@@ -384,13 +448,13 @@ impl Environment {
     /// Returns or creates a named database
     ///
     /// Note: set_maxdbis should be called before
-    pub fn get_or_create_db<'a>(&'a self, name: &'a str, flags: c_uint) -> MdbResult<CachedDatabase> {
+    pub fn get_or_create_db<'a>(&'a self, name: &'a str, flags: c_uint) -> MdbResult<Database> {
         // FIXME: MDB_CREATE should be included only in read-write Environment
         self.get_db_by_name(name, flags | MDB_CREATE)
     }
 
     /// Returns default database
-    pub fn get_default_db<'a>(&'a self, flags: c_uint) -> MdbResult<CachedDatabase> {
+    pub fn get_default_db<'a>(&'a self, flags: c_uint) -> MdbResult<Database> {
         self.get_db_by_name("", flags)
     }
 }
@@ -546,7 +610,7 @@ impl<'a> NativeTransaction<'a> {
     }
 
     /// creates a new cursor in current transaction tied to db
-    pub fn new_cursor<Db: DatabaseHandle>(&'a self, db: &'a Db) -> MdbResult<Cursor<'a, Db>> {
+    pub fn new_cursor(&'a self, db: &'a Database) -> MdbResult<Cursor<'a>> {
         Cursor::<'a>::new(self, db)
     }
 
@@ -604,49 +668,17 @@ impl<'a> Transaction<'a> {
         let mut t = self;
         t.inner.abort();
     }
+}
 
-    pub fn get<T: FromMdbValue>(&self, db: &DatabaseHandle, key: &ToMdbValue) -> MdbResult<T> {
-        self.inner.get(db, key)
+impl<'a> WriteTransaction<'a> for Transaction<'a> {
+    fn get_write_transaction(&'a self) -> &'a NativeTransaction {
+        &self.inner
     }
+}
 
-    pub fn set(&self, db: &DatabaseHandle, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
-        self.inner.set(db, key, value)
-    }
-
-    pub fn del(&self, db: &DatabaseHandle, key: &ToMdbValue) -> MdbResult<()> {
-        self.inner.del(db, key)
-    }
-
-    pub fn del_exact(&self, db: &DatabaseHandle, key: &ToMdbValue, data: &ToMdbValue) -> MdbResult<()> {
-        self.inner.del_exact_value(db, key, data)
-    }
-
-    pub fn new_cursor<Db: DatabaseHandle>(&'a self, db: &'a Db) -> MdbResult<Cursor<'a, Db>> {
-        self.inner.new_cursor(db)
-    }
-
-    pub fn del_db(&self, db: &DatabaseHandle) -> MdbResult<()> {
-        self.inner.del_db(db)
-    }
-
-    pub fn empty_db(&self, db: &DatabaseHandle) -> MdbResult<()> {
-        self.inner.empty_db(db)
-    }
-
-    /// Returns an iterator for all values in database
-    pub fn iter<'a, Db: DatabaseHandle>(&'a self, db: &'a Db) -> MdbResult<CursorIter<'a, Db>> {
-        self.inner.new_cursor(db)
-            .and_then(|c| Ok(CursorIter::new(c)))
-    }
-
-    /// Returns an iterator for values between start_key and end_key.
-    /// Currently it works only for unique keys (i.e. it will skip
-    /// multiple items when DB created with MDB_DUPSORT).
-    /// Iterator is valid while cursor is valid
-    pub fn keyrange<'a, T: ToMdbValue+Clone, Db: DatabaseHandle>(&'a self, db: &'a Db, start_key: &T, end_key: &T)
-                                                                 -> MdbResult<CursorKeyRangeIter<'a, Db>> {
-        self.inner.new_cursor(db)
-            .and_then(|c| Ok(CursorKeyRangeIter::new(c, start_key.clone().to_mdb_value(), end_key.clone().to_mdb_value())))
+impl<'a> ReadTransaction<'a> for Transaction<'a> {
+    fn get_read_transaction(&'a self) -> &'a NativeTransaction {
+        &self.inner
     }
 }
 
@@ -687,33 +719,6 @@ impl<'a> ReadonlyTransaction<'a> {
     pub fn renew(&mut self) -> MdbResult<()> {
         self.inner.renew()
     }
-
-    pub fn get<T: FromMdbValue>(&self, db: &DatabaseHandle, key: &ToMdbValue) -> MdbResult<T> {
-        self.inner.get(db, key)
-    }
-
-    pub fn new_cursor<Db: DatabaseHandle>(&'a self, db: &'a Db) -> MdbResult<Cursor<'a, Db>> {
-        self.inner.new_cursor(db)
-    }
-
-    /// Returns an iterator for all values in database
-    pub fn iter<'a, Db: DatabaseHandle>(&'a self, db: &'a Db) -> MdbResult<CursorIter<'a, Db>> {
-        self.inner.new_cursor(db)
-            .and_then(|c| Ok(CursorIter::new(c)))
-    }
-
-    /// Returns an iterator for values between start_key and end_key.
-    /// Currently it works only for unique keys (i.e. it will skip
-    /// multiple items when DB created with MDB_DUPSORT).
-    /// Iterator is valid while cursor is valid
-    pub fn keyrange<'a, T: ToMdbValue+Clone, Db: DatabaseHandle>(&'a self, db: &'a Db, start_key: &T, end_key: &T)
-                                                                 -> MdbResult<CursorKeyRangeIter<'a, Db>> {
-        self.inner.new_cursor(db)
-            .and_then(|c| Ok(CursorKeyRangeIter::new(c,
-                                                     start_key.clone().to_mdb_value(),
-                                                     end_key.clone().to_mdb_value())))
-
-    }
 }
 
 
@@ -724,18 +729,18 @@ impl<'a> Drop for ReadonlyTransaction<'a> {
     }
 }
 
-pub struct Cursor<'a, Db: 'a> {
+pub struct Cursor<'a> {
     handle: *const MDB_cursor,
     data_val: MDB_val,
     key_val: MDB_val,
     txn: &'a NativeTransaction<'a>,
-    db: &'a Db
+    db: &'a Database
 }
 
-impl<'a, Db: DatabaseHandle> Cursor<'a, Db> {
-    fn new(txn: &'a NativeTransaction, db: &'a Db) -> MdbResult<Cursor<'a, Db>> {
+impl<'a> Cursor<'a> {
+    fn new(txn: &'a NativeTransaction, db: &'a Database) -> MdbResult<Cursor<'a>> {
         let mut tmp: *const MDB_cursor = std::ptr::null();
-        try_mdb!(unsafe { mdb_cursor_open(txn.handle, db.get_handle(), &mut tmp) });
+        try_mdb!(unsafe { mdb_cursor_open(txn.handle, db.handle, &mut tmp) });
         Ok(Cursor {
             handle: tmp,
             data_val: unsafe { std::mem::zeroed() },
@@ -872,7 +877,7 @@ impl<'a, Db: DatabaseHandle> Cursor<'a, Db> {
 }
 
 #[unsafe_destructor]
-impl<'a, Db: DatabaseHandle> Drop for Cursor<'a, Db> {
+impl<'a> Drop for Cursor<'a> {
     fn drop(&mut self) {
         unsafe { mdb_cursor_close(std::mem::transmute(self.handle)) };
     }
@@ -900,15 +905,15 @@ impl<'cursor> CursorValue<'cursor> {
     }
 }
 
-pub struct CursorKeyRangeIter<'a, Db: 'a> {
-    cursor: Cursor<'a, Db>,
+pub struct CursorKeyRangeIter<'a> {
+    cursor: Cursor<'a>,
     start_key: MDB_val,
     end_key: MDB_val,
     initialized: bool
 }
 
-impl<'a, Db: DatabaseHandle> CursorKeyRangeIter<'a, Db> {
-    pub fn new(cursor: Cursor<'a, Db>, start_key: MDB_val, end_key: MDB_val) -> CursorKeyRangeIter<'a, Db> {
+impl<'a> CursorKeyRangeIter<'a> {
+    pub fn new(cursor: Cursor<'a>, start_key: MDB_val, end_key: MDB_val) -> CursorKeyRangeIter<'a> {
         CursorKeyRangeIter {
             cursor: cursor,
             start_key: start_key,
@@ -918,12 +923,12 @@ impl<'a, Db: DatabaseHandle> CursorKeyRangeIter<'a, Db> {
     }
 
     // Moves out cursor for further usage
-    pub fn unwrap(self) -> Cursor<'a, Db> {
+    pub fn unwrap(self) -> Cursor<'a> {
         self.cursor
     }
 }
 
-impl<'a, Db: DatabaseHandle> Iterator<CursorValue<'a>> for CursorKeyRangeIter<'a, Db> {
+impl<'a> Iterator<CursorValue<'a>> for CursorKeyRangeIter<'a> {
     fn next(&mut self) -> Option<CursorValue<'a>> {
         let move_res = if !self.initialized {
             self.initialized = true;
@@ -936,7 +941,7 @@ impl<'a, Db: DatabaseHandle> Iterator<CursorValue<'a>> for CursorKeyRangeIter<'a
             None
         } else {
             let (k, v): (MDB_val, MDB_val) = self.cursor.get_plain();
-            let cmp_res = unsafe {mdb_cmp(self.cursor.txn.handle, self.cursor.db.get_handle(), &k, &self.end_key)};
+            let cmp_res = unsafe {mdb_cmp(self.cursor.txn.handle, self.cursor.db.handle, &k, &self.end_key)};
 
             if cmp_res > 0 {
                 Some(CursorValue {
@@ -957,13 +962,13 @@ impl<'a, Db: DatabaseHandle> Iterator<CursorValue<'a>> for CursorKeyRangeIter<'a
     }
 }
 
-pub struct CursorIter<'a, Db: 'a> {
-    cursor: Cursor<'a, Db>,
+pub struct CursorIter<'a> {
+    cursor: Cursor<'a>,
     initialized: bool
 }
 
-impl<'a, Db: DatabaseHandle> CursorIter<'a, Db> {
-    pub fn new(cursor: Cursor<'a, Db>) -> CursorIter<'a, Db> {
+impl<'a> CursorIter<'a> {
+    pub fn new(cursor: Cursor<'a>) -> CursorIter<'a> {
         CursorIter {
             cursor: cursor,
             initialized: false
@@ -971,12 +976,12 @@ impl<'a, Db: DatabaseHandle> CursorIter<'a, Db> {
     }
 
     // Moves out corresponding cursor
-    pub fn unwrap(self) -> Cursor<'a, Db> {
+    pub fn unwrap(self) -> Cursor<'a> {
         self.cursor
     }
 }
 
-impl<'a, Db: DatabaseHandle> Iterator<CursorValue<'a>> for CursorIter<'a, Db> {
+impl<'a> Iterator<CursorValue<'a>> for CursorIter<'a> {
     fn next(&mut self) -> Option<CursorValue<'a>> {
         let move_res = if !self.initialized {
             self.initialized = true;
@@ -1074,10 +1079,10 @@ mod test {
                                     let value = "world";
 
                                     match env.new_transaction() {
-                                        Ok(tnx) => {
-                                            match tnx.set(&db, &key, &value) {
+                                        Ok(txn) => {
+                                            match db.set(&txn, &key, &value) {
                                                 Ok(_) => {
-                                                    match tnx.get::<String>(&db, &key) {
+                                                    match db.get::<String>(&txn, &key) {
                                                         Ok(v) => assert!(v.as_slice() == value, "Written {:?} and read {:?}", value.as_slice(), v.as_slice()),
                                                         Err(err) => fail!("Failed to read value: {}", err)
                                                     }
@@ -1114,18 +1119,18 @@ mod test {
             let test_data1 = "value1";
             let test_data2 = "value2";
 
-            assert!(txn.get::<()>(&db, &test_key1).is_err(), "Key shouldn't exist yet");
+            assert!(db.get::<()>(&txn, &test_key1).is_err(), "Key shouldn't exist yet");
 
-            let _ = txn.set(&db, &test_key1, &test_data1);
-            let v: String = txn.get(&db, &test_key1).unwrap();
+            let _ = db.set(&txn, &test_key1, &test_data1);
+            let v: String = db.get(&txn, &test_key1).unwrap();
             assert!(v.as_slice() == test_data1, "Data written differs from data read");
 
-            let _ = txn.set(&db, &test_key1, &test_data2);
-            let v: String = txn.get(&db, &test_key1).unwrap();
+            let _ = db.set(&txn, &test_key1, &test_data2);
+            let v: String = db.get(&txn, &test_key1).unwrap();
             assert!(v.as_slice() == test_data2, "Data written differs from data read");
 
-            let _ = txn.del(&db, &test_key1);
-            assert!(txn.get::<()>(&db, &test_key1).is_err(), "Key should be deleted");
+            let _ = db.del(&txn, &test_key1);
+            assert!(db.get::<()>(&txn, &test_key1).is_err(), "Key should be deleted");
         });
     }
 
@@ -1144,23 +1149,23 @@ mod test {
             let test_data1 = "value1";
             let test_data2 = "value2";
 
-            assert!(txn.get::<()>(&db, &test_key1).is_err(), "Key shouldn't exist yet");
+            assert!(db.get::<()>(&txn, &test_key1).is_err(), "Key shouldn't exist yet");
 
-            let _ = txn.set(&db, &test_key1, &test_data1);
-            let v: String = txn.get(&db, &test_key1).unwrap();
+            let _ = db.set(&txn, &test_key1, &test_data1);
+            let v: String = db.get(&txn, &test_key1).unwrap();
             assert!(v.as_slice() == test_data1, "Data written differs from data read");
 
-            let _ = txn.set(&db, &test_key1, &test_data2);
-            let v: String = txn.get(&db, &test_key1).unwrap();
+            let _ = db.set(&txn, &test_key1, &test_data2);
+            let v: String = db.get(&txn, &test_key1).unwrap();
             assert!(v.as_slice() == test_data1, "It should still return first value");
 
-            let _ = txn.del_exact(&db, &test_key1, &test_data1);
+            let _ = db.del_exact(&txn, &test_key1, &test_data1);
 
-            let v: String = txn.get(&db, &test_key1).unwrap();
+            let v: String = db.get(&txn, &test_key1).unwrap();
             assert!(v.as_slice() == test_data2, "It should return second value");
-            let _ = txn.del(&db, &test_key1);
+            let _ = db.del(&txn, &test_key1);
 
-            assert!(txn.get::<()>(&db, &test_key1).is_err(), "Key shouldn't exist anymore!");
+            assert!(db.get::<()>(&txn, &test_key1).is_err(), "Key shouldn't exist anymore!");
         });
     }
 
@@ -1180,14 +1185,14 @@ mod test {
             let test_key2 = "key2";
             let test_values: Vec<String> = vec!("value1".to_string(), "value2".to_string(), "value3".to_string(), "value4".to_string());
 
-            assert!(txn.get::<()>(&db, &test_key1).is_err(), "Key shouldn't exist yet");
+            assert!(db.get::<()>(&txn, &test_key1).is_err(), "Key shouldn't exist yet");
 
             for t in test_values.iter() {
-                let _ = txn.set(&db, &test_key1, t);
-                let _ = txn.set(&db, &test_key2, t);
+                let _ = db.set(&txn, &test_key1, t);
+                let _ = db.set(&txn, &test_key2, t);
             }
 
-            let mut cursor = txn.new_cursor(&db).unwrap();
+            let mut cursor = db.new_cursor(&txn).unwrap();
             assert!(cursor.to_first().is_ok());
 
             assert!(cursor.to_key(&test_key1).is_ok());
