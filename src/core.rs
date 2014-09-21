@@ -15,15 +15,15 @@ use ffi::types::*;
 use traits::{ToMdbValue, FromMdbValue};
 
 macro_rules! lift_mdb(
-        ($e:expr) => (
+        ($e:expr) => (lift_mdb!($e, ()));
+    ($e:expr, $r:expr) => (
         {
             let t = $e;
             match t {
-                MDB_SUCCESS => Ok(()),
-                _ => Err(MdbError::new_with_code(t))
+                MDB_SUCCESS => Ok($r),
+                _ => return Err(MdbError::new_with_code(t))
             }
         }))
-
 
 macro_rules! try_mdb(
         ($e:expr) => (
@@ -31,15 +31,6 @@ macro_rules! try_mdb(
             let t = $e;
             match t {
                 MDB_SUCCESS => (),
-                _ => return Err(MdbError::new_with_code(t))
-            }
-        });
-
-        ($e:expr, $r:expr) => (
-        {
-            let t = $e;
-            match t {
-                MDB_SUCCESS => Ok($r),
                 _ => return Err(MdbError::new_with_code(t))
             }
         }))
@@ -252,13 +243,13 @@ impl Environment {
         assert_state_eq!(env, self.state, EnvOpened);
 
         let mut tmp: MDB_stat = unsafe { std::mem::zeroed() };
-        try_mdb!(unsafe { mdb_env_stat(self.env, &mut tmp)}, tmp)
+        lift_mdb!(unsafe { mdb_env_stat(self.env, &mut tmp)}, tmp)
     }
 
     pub fn info(&self) -> MdbResult<MDB_envinfo> {
         assert_state_eq!(env, self.state, EnvOpened);
         let mut tmp: MDB_envinfo = unsafe { std::mem::zeroed() };
-        try_mdb!(unsafe { mdb_env_info(self.env, &mut tmp)}, tmp)
+        lift_mdb!(unsafe { mdb_env_info(self.env, &mut tmp)}, tmp)
     }
 
     /// Sync environment to disk
@@ -277,7 +268,7 @@ impl Environment {
     pub fn get_flags(&self) -> MdbResult<c_uint> {
         assert_state_not!(env, self.state, EnvClosed);
         let mut flags: c_uint = 0;
-        try_mdb!(unsafe {mdb_env_get_flags(self.env, &mut flags)}, flags)
+        lift_mdb!(unsafe {mdb_env_get_flags(self.env, &mut flags)}, flags)
     }
 
     pub fn set_mapsize(&mut self, size: size_t) -> MdbResult<()> {
@@ -293,7 +284,7 @@ impl Environment {
     pub fn get_maxreaders(&self) -> MdbResult<c_uint> {
         assert_state_not!(env, self.state, EnvClosed);
         let mut max_readers: c_uint = 0;
-        try_mdb!(unsafe {
+        lift_mdb!(unsafe {
             mdb_env_get_maxreaders(self.env, &mut max_readers)
         }, max_readers)
     }
@@ -322,7 +313,7 @@ impl Environment {
     pub fn get_fd(&self) -> MdbResult<mdb_filehandle_t> {
         assert_state_eq!(env, self.state, EnvOpened);
         let mut fd = 0;
-        try_mdb!({ unsafe { mdb_env_get_fd(self.env, &mut fd) }}, fd)
+        lift_mdb!({ unsafe { mdb_env_get_fd(self.env, &mut fd) }}, fd)
     }
 
     /// Creates a backup copy in specified path
@@ -342,7 +333,7 @@ impl Environment {
             _ => ptr::null()
         };
 
-        try_mdb!(unsafe { mdb_txn_begin(self.env, parent_handle, flags, &mut handle) },
+        lift_mdb!(unsafe { mdb_txn_begin(self.env, parent_handle, flags, &mut handle) },
                  NativeTransaction::new_with_handle(handle, flags as uint))
     }
 
@@ -871,7 +862,7 @@ impl<'a, Db: DatabaseHandle> Cursor<'a, Db> {
     /// Returns count of items with the same key as current
     pub fn item_count(&self) -> MdbResult<size_t> {
         let mut tmp: size_t = 0;
-        try_mdb!(unsafe {mdb_cursor_count(self.handle, &mut tmp)}, tmp)
+        lift_mdb!(unsafe {mdb_cursor_count(self.handle, &mut tmp)}, tmp)
     }
 }
 
