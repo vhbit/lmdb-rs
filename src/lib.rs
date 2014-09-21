@@ -15,11 +15,11 @@ extern crate debug;
 
 pub use ffi::consts as consts;
 pub use ffi::types::{mdb_mode_t, mdb_filehandle_t, MDB_stat, MDB_envinfo};
-pub use base::{Environment, Database, Transaction, ReadonlyTransaction, MdbError};
-pub use base::{Cursor, CursorValue, CursorIter, CursorKeyRangeIter};
-pub use base::errors;
+pub use core::{Environment, Database, Transaction, ReadonlyTransaction, MdbError};
+pub use core::{Cursor, CursorValue, CursorIter, CursorKeyRangeIter};
+pub use core::errors;
 
 mod traits;
 mod utils;
 mod ffi;
-pub mod base;
+pub mod core;
