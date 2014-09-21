@@ -139,8 +139,7 @@ impl Database {
     }
 
     pub fn get<'a, T: FromMdbValue>(&self, txn: &'a ReadTransaction<'a>, key: &ToMdbValue) -> MdbResult<T> {
-        let reader = txn.get_read_transaction();
-        reader.get(self, key)
+        txn.get_read_transaction().get(self, key)
     }
 
     pub fn set<'a>(&self, txn: &'a WriteTransaction<'a>, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
@@ -1171,7 +1170,6 @@ mod test {
 
     #[test]
     fn test_cursors() {
-
         let path = Path::new("cursors");
         test_db_in_path(&path, || {
             let mut env = Environment::new().unwrap();
