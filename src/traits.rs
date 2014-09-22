@@ -1,93 +1,103 @@
+use libc::{c_void};
 use std;
 use std::string;
 use libc::size_t;
 use ffi::types::MDB_val;
 
-pub trait ToMdbValue {
-    fn to_mdb_value(&self) -> MDB_val;
+#[deriving(Clone)]
+pub struct MdbValue<'a> {
+    pub value: MDB_val
 }
 
-pub trait FromMdbValue {
-    fn from_mdb_value(value: &MDB_val) -> Self;
-}
-
-impl ToMdbValue for Vec<u8> {
-    fn to_mdb_value(&self) -> MDB_val {
-        unsafe {
-            MDB_val {
-                mv_data: std::mem::transmute(self.as_ptr()),
-                mv_size: self.len() as size_t
+impl<'a> MdbValue<'a> {
+    fn new(data: *const c_void, len: uint) -> MdbValue<'a> {
+        MdbValue {
+            value: MDB_val {
+                mv_data: data,
+                mv_size: len as size_t
             }
         }
     }
 }
 
-impl FromMdbValue for Vec<u8> {
-    fn from_mdb_value(value: &MDB_val) -> Vec<u8> {
+pub trait ToMdbValue<'a> {
+    fn to_mdb_value(&'a self) -> MdbValue<'a>;
+}
+
+pub trait FromMdbValue<'a> {
+    fn from_mdb_value(value: &'a MdbValue<'a>) -> Self;
+}
+
+impl<'a> ToMdbValue<'a> for Vec<u8> {
+    fn to_mdb_value(&'a self) -> MdbValue<'a> {
         unsafe {
-            std::vec::raw::from_buf(std::mem::transmute(value.mv_data), value.mv_size as uint)
+            MdbValue::new(std::mem::transmute(self.as_ptr()), self.len())
         }
     }
 }
 
-impl ToMdbValue for String {
-    fn to_mdb_value(&self) -> MDB_val {
+impl<'a> FromMdbValue<'a> for Vec<u8> {
+    fn from_mdb_value(value: &'a MdbValue<'a>) -> Vec<u8> {
+        unsafe {
+            std::vec::raw::from_buf(std::mem::transmute(value.value.mv_data), value.value.mv_size as uint)
+        }
+    }
+}
+
+impl<'a> ToMdbValue<'a> for String {
+    fn to_mdb_value(&'a self) -> MdbValue<'a> {
         unsafe {
             let t = self.as_slice();
-            MDB_val {
-                mv_data: std::mem::transmute(t.as_ptr()),
-                mv_size: t.len() as size_t
-            }
+            MdbValue::new(std::mem::transmute(t.as_ptr()), t.len())
         }
     }
 }
 
 /*
-impl<'a> ToMdbValue for &'a str {
-    fn to_mdb_value<'a>(&'a self) -> MDB_val {
+impl<'a> ToMdbValue<'a> for &'a str {
+    fn to_mdb_value<'a>(&'a self) -> MdbValue<'a> {
         unsafe {
-            MDB_val {
-                mv_data: std::mem::transmute(self.as_ptr()),
-                mv_size: self.len() as size_t
-            }
+            MdbValue::new(std::mem::transmute(self.as_ptr()),
+                self.len())
         }
     }
 }
 */
 
-impl ToMdbValue for MDB_val {
-    fn to_mdb_value(&self) -> MDB_val {
-        MDB_val {
-            mv_data: (*self).mv_data,
-            mv_size: (*self).mv_size
-        }
+impl<'a> ToMdbValue<'a> for MDB_val {
+    fn to_mdb_value(&'a self) -> MdbValue<'a> {
+        MdbValue::new((*self).mv_data, (*self).mv_size as uint)
     }
 }
 
-impl FromMdbValue for String {
-    fn from_mdb_value(value: &MDB_val) -> String {
+impl<'a> ToMdbValue<'a> for MdbValue<'a> {
+    fn to_mdb_value(&'a self) -> MdbValue<'a> {
+        *self
+    }
+}
+
+
+impl<'a> FromMdbValue<'a> for String {
+    fn from_mdb_value(value: &'a MdbValue<'a>) -> String {
         unsafe {
-            string::raw::from_buf_len(std::mem::transmute(value.mv_data), 
-                                      value.mv_size as uint).to_string()
+            string::raw::from_buf_len(std::mem::transmute(value.value.mv_data), 
+                                      value.value.mv_size as uint).to_string()
         }
     }
 }
 
-impl FromMdbValue for () {
-    fn from_mdb_value(_: &MDB_val) {
+impl<'a> FromMdbValue<'a> for () {
+    fn from_mdb_value(_: &'a MdbValue<'a>) {
     }
 }
 
-
-/*
-impl<'a> FromMdbValue for &'a str {
-    fn from_mdb_value(value: &MDB_val) -> &'a str {
+impl<'a> FromMdbValue<'a> for &'a str {
+    fn from_mdb_value(value: &'a MdbValue<'a>) -> &'a str {
         unsafe {
             std::mem::transmute(std::raw::Slice {
-                data: value.mv_data,
-                len: value.mv_size as uint,
+                data: value.value.mv_data,
+                len: value.value.mv_size as uint,
             })
         }
     }
 }
-*/

@@ -12,7 +12,8 @@ pub use self::errors::{MdbError, NotFound, InvalidPath, StateError};
 use ffi::consts::*;
 use ffi::funcs::*;
 use ffi::types::*;
-use traits::{ToMdbValue, FromMdbValue};
+use traits::{MdbValue, ToMdbValue, FromMdbValue};
+
 
 macro_rules! lift_mdb(
         ($e:expr) => (lift_mdb!($e, ()));
@@ -138,19 +139,19 @@ impl Database {
         Database { handle: handle, owns: owns }
     }
 
-    pub fn get<'a, T: FromMdbValue>(&self, txn: &'a ReadTransaction<'a>, key: &ToMdbValue) -> MdbResult<T> {
+    pub fn get<'a, T: FromMdbValue<'a>>(&self, txn: &'a ReadTransaction<'a>, key: &'a ToMdbValue<'a>) -> MdbResult<T> {
         txn.get_read_transaction().get(self, key)
     }
 
-    pub fn set<'a>(&self, txn: &'a WriteTransaction<'a>, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
+    pub fn set<'a>(&'a self, txn: &'a WriteTransaction<'a>, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
         txn.get_write_transaction().set(self, key, value)
     }
 
-    pub fn del<'a>(&self, txn: &'a WriteTransaction<'a>, key: &ToMdbValue) -> MdbResult<()> {
+    pub fn del<'a>(&self, txn: &'a WriteTransaction<'a>, key: &'a ToMdbValue<'a>) -> MdbResult<()> {
         txn.get_write_transaction().del(self, key)
     }
 
-    pub fn del_exact<'a>(&self, txn: &'a WriteTransaction<'a>, key: &ToMdbValue, data: &ToMdbValue) -> MdbResult<()> {
+    pub fn del_exact<'a>(&self, txn: &'a WriteTransaction<'a>, key: &'a ToMdbValue<'a>, data: &'a ToMdbValue<'a>) -> MdbResult<()> {
         txn.get_write_transaction().del_exact_value(self, key, data)
     }
 
@@ -176,10 +177,11 @@ impl Database {
     /// Currently it works only for unique keys (i.e. it will skip
     /// multiple items when DB created with MDB_DUPSORT).
     /// Iterator is valid while cursor is valid
-    pub fn keyrange<'a, T: ToMdbValue+Clone>(&'a self, txn: &'a ReadTransaction<'a>, start_key: &T, end_key: &T)
-                                             -> MdbResult<CursorKeyRangeIter<'a>> {
+    pub fn keyrange<'a, T: 'a>(&'a self, txn: &'a ReadTransaction<'a>, start_key: &'a T, end_key: &'a T)
+                                             -> MdbResult<CursorKeyRangeIter<'a>> 
+                                             where T: ToMdbValue<'a> + Clone {
         txn.get_read_transaction().new_cursor(self)
-            .and_then(|c| Ok(CursorKeyRangeIter::new(c, start_key.clone().to_mdb_value(), end_key.clone().to_mdb_value())))
+            .and_then(|c| Ok(CursorKeyRangeIter::new(c, start_key, end_key)))
     }
 }
 
@@ -546,30 +548,30 @@ impl<'a> NativeTransaction<'a> {
         self.state = TxnStateInvalid;
     }
 
-    fn get_value<T: FromMdbValue>(&self, db: &DatabaseHandle, key: &ToMdbValue) -> MdbResult<T> {
-        let key_val = key.to_mdb_value();
-        unsafe {
-            let mut data_val: MDB_val = std::mem::zeroed();
-            try_mdb!(mdb_get(self.handle, db.get_handle(), &key_val, &mut data_val));
-            Ok(FromMdbValue::from_mdb_value(&data_val))
+    fn get_value<T: FromMdbValue<'a>>(&'a self, db: &DatabaseHandle, key: &'a ToMdbValue<'a>) -> MdbResult<T> {
+        let key_val = key.to_mdb_value();        
+        unsafe {            
+            let mut data_val: MdbValue = std::mem::zeroed();
+            try_mdb!(mdb_get(self.handle, db.get_handle(), &key_val.value, &mut data_val.value));
+            Ok(FromMdbValue::from_mdb_value(mem::transmute(&data_val)))
         }
     }
 
-    pub fn get<T: FromMdbValue>(&self, db: &DatabaseHandle, key: &ToMdbValue) -> MdbResult<T> {
+    pub fn get<'a, T: FromMdbValue<'a>>(&'a self, db: &DatabaseHandle, key: &'a ToMdbValue<'a>) -> MdbResult<T> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         self.get_value(db, key)
     }
 
-    fn set_value(&self, db: &DatabaseHandle, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
+    fn set_value<'a>(&'a self, db: &DatabaseHandle, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
         self.set_value_with_flags(db, key, value, 0)
     }
 
-    fn set_value_with_flags(&self, db: &DatabaseHandle, key: &ToMdbValue, value: &ToMdbValue, flags: c_uint) -> MdbResult<()> {
+    fn set_value_with_flags<'a>(&'a self, db: &DatabaseHandle, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>, flags: c_uint) -> MdbResult<()> {
         unsafe {
             let key_val = key.to_mdb_value();
             let data_val = value.to_mdb_value();
 
-            lift_mdb!(mdb_put(self.handle, db.get_handle(), &key_val, &data_val, flags))
+            lift_mdb!(mdb_put(self.handle, db.get_handle(), &key_val.value, &data_val.value, flags))
         }
     }
 
@@ -578,32 +580,32 @@ impl<'a> NativeTransaction<'a> {
     // FIXME: add explicit append function
     // FIXME: think about creating explicit separation of
     // all traits for databases with dup keys
-    pub fn set(&self, db: &DatabaseHandle, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
+    pub fn set<'a>(&'a self, db: &DatabaseHandle, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         self.set_value(db, key, value)
     }
 
     /// Deletes all values by key
-    fn del_value(&self, db: &DatabaseHandle, key: &ToMdbValue) -> MdbResult<()> {
+    fn del_value<'a>(&'a self, db: &DatabaseHandle, key: &'a ToMdbValue<'a>) -> MdbResult<()> {
         unsafe {
             let key_val = key.to_mdb_value();
-            lift_mdb!(mdb_del(self.handle, db.get_handle(), &key_val, std::ptr::null()))
+            lift_mdb!(mdb_del(self.handle, db.get_handle(), &key_val.value, std::ptr::null()))
         }
     }
 
     /// If duplicate keys are allowed deletes value for key which is equal to data
-    pub fn del_exact_value(&self, db: &DatabaseHandle, key: &ToMdbValue, data: &ToMdbValue) -> MdbResult<()> {
+    pub fn del_exact_value<'a>(&'a self, db: &DatabaseHandle, key: &'a ToMdbValue<'a>, data: &'a ToMdbValue<'a>) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         unsafe {
             let key_val = key.to_mdb_value();
             let data_val = data.to_mdb_value();
 
-            lift_mdb!(mdb_del(self.handle, db.get_handle(), &key_val, &data_val))
+            lift_mdb!(mdb_del(self.handle, db.get_handle(), &key_val.value, &data_val.value))
         }
     }
 
     /// Deletes all values for key
-    pub fn del(&self, db: &DatabaseHandle, key: &ToMdbValue) -> MdbResult<()> {
+    pub fn del<'a>(&'a self, db: &DatabaseHandle, key: &'a ToMdbValue<'a>) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         self.del_value(db, key)
     }
@@ -754,13 +756,14 @@ impl<'a> Cursor<'a> {
         })
     }
 
-    fn move_to<T: ToMdbValue+Clone>(&mut self, key: Option<&T>, op: MDB_cursor_op) -> MdbResult<()> {
+    fn move_to<T: 'a>(&mut self, key: Option<&'a T>, op: MDB_cursor_op) -> MdbResult<()> 
+        where T: ToMdbValue<'a> + Clone {
         // Even if we don't ask for any data and want only to set a position
         // MDB still insists in writing back key and data to provided pointers
         // it's actually not that big deal, considering no actual data copy happens
         self.data_val = unsafe {std::mem::zeroed()};
         self.key_val = match key {
-            Some(k) => k.clone().to_mdb_value(),
+            Some(k) => k.to_mdb_value().value,
             _ => unsafe {std::mem::zeroed()}
         };
 
@@ -778,13 +781,13 @@ impl<'a> Cursor<'a> {
     }
 
     /// Moves cursor to first entry for key if it exists
-    pub fn to_key<T:ToMdbValue+Clone>(&mut self, key: &T) -> MdbResult<()> {
+    pub fn to_key<T:'a>(&mut self, key: &'a T) -> MdbResult<()> where T: ToMdbValue<'a>+Clone{
         self.move_to(Some(key), MDB_SET)
     }
 
     /// Moves cursor to first entry for key greater than
     /// or equal to ke
-    pub fn to_gte_key<T:ToMdbValue+Clone>(&mut self, key: &T) -> MdbResult<()> {
+    pub fn to_gte_key<T: 'a>(&mut self, key: &'a T) -> MdbResult<()> where T: ToMdbValue<'a>+Clone{
         self.move_to(Some(key), MDB_SET_RANGE)
     }
 
@@ -821,20 +824,24 @@ impl<'a> Cursor<'a> {
     }
 
     /// Retrieves current key/value as tuple
-    pub fn get<T: FromMdbValue, U: FromMdbValue>(&mut self) -> MdbResult<(T, U)> {
+    pub fn get<T: FromMdbValue<'a>, U: FromMdbValue<'a>>(&mut self) -> MdbResult<(T, U)> {
         unsafe {
-            let mut key_val: MDB_val = std::mem::zeroed();
-            let mut data_val: MDB_val = std::mem::zeroed();
-            try_mdb!(mdb_cursor_get(self.handle, &mut key_val, &mut data_val, MDB_GET_CURRENT));
-            Ok((FromMdbValue::from_mdb_value(&key_val), FromMdbValue::from_mdb_value(&data_val)))
+            let mut key_val: MdbValue = std::mem::zeroed();
+            let mut data_val: MdbValue = std::mem::zeroed();
+            try_mdb!(mdb_cursor_get(self.handle, &mut key_val.value, &mut data_val.value, MDB_GET_CURRENT));
+
+            Ok((FromMdbValue::from_mdb_value(mem::transmute(&key_val)), 
+                FromMdbValue::from_mdb_value(mem::transmute(&data_val))))
         }
     }
 
-    fn get_plain(&self) -> (MDB_val, MDB_val) {
-        (self.key_val, self.data_val)
+    fn get_plain(&self) -> (MdbValue<'a>, MdbValue<'a>) {
+        let k: MdbValue<'a> = MdbValue { value: self.key_val };
+        let v: MdbValue<'a> = MdbValue { value: self.data_val };
+        (k, v)
     }
 
-    fn set_value<'a>(&mut self, key:Option<&'a ToMdbValue>, value: &ToMdbValue, flags: c_uint) -> MdbResult<()> {
+    fn set_value<'a>(&mut self, key:Option<&'a ToMdbValue<'a>>, value: &'a ToMdbValue<'a>, flags: c_uint) -> MdbResult<()> {
         let data_val = value.to_mdb_value();
         let key_val = unsafe {
             match  key {
@@ -843,12 +850,12 @@ impl<'a> Cursor<'a> {
             }
         };
 
-        lift_mdb!(unsafe {mdb_cursor_put(self.handle, &key_val, &data_val, flags)})
+        lift_mdb!(unsafe {mdb_cursor_put(self.handle, &key_val.value, &data_val.value, flags)})
     }
 
     /// Overwrites value for current item
     /// Note: overwrites max cur_value.len() bytes
-    pub fn set(&mut self, value: &ToMdbValue) -> MdbResult<()> {
+    pub fn set<'a>(&mut self, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
         self.set_value(None, value, MDB_CURRENT)
     }
 
@@ -888,40 +895,40 @@ impl<'a> Drop for Cursor<'a> {
 }
 
 pub struct CursorValue<'cursor> {
-    key: MDB_val,
-    value: MDB_val,
+    key: MdbValue<'cursor>,
+    value: MdbValue<'cursor>,
 }
 
 /// CursorValue performs lazy data extraction from iterator
 /// avoiding any data conversions and memory copy. Lifetime
 /// is limited to iterator lifetime
 impl<'cursor> CursorValue<'cursor> {
-    pub fn get_key<T: FromMdbValue>(&self) -> T {
+    pub fn get_key<T: FromMdbValue<'cursor>>(&'cursor self) -> T {
         FromMdbValue::from_mdb_value(&self.key)
     }
 
-    pub fn get_value<T: FromMdbValue>(&self) -> T {
+    pub fn get_value<T: FromMdbValue<'cursor>>(&'cursor self) -> T {
         FromMdbValue::from_mdb_value(&self.value)
     }
 
-    pub fn get<T: FromMdbValue, U: FromMdbValue>(&self) -> (T, U) {
+    pub fn get<T: FromMdbValue<'cursor>, U: FromMdbValue<'cursor>>(&'cursor self) -> (T, U) {
         (FromMdbValue::from_mdb_value(&self.key),  FromMdbValue::from_mdb_value(&self.value))
     }
 }
 
 pub struct CursorKeyRangeIter<'a> {
     cursor: Cursor<'a>,
-    start_key: MDB_val,
-    end_key: MDB_val,
+    start_key: MdbValue<'a>,
+    end_key: MdbValue<'a>,
     initialized: bool
 }
 
 impl<'a> CursorKeyRangeIter<'a> {
-    pub fn new(cursor: Cursor<'a>, start_key: MDB_val, end_key: MDB_val) -> CursorKeyRangeIter<'a> {
+    pub fn new(cursor: Cursor<'a>, start_key: &'a ToMdbValue<'a>, end_key: &'a ToMdbValue<'a>) -> CursorKeyRangeIter<'a> {
         CursorKeyRangeIter {
             cursor: cursor,
-            start_key: start_key,
-            end_key: end_key,
+            start_key: start_key.to_mdb_value(),
+            end_key: end_key.to_mdb_value(),
             initialized: false
         }
     }
@@ -936,7 +943,12 @@ impl<'a> Iterator<CursorValue<'a>> for CursorKeyRangeIter<'a> {
     fn next(&mut self) -> Option<CursorValue<'a>> {
         let move_res = if !self.initialized {
             self.initialized = true;
-            self.cursor.to_gte_key(&self.start_key)
+            let tmp = MdbValue {
+                value: self.start_key.value
+            };
+            unsafe { 
+                self.cursor.to_gte_key(mem::transmute::<&MdbValue, &'a MdbValue<'a>>(&tmp))
+            }
         } else {
             self.cursor.to_next_key()
         };
@@ -944,8 +956,8 @@ impl<'a> Iterator<CursorValue<'a>> for CursorKeyRangeIter<'a> {
         if move_res.is_err() {
             None
         } else {
-            let (k, v): (MDB_val, MDB_val) = self.cursor.get_plain();
-            let cmp_res = unsafe {mdb_cmp(self.cursor.txn.handle, self.cursor.db.handle, &k, &self.end_key)};
+            let (k, v) = self.cursor.get_plain();
+            let cmp_res = unsafe {mdb_cmp(self.cursor.txn.handle, self.cursor.db.handle, &k.value, &self.end_key.value)};
 
             if cmp_res > 0 {
                 Some(CursorValue {
@@ -997,7 +1009,7 @@ impl<'a> Iterator<CursorValue<'a>> for CursorIter<'a> {
         if move_res.is_err() {
             None
         } else {
-            let (k, v): (MDB_val, MDB_val) = self.cursor.get_plain();
+            let (k, v) = self.cursor.get_plain();
             Some(CursorValue {
                 key: k,
                 value: v
