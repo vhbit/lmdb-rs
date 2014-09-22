@@ -42,17 +42,18 @@ impl ToMdbValue for String {
     }
 }
 
+/*
 impl<'a> ToMdbValue for &'a str {
-    fn to_mdb_value(&self) -> MDB_val {
+    fn to_mdb_value<'a>(&'a self) -> MDB_val {
         unsafe {
-            let t = self.as_slice();
             MDB_val {
-                mv_data: std::mem::transmute(t.as_ptr()),
-                mv_size: t.len() as size_t
+                mv_data: std::mem::transmute(self.as_ptr()),
+                mv_size: self.len() as size_t
             }
         }
     }
 }
+*/
 
 impl ToMdbValue for MDB_val {
     fn to_mdb_value(&self) -> MDB_val {
@@ -66,7 +67,8 @@ impl ToMdbValue for MDB_val {
 impl FromMdbValue for String {
     fn from_mdb_value(value: &MDB_val) -> String {
         unsafe {
-            string::raw::from_buf_len(std::mem::transmute(value.mv_data), value.mv_size as uint).to_string()
+            string::raw::from_buf_len(std::mem::transmute(value.mv_data), 
+                                      value.mv_size as uint).to_string()
         }
     }
 }
@@ -77,6 +79,7 @@ impl FromMdbValue for () {
 }
 
 
+/*
 impl<'a> FromMdbValue for &'a str {
     fn from_mdb_value(value: &MDB_val) -> &'a str {
         unsafe {
@@ -87,3 +90,4 @@ impl<'a> FromMdbValue for &'a str {
         }
     }
 }
+*/

@@ -1079,15 +1079,15 @@ mod test {
 
                             match env.get_default_db(0) {
                                 Ok(db) => {
-                                    let key = "hello";
-                                    let value = "world";
+                                    let key = "hello".to_string();
+                                    let value = "world".to_string();
 
                                     match env.new_transaction() {
                                         Ok(txn) => {
                                             match db.set(&txn, &key, &value) {
                                                 Ok(_) => {
                                                     match db.get::<String>(&txn, &key) {
-                                                        Ok(v) => assert!(v.as_slice() == value, "Written {:?} and read {:?}", value.as_slice(), v.as_slice()),
+                                                        Ok(v) => assert!(v.as_slice() == value.as_slice(), "Written {:?} and read {:?}", value.as_slice(), v.as_slice()),
                                                         Err(err) => fail!("Failed to read value: {}", err)
                                                     }
                                                 },
@@ -1119,19 +1119,19 @@ mod test {
             let db = env.get_default_db(0).unwrap();
             let txn = env.new_transaction().unwrap();
 
-            let test_key1 = "key1";
-            let test_data1 = "value1";
-            let test_data2 = "value2";
+            let test_key1 = "key1".to_string();
+            let test_data1 = "value1".to_string();
+            let test_data2 = "value2".to_string();
 
             assert!(db.get::<()>(&txn, &test_key1).is_err(), "Key shouldn't exist yet");
 
             let _ = db.set(&txn, &test_key1, &test_data1);
             let v: String = db.get(&txn, &test_key1).unwrap();
-            assert!(v.as_slice() == test_data1, "Data written differs from data read");
+            assert!(v.as_slice() == test_data1.as_slice(), "Data written differs from data read");
 
             let _ = db.set(&txn, &test_key1, &test_data2);
             let v: String = db.get(&txn, &test_key1).unwrap();
-            assert!(v.as_slice() == test_data2, "Data written differs from data read");
+            assert!(v.as_slice() == test_data2.as_slice(), "Data written differs from data read");
 
             let _ = db.del(&txn, &test_key1);
             assert!(db.get::<()>(&txn, &test_key1).is_err(), "Key should be deleted");
@@ -1149,24 +1149,24 @@ mod test {
             let db = env.get_default_db(consts::MDB_DUPSORT).unwrap();
             let txn = env.new_transaction().unwrap();
 
-            let test_key1 = "key1";
-            let test_data1 = "value1";
-            let test_data2 = "value2";
+            let test_key1 = "key1".to_string();
+            let test_data1 = "value1".to_string();
+            let test_data2 = "value2".to_string();
 
             assert!(db.get::<()>(&txn, &test_key1).is_err(), "Key shouldn't exist yet");
 
             let _ = db.set(&txn, &test_key1, &test_data1);
             let v: String = db.get(&txn, &test_key1).unwrap();
-            assert!(v.as_slice() == test_data1, "Data written differs from data read");
+            assert!(v.as_slice() == test_data1.as_slice(), "Data written differs from data read");
 
             let _ = db.set(&txn, &test_key1, &test_data2);
             let v: String = db.get(&txn, &test_key1).unwrap();
-            assert!(v.as_slice() == test_data1, "It should still return first value");
+            assert!(v.as_slice() == test_data1.as_slice(), "It should still return first value");
 
             let _ = db.del_exact(&txn, &test_key1, &test_data1);
 
             let v: String = db.get(&txn, &test_key1).unwrap();
-            assert!(v.as_slice() == test_data2, "It should return second value");
+            assert!(v.as_slice() == test_data2.as_slice(), "It should return second value");
             let _ = db.del(&txn, &test_key1);
 
             assert!(db.get::<()>(&txn, &test_key1).is_err(), "Key shouldn't exist anymore!");
@@ -1184,8 +1184,8 @@ mod test {
             let db = env.get_default_db(consts::MDB_DUPSORT).unwrap();
             let txn = env.new_transaction().unwrap();
 
-            let test_key1 = "key1";
-            let test_key2 = "key2";
+            let test_key1 = "key1".to_string();
+            let test_key2 = "key2".to_string();
             let test_values: Vec<String> = vec!("value1".to_string(), "value2".to_string(), "value3".to_string(), "value4".to_string());
 
             assert!(db.get::<()>(&txn, &test_key1).is_err(), "Key shouldn't exist yet");
@@ -1205,14 +1205,14 @@ mod test {
             assert!(cursor.item_count().unwrap() == 3);
 
             assert!(cursor.to_key(&test_key1).is_ok());
-            let new_value = "testme";
+            let new_value = "testme".to_string();
 
             assert!(cursor.set(&new_value).is_ok());
             let (_, v): ((), String) = cursor.get().unwrap();
 
             // NOTE: this asserting will work once new_value is
             // of the same length as it is inplace change
-            assert!(v.as_slice() == new_value);
+            assert!(v.as_slice() == new_value.as_slice());
 
             assert!(cursor.del_all().is_ok());
             assert!(cursor.to_key(&test_key1).is_err());
