@@ -720,6 +720,11 @@ impl<'a> ReadonlyTransaction<'a> {
     }
 }
 
+impl<'a> ReadTransaction<'a> for ReadonlyTransaction<'a> {
+    fn get_read_transaction(&'a self) -> &'a NativeTransaction {
+        &self.inner
+    }
+}
 
 #[unsafe_destructor]
 impl<'a> Drop for ReadonlyTransaction<'a> {
