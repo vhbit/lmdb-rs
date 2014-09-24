@@ -116,15 +116,11 @@ pub mod errors {
 
 pub type MdbResult<T> = Result<T, MdbError>;
 
-trait DatabaseHandle {
-    fn get_handle(&self) -> MDB_dbi;
-}
-
-trait WriteTransaction<'a> {
+pub trait WriteTransaction<'a> {
     fn get_write_transaction(&'a self) -> &'a NativeTransaction;
 }
 
-trait ReadTransaction<'a> {
+pub trait ReadTransaction<'a> {
     fn get_read_transaction(&'a self) -> &'a NativeTransaction;
 }
 
@@ -178,7 +174,7 @@ impl Database {
     /// multiple items when DB created with MDB_DUPSORT).
     /// Iterator is valid while cursor is valid
     pub fn keyrange<'a, T: 'a>(&'a self, txn: &'a ReadTransaction<'a>, start_key: &'a T, end_key: &'a T)
-                                             -> MdbResult<CursorKeyRangeIter<'a>> 
+                                             -> MdbResult<CursorKeyRangeIter<'a>>
                                              where T: ToMdbValue<'a> + Clone {
         txn.get_read_transaction().new_cursor(self)
             .and_then(|c| Ok(CursorKeyRangeIter::new(c, start_key, end_key)))
@@ -193,30 +189,6 @@ impl Drop for Database {
         }
     }
 
-}
-
-impl DatabaseHandle for Database {
-    fn get_handle(&self) -> MDB_dbi {
-        self.handle
-    }
-}
-
-pub struct CachedDatabase {
-    handle: MDB_dbi,
-}
-
-impl CachedDatabase {
-    fn new_with_handle(handle: MDB_dbi) -> CachedDatabase {
-        CachedDatabase {
-            handle: handle
-        }
-    }
-}
-
-impl DatabaseHandle for CachedDatabase {
-    fn get_handle(&self) -> MDB_dbi {
-        self.handle
-    }
 }
 
 #[deriving(PartialEq, Eq, Show, Clone)]
@@ -475,7 +447,7 @@ enum TransactionState {
     TxnStateInvalid,  // Invalid, no further operation possible
 }
 
-struct NativeTransaction<'a> {
+pub struct NativeTransaction<'a> {
     handle: *const MDB_txn,
     flags: uint,
     state: TransactionState,
@@ -548,30 +520,30 @@ impl<'a> NativeTransaction<'a> {
         self.state = TxnStateInvalid;
     }
 
-    fn get_value<T: FromMdbValue<'a>>(&'a self, db: &DatabaseHandle, key: &'a ToMdbValue<'a>) -> MdbResult<T> {
-        let key_val = key.to_mdb_value();        
-        unsafe {            
+    fn get_value<T: FromMdbValue<'a>>(&'a self, db: &Database, key: &'a ToMdbValue<'a>) -> MdbResult<T> {
+        let key_val = key.to_mdb_value();
+        unsafe {
             let mut data_val: MdbValue = std::mem::zeroed();
-            try_mdb!(mdb_get(self.handle, db.get_handle(), &key_val.value, &mut data_val.value));
+            try_mdb!(mdb_get(self.handle, db.handle, &key_val.value, &mut data_val.value));
             Ok(FromMdbValue::from_mdb_value(mem::transmute(&data_val)))
         }
     }
 
-    pub fn get<'a, T: FromMdbValue<'a>>(&'a self, db: &DatabaseHandle, key: &'a ToMdbValue<'a>) -> MdbResult<T> {
+    pub fn get<'a, T: FromMdbValue<'a>>(&'a self, db: &Database, key: &'a ToMdbValue<'a>) -> MdbResult<T> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         self.get_value(db, key)
     }
 
-    fn set_value<'a>(&'a self, db: &DatabaseHandle, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    fn set_value<'a>(&'a self, db: &Database, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
         self.set_value_with_flags(db, key, value, 0)
     }
 
-    fn set_value_with_flags<'a>(&'a self, db: &DatabaseHandle, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>, flags: c_uint) -> MdbResult<()> {
+    fn set_value_with_flags<'a>(&'a self, db: &Database, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>, flags: c_uint) -> MdbResult<()> {
         unsafe {
             let key_val = key.to_mdb_value();
             let data_val = value.to_mdb_value();
 
-            lift_mdb!(mdb_put(self.handle, db.get_handle(), &key_val.value, &data_val.value, flags))
+            lift_mdb!(mdb_put(self.handle, db.handle, &key_val.value, &data_val.value, flags))
         }
     }
 
@@ -580,32 +552,32 @@ impl<'a> NativeTransaction<'a> {
     // FIXME: add explicit append function
     // FIXME: think about creating explicit separation of
     // all traits for databases with dup keys
-    pub fn set<'a>(&'a self, db: &DatabaseHandle, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    pub fn set<'a>(&'a self, db: &Database, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         self.set_value(db, key, value)
     }
 
     /// Deletes all values by key
-    fn del_value<'a>(&'a self, db: &DatabaseHandle, key: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    fn del_value<'a>(&'a self, db: &Database, key: &'a ToMdbValue<'a>) -> MdbResult<()> {
         unsafe {
             let key_val = key.to_mdb_value();
-            lift_mdb!(mdb_del(self.handle, db.get_handle(), &key_val.value, std::ptr::null()))
+            lift_mdb!(mdb_del(self.handle, db.handle, &key_val.value, std::ptr::null()))
         }
     }
 
     /// If duplicate keys are allowed deletes value for key which is equal to data
-    pub fn del_exact_value<'a>(&'a self, db: &DatabaseHandle, key: &'a ToMdbValue<'a>, data: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    pub fn del_exact_value<'a>(&'a self, db: &Database, key: &'a ToMdbValue<'a>, data: &'a ToMdbValue<'a>) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         unsafe {
             let key_val = key.to_mdb_value();
             let data_val = data.to_mdb_value();
 
-            lift_mdb!(mdb_del(self.handle, db.get_handle(), &key_val.value, &data_val.value))
+            lift_mdb!(mdb_del(self.handle, db.handle, &key_val.value, &data_val.value))
         }
     }
 
     /// Deletes all values for key
-    pub fn del<'a>(&'a self, db: &DatabaseHandle, key: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    pub fn del<'a>(&'a self, db: &Database, key: &'a ToMdbValue<'a>) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         self.del_value(db, key)
     }
@@ -616,18 +588,18 @@ impl<'a> NativeTransaction<'a> {
     }
 
     /// Deletes provided database completely
-    pub fn del_db(&self, db: &DatabaseHandle) -> MdbResult<()> {
+    pub fn del_db(&self, db: &Database) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         unsafe {
-            lift_mdb!(mdb_drop(self.handle, db.get_handle(), 1))
+            lift_mdb!(mdb_drop(self.handle, db.handle, 1))
         }
     }
 
     /// Empties provided database
-    pub fn empty_db(&self, db: &DatabaseHandle) -> MdbResult<()> {
+    pub fn empty_db(&self, db: &Database) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         unsafe {
-            lift_mdb!(mdb_drop(self.handle, db.get_handle(), 0))
+            lift_mdb!(mdb_drop(self.handle, db.handle, 0))
         }
     }
 }
@@ -756,7 +728,7 @@ impl<'a> Cursor<'a> {
         })
     }
 
-    fn move_to<T: 'a>(&mut self, key: Option<&'a T>, op: MDB_cursor_op) -> MdbResult<()> 
+    fn move_to<T: 'a>(&mut self, key: Option<&'a T>, op: MDB_cursor_op) -> MdbResult<()>
         where T: ToMdbValue<'a> + Clone {
         // Even if we don't ask for any data and want only to set a position
         // MDB still insists in writing back key and data to provided pointers
@@ -830,7 +802,7 @@ impl<'a> Cursor<'a> {
             let mut data_val: MdbValue = std::mem::zeroed();
             try_mdb!(mdb_cursor_get(self.handle, &mut key_val.value, &mut data_val.value, MDB_GET_CURRENT));
 
-            Ok((FromMdbValue::from_mdb_value(mem::transmute(&key_val)), 
+            Ok((FromMdbValue::from_mdb_value(mem::transmute(&key_val)),
                 FromMdbValue::from_mdb_value(mem::transmute(&data_val))))
         }
     }
@@ -946,7 +918,7 @@ impl<'a> Iterator<CursorValue<'a>> for CursorKeyRangeIter<'a> {
             let tmp = MdbValue {
                 value: self.start_key.value
             };
-            unsafe { 
+            unsafe {
                 self.cursor.to_gte_key(mem::transmute::<&MdbValue, &'a MdbValue<'a>>(&tmp))
             }
         } else {
