@@ -124,6 +124,54 @@ pub trait ReadTransaction<'a> {
     fn get_read_transaction(&'a self) -> &'a NativeTransaction;
 }
 
+bitflags! {
+    #[doc = "A set of environment open flags"]
+    flags EnvFlags: c_uint {
+        #[doc="Use a fixed address for the mmap region. This flag must be specified when creating the environment, and is stored persistently in the environment. If successful, the memory map will always reside at the same virtual address and pointers used to reference data items in the database will be constant across multiple invocations. This option may not always work, depending on how the operating system has allocated memory to shared libraries and other uses. The feature is highly experimental."]
+        static EnvFixedMap    = MDB_FIXEDMAP,
+        #[doc="By default, LMDB creates its environment in a directory whose pathname is given in path, and creates its data and lock files under that directory. With this option, path is used as-is for the database main data file. The database lock file is the path with \"-lock\" appended."]
+        static EnvNoSubDir    = MDB_NOSUBDIR,
+        #[doc="Don't flush system buffers to disk when committing a transaction. This optimization means a system crash can corrupt the database or lose the last transactions if buffers are not yet flushed to disk. The risk is governed by how often the system flushes dirty buffers to disk and how often mdb_env_sync() is called. However, if the filesystem preserves write order and the MDB_WRITEMAP flag is not used, transactions exhibit ACI (atomicity, consistency, isolation) properties and only lose D (durability). I.e. database integrity is maintained, but a system crash may undo the final transactions. Note that (MDB_NOSYNC | MDB_WRITEMAP) leaves the system with no hint for when to write transactions to disk, unless mdb_env_sync() is called. (MDB_MAPASYNC | MDB_WRITEMAP) may be preferable. This flag may be changed at any time using mdb_env_set_flags()."]
+        static EnvNoSync      = MDB_NOSYNC,
+        #[doc="Open the environment in read-only mode. No write operations will be allowed. LMDB will still modify the lock file - except on read-only filesystems, where LMDB does not use locks."]
+        static EnvReadOnly    = MDB_RDONLY,
+        #[doc="Flush system buffers to disk only once per transaction, omit the metadata flush. Defer that until the system flushes files to disk, or next non-MDB_RDONLY commit or mdb_env_sync(). This optimization maintains database integrity, but a system crash may undo the last committed transaction. I.e. it preserves the ACI (atomicity, consistency, isolation) but not D (durability) database property. This flag may be changed at any time using mdb_env_set_flags()."]
+        static EnvNoMetaSync  = MDB_NOMETASYNC,
+        #[doc="Use a writeable memory map unless MDB_RDONLY is set. This is faster and uses fewer mallocs, but loses protection from application bugs like wild pointer writes and other bad updates into the database. Incompatible with nested transactions. Processes with and without MDB_WRITEMAP on the same environment do not cooperate well."]
+        static EnvWriteMap    = MDB_WRITEMAP,
+        #[doc="When using MDB_WRITEMAP, use asynchronous flushes to disk. As with MDB_NOSYNC, a system crash can then corrupt the database or lose the last transactions. Calling mdb_env_sync() ensures on-disk database integrity until next commit. This flag may be changed at any time using mdb_env_set_flags()."]
+        static EnvMapAsync    = MDB_MAPASYNC,
+        #[doc="Don't use Thread-Local Storage. Tie reader locktable slots to MDB_txn objects instead of to threads. I.e. mdb_txn_reset() keeps the slot reseved for the MDB_txn object. A thread may use parallel read-only transactions. A read-only transaction may span threads if the user synchronizes its use. Applications that multiplex many user threads over individual OS threads need this option. Such an application must also serialize the write transactions in an OS thread, since LMDB's write locking is unaware of the user threads."]
+        static EnvNoTls       = MDB_NOTLS,
+        #[doc="Don't do any locking. If concurrent access is anticipated, the caller must manage all concurrency itself. For proper operation the caller must enforce single-writer semantics, and must ensure that no readers are using old transactions while a writer is active. The simplest approach is to use an exclusive lock so that no readers may be active at all when a writer begins. "]
+        static EnvNoLock      = MDB_NOLOCK,
+        #[doc="Turn off readahead. Most operating systems perform readahead on read requests by default. This option turns it off if the OS supports it. Turning it off may help random read performance when the DB is larger than RAM and system RAM is full. The option is not implemented on Windows."]
+        static EnvNoReadAhead = MDB_NORDAHEAD,
+        #[doc="Don't initialize malloc'd memory before writing to unused spaces in the data file. By default, memory for pages written to the data file is obtained using malloc. While these pages may be reused in subsequent transactions, freshly malloc'd pages will be initialized to zeroes before use. This avoids persisting leftover data from other code (that used the heap and subsequently freed the memory) into the data file. Note that many other system libraries may allocate and free memory from the heap for arbitrary uses. E.g., stdio may use the heap for file I/O buffers. This initialization step has a modest performance cost so some applications may want to disable it using this flag. This option can be a problem for applications which handle sensitive data like passwords, and it makes memory checkers like Valgrind noisy. This flag is not needed with MDB_WRITEMAP, which writes directly to the mmap instead of using malloc for pages. The initialization is also skipped if MDB_RESERVE is used; the caller is expected to overwrite all of the memory that was reserved in that case. This flag may be changed at any time using mdb_env_set_flags()."]
+        static EnvNoMemInit   = MDB_NOMEMINIT
+    }
+}
+
+bitflags! {
+    #[doc = "A set of database flags"]
+    flags DbFlags: c_uint {
+        #[doc="Keys are strings to be compared in reverse order, from the end of the strings to the beginning. By default, Keys are treated as strings and compared from beginning to end."]
+        static DbReverseKey   = MDB_REVERSEKEY,
+        #[doc="Duplicate keys may be used in the database. (Or, from another perspective, keys may have multiple data items, stored in sorted order.) By default keys must be unique and may have only a single data item."]
+        static DbAllowDups    = MDB_DUPSORT,
+        #[doc="Keys are binary integers in native byte order. Setting this option requires all keys to be the same size, typically sizeof(int) or sizeof(size_t)."]
+        static DbIntKey       = MDB_INTEGERKEY,
+        #[doc="This flag may only be used in combination with MDB_DUPSORT. This option tells the library that the data items for this database are all the same size, which allows further optimizations in storage and retrieval. When all data items are the same size, the MDB_GET_MULTIPLE and MDB_NEXT_MULTIPLE cursor operations may be used to retrieve multiple items at once."]
+        static DbDupFixed     = MDB_DUPFIXED,
+        #[doc="This option specifies that duplicate data items are also integers, and should be sorted as such."]
+        static DbAllowIntDups = MDB_INTEGERDUP,
+        #[doc="This option specifies that duplicate data items should be compared as strings in reverse order."]
+        static DbReversedDups = MDB_REVERSEDUP,
+        #[doc="Create the named database if it doesn't exist. This option is not allowed in a read-only transaction or a read-only environment."]
+        static DbCreate       = MDB_CREATE,
+    }
+}
+
 /// Database
 pub struct Database {
     handle: MDB_dbi,
@@ -202,7 +250,7 @@ enum EnvState {
 pub struct Environment {
     env: *const MDB_env,
     state: EnvState,
-    flags: c_uint,
+    flags: EnvFlags,
 //    reader_pool: Mutex<Vec<Option<ReadonlyTransaction>>>,
     db_cache: Mutex<UnsafeCell<HashMap<String, Database>>>,
 }
@@ -222,14 +270,14 @@ impl Environment {
         Ok(Environment {
             env: env,
             state: EnvCreated,
-            flags: 0,
+            flags: EnvFlags::empty(),
 //            reader_pool: Mutex::new(Vec::new()),
             db_cache: Mutex::new(UnsafeCell::new(HashMap::new())),
         })
     }
 
-    fn check_path(path: &Path, flags: c_uint, mode: mdb_mode_t) -> MdbResult<()> {
-        let as_file = (flags & MDB_NOSUBDIR) == MDB_NOSUBDIR;
+    fn check_path(path: &Path, flags: EnvFlags, mode: mdb_mode_t) -> MdbResult<()> {
+        let as_file = flags.contains(EnvNoSubDir);
 
         if as_file {
             // FIXME: check file existence/absence
@@ -254,13 +302,13 @@ impl Environment {
     /// [original documentation](http://symas.com/mdb/doc/group__mdb.html#ga32a193c6bf4d7d5c5d579e71f22e9340)
     ///
     /// mode is expected to be permissions on UNIX like systems and is ignored on Windows
-    pub fn open(&mut self, path: &Path, flags: c_uint, mode: mdb_mode_t) -> MdbResult<()> {
+    pub fn open(&mut self, path: &Path, flags: EnvFlags, mode: mdb_mode_t) -> MdbResult<()> {
         let _ = try!(Environment::check_path(path, flags, mode));
         assert_state_eq!(env, self.state, EnvCreated);
 
         let res = path.with_c_str(|c_path| {
             unsafe {
-                mdb_env_open(mem::transmute(self.env), c_path, flags, mode)}
+                mdb_env_open(mem::transmute(self.env), c_path, flags.bits, mode)}
         });
 
         match res {
@@ -388,7 +436,7 @@ impl Environment {
             .and_then(|txn| Ok(ReadonlyTransaction::new_with_native(txn)))
     }
 
-    fn get_db_by_name<'a>(&'a self, db_name: &'a str, flags: c_uint) -> MdbResult<Database> {
+    fn get_db_by_name<'a>(&'a self, db_name: &'a str, flags: DbFlags) -> MdbResult<Database> {
         assert_state_eq!(env, self.state, EnvOpened);
 
         let guard = self.db_cache.lock();
@@ -405,7 +453,7 @@ impl Environment {
         let mut dbi: MDB_dbi = 0;
         let mut txn = try!(self.create_transaction(None, 0));
         try_mdb!(db_name.with_c_str(|c_name| unsafe {
-            mdb_dbi_open(txn.handle, c_name, flags, &mut dbi)
+            mdb_dbi_open(txn.handle, c_name, flags.bits(), &mut dbi)
         }));
         try!(txn.commit());
 
@@ -421,13 +469,13 @@ impl Environment {
     /// Returns or creates a named database
     ///
     /// Note: set_maxdbis should be called before
-    pub fn get_or_create_db<'a>(&'a self, name: &'a str, flags: c_uint) -> MdbResult<Database> {
+    pub fn get_or_create_db<'a>(&'a self, name: &'a str, flags: DbFlags) -> MdbResult<Database> {
         // FIXME: MDB_CREATE should be included only in read-write Environment
-        self.get_db_by_name(name, flags | MDB_CREATE)
+        self.get_db_by_name(name, flags | DbCreate)
     }
 
     /// Returns default database
-    pub fn get_default_db<'a>(&'a self, flags: c_uint) -> MdbResult<Database> {
+    pub fn get_default_db<'a>(&'a self, flags: DbFlags) -> MdbResult<Database> {
         self.get_db_by_name("", flags)
     }
 }
@@ -1005,7 +1053,7 @@ mod test {
     use std::path::Path;
 
     use ffi::consts;
-    use super::{Environment};
+    use super::{Environment, EnvFlags, DbFlags};
 
     fn test_db_in_path(path: &Path, f: ||) {
         // Delete dir to be sure nothing existed before test
@@ -1042,7 +1090,7 @@ mod test {
                         Err(err) => fail!("Failed to set max number of readers: {}", err)
                     };
 
-                    match env.open(&path, 0, 0o755) {
+                    match env.open(&path, EnvFlags::empty(), 0o755) {
                         Ok(..) => {
                             match env.sync(true) {
                                 Ok(..) => (),
@@ -1061,7 +1109,7 @@ mod test {
                                 Err(err) => fail!("Failed to set flags: {}", err)
                             };
 
-                            match env.get_default_db(0) {
+                            match env.get_default_db(DbFlags::empty()) {
                                 Ok(db) => {
                                     let key = "hello".to_string();
                                     let value = "world".to_string();
@@ -1097,10 +1145,10 @@ mod test {
         let path = Path::new("single-values");
         test_db_in_path(&path, || {
             let mut env = Environment::new().unwrap();
-            let _ = env.open(&path, 0, 0o755);
+            let _ = env.open(&path, EnvFlags::empty(), 0o755);
             let _ = env.set_maxdbs(5);
 
-            let db = env.get_default_db(0).unwrap();
+            let db = env.get_default_db(DbFlags::empty()).unwrap();
             let txn = env.new_transaction().unwrap();
 
             let test_key1 = "key1".to_string();
@@ -1127,10 +1175,10 @@ mod test {
         let path = Path::new("multiple-values");
         test_db_in_path(&path, || {
             let mut env = Environment::new().unwrap();
-            let _ = env.open(&path, 0, 0o755);
+            let _ = env.open(&path, EnvFlags::empty(), 0o755);
             let _ = env.set_maxdbs(5);
 
-            let db = env.get_default_db(consts::MDB_DUPSORT).unwrap();
+            let db = env.get_default_db(super::DbAllowDups).unwrap();
             let txn = env.new_transaction().unwrap();
 
             let test_key1 = "key1".to_string();
@@ -1163,9 +1211,9 @@ mod test {
         test_db_in_path(&path, || {
             let mut env = Environment::new().unwrap();
             let _ = env.set_maxdbs(5);
-            let _ = env.open(&path, 0, 0o755);
+            let _ = env.open(&path, EnvFlags::empty(), 0o755);
 
-            let db = env.get_default_db(consts::MDB_DUPSORT).unwrap();
+            let db = env.get_default_db(super::DbAllowDups).unwrap();
             let txn = env.new_transaction().unwrap();
 
             let test_key1 = "key1".to_string();
@@ -1211,8 +1259,8 @@ mod test {
         test_db_in_path(&path, || {
             let mut env = Environment::new().unwrap();
             assert!(env.set_maxdbs(5).is_ok());
-            assert!(env.open(&path, 0, 0o755).is_ok());
-            assert!(env.get_or_create_db("test-db", 0).is_ok());
+            assert!(env.open(&path, EnvFlags::empty(), 0o755).is_ok());
+            assert!(env.get_or_create_db("test-db", DbFlags::empty()).is_ok());
         });
     }
 
