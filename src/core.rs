@@ -436,6 +436,23 @@ impl Environment {
             .and_then(|txn| Ok(ReadonlyTransaction::new_with_native(txn)))
     }
 
+    fn create_db<'a>(&'a self, db_name: Option<&'a str>, flags: DbFlags) -> MdbResult<MDB_dbi> {
+        let mut dbi: MDB_dbi = 0;
+        let mut txn = try!(self.create_transaction(None, 0));
+        let db_res = match db_name {
+            None => unsafe { mdb_dbi_open(txn.handle, ptr::null(), flags.bits(), &mut dbi) },
+            Some(db_name) => {
+                db_name.with_c_str(|c_name| unsafe {
+                    mdb_dbi_open(txn.handle, c_name, flags.bits(), &mut dbi)
+                })
+            }
+        };
+
+        try_mdb!(db_res);
+        try!(txn.commit());
+        Ok(dbi)
+    }
+
     fn get_db_by_name<'a>(&'a self, db_name: &'a str, flags: DbFlags) -> MdbResult<Database> {
         assert_state_eq!(env, self.state, EnvOpened);
 
@@ -450,13 +467,7 @@ impl Environment {
             }
         }
 
-        let mut dbi: MDB_dbi = 0;
-        let mut txn = try!(self.create_transaction(None, 0));
-        try_mdb!(db_name.with_c_str(|c_name| unsafe {
-            mdb_dbi_open(txn.handle, c_name, flags.bits(), &mut dbi)
-        }));
-        try!(txn.commit());
-
+        let dbi = try!(self.create_db(Some(db_name), flags));
         let db = Database::new_with_handle(dbi, true);
         unsafe { (*cache).insert(db_name.to_string(), db) };
 
@@ -476,7 +487,9 @@ impl Environment {
 
     /// Returns default database
     pub fn get_default_db<'a>(&'a self, flags: DbFlags) -> MdbResult<Database> {
-        self.get_db_by_name("", flags)
+        // FIXME: cache default DB
+        let dbi = try!(self.create_db(None, flags));
+        Ok(Database::new_with_handle(dbi, false))
     }
 }
 
