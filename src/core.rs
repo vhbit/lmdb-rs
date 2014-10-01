@@ -15,8 +15,8 @@ use ffi::types::*;
 use traits::{MdbValue, ToMdbValue, FromMdbValue};
 
 
-macro_rules! lift_mdb(
-        ($e:expr) => (lift_mdb!($e, ()));
+macro_rules! lift_mdb {
+    ($e:expr) => (lift_mdb!($e, ()));
     ($e:expr, $r:expr) => (
         {
             let t = $e;
@@ -24,9 +24,10 @@ macro_rules! lift_mdb(
                 MDB_SUCCESS => Ok($r),
                 _ => return Err(MdbError::new_with_code(t))
             }
-        }))
+        })
+}
 
-macro_rules! try_mdb(
+macro_rules! try_mdb {
         ($e:expr) => (
         {
             let t = $e;
@@ -34,9 +35,10 @@ macro_rules! try_mdb(
                 MDB_SUCCESS => (),
                 _ => return Err(MdbError::new_with_code(t))
             }
-        }))
+        })
+}
 
-macro_rules! assert_state_eq(
+macro_rules! assert_state_eq {
     ($log:ident, $cur:expr, $exp:expr) =>
         ({
             let c = $cur;
@@ -46,9 +48,10 @@ macro_rules! assert_state_eq(
             } else {
                 let msg = format!("{} requires {}, is in {}", stringify!($log), c, e);
                 return Err(StateError(msg))
-            }}) )
+            }})
+}
 
-macro_rules! assert_state_not(
+macro_rules! assert_state_not {
     ($log:ident, $cur:expr, $exp:expr) =>
         ({
             let c = $cur;
@@ -58,7 +61,8 @@ macro_rules! assert_state_not(
             } else {
                 let msg = format!("{} shouldn't be in {}", stringify!($log), e);
                 return Err(StateError(msg))
-            }}) )
+            }})
+}
 
 /// MdbError wraps information about LMDB error
 pub mod errors {
