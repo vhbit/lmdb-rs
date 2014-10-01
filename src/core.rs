@@ -188,22 +188,27 @@ impl Database {
         Database { handle: handle, owns: owns }
     }
 
+    /// Retrieves a value by key. In case of DbAllowDups it will be the first value
     pub fn get<'a, T: FromMdbValue<'a>>(&self, txn: &'a ReadTransaction<'a>, key: &'a ToMdbValue<'a>) -> MdbResult<T> {
         txn.get_read_transaction().get(self, key)
     }
 
+    /// Sets value for key. In case of DbAllowDups it will add a new item
     pub fn set<'a>(&'a self, txn: &'a WriteTransaction<'a>, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
         txn.get_write_transaction().set(self, key, value)
     }
 
+    /// Deletes value for key.
     pub fn del<'a>(&self, txn: &'a WriteTransaction<'a>, key: &'a ToMdbValue<'a>) -> MdbResult<()> {
         txn.get_write_transaction().del(self, key)
     }
 
+    /// Should be used only with DbAllowDups. Deletes corresponding (key, value)
     pub fn del_exact<'a>(&self, txn: &'a WriteTransaction<'a>, key: &'a ToMdbValue<'a>, data: &'a ToMdbValue<'a>) -> MdbResult<()> {
         txn.get_write_transaction().del_exact_value(self, key, data)
     }
 
+    /// Returns a new cursor
     pub fn new_cursor<'a>(&'a self, txn: &'a ReadTransaction<'a>) -> MdbResult<Cursor<'a>> {
         txn.get_read_transaction().new_cursor(self)
     }
@@ -219,6 +224,7 @@ impl Database {
         }
     }
 
+    /// Removes all key/values from db
     pub fn clear<'a>(&self, txn: &'a WriteTransaction<'a>) -> MdbResult<()> {
         txn.get_write_transaction().empty_db(self)
     }
