@@ -208,8 +208,15 @@ impl Database {
         txn.get_read_transaction().new_cursor(self)
     }
 
-    pub fn del_db<'a>(&self, txn: &'a WriteTransaction<'a>) -> MdbResult<()> {
-        txn.get_write_transaction().del_db(self)
+    /// Deletes current db, also moves it out
+    pub fn del_db<'a>(self, txn: &'a WriteTransaction<'a>) -> MdbResult<()> {
+        let res = txn.get_write_transaction().del_db(&self);
+        if res.is_ok() {
+            let _ = self;
+            Ok(())
+        } else {
+            res
+        }
     }
 
     pub fn clear<'a>(&self, txn: &'a WriteTransaction<'a>) -> MdbResult<()> {
