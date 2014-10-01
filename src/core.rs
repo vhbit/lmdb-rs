@@ -120,12 +120,13 @@ pub mod errors {
 
 pub type MdbResult<T> = Result<T, MdbError>;
 
-pub trait WriteTransaction<'a> {
-    fn get_write_transaction(&'a self) -> &'a NativeTransaction;
-}
 
 pub trait ReadTransaction<'a> {
     fn get_read_transaction(&'a self) -> &'a NativeTransaction;
+}
+
+pub trait WriteTransaction<'a>: ReadTransaction<'a> {
+    fn get_write_transaction(&'a self) -> &'a NativeTransaction;
 }
 
 bitflags! {
@@ -230,6 +231,11 @@ impl Database {
                                              where T: ToMdbValue<'a> + Clone {
         txn.get_read_transaction().new_cursor(self)
             .and_then(|c| Ok(CursorKeyRangeIter::new(c, start_key, end_key)))
+    }
+
+    /// Returns an iterator for all items (i.e. values with same key)
+    pub fn item_iter<'a>(&'a self, txn: &'a ReadTransaction<'a>, key: &'a ToMdbValue<'a>) -> MdbResult<CursorItemIter<'a>> {
+        txn.get_read_transaction().new_item_iter(self, key)
     }
 }
 
@@ -652,6 +658,13 @@ impl<'a> NativeTransaction<'a> {
         Cursor::<'a>::new(self, db)
     }
 
+    /// Creates a new item cursor, i.e. cursor which navigates all
+    /// values with the same key (if AllowsDup was specified)
+    pub fn new_item_iter(&'a self, db: &'a Database, key: &'a ToMdbValue<'a>) -> MdbResult<CursorItemIter<'a>> {
+        let cursor = try!(self.new_cursor(db));
+        Ok(CursorItemIter::<'a>::new(cursor, key))
+    }
+
     /// Deletes provided database completely
     pub fn del_db(&self, db: &Database) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
@@ -1063,6 +1076,62 @@ impl<'a> Iterator<CursorValue<'a>> for CursorIter<'a> {
 }
 
 
+pub struct CursorItemIter<'a> {
+    cursor: Cursor<'a>,
+    key: MdbValue<'a>,
+    pos: u64,
+    cnt: u64,
+    initialized: bool
+}
+
+impl<'a> CursorItemIter<'a> {
+    pub fn new(cursor: Cursor<'a>, key: &'a ToMdbValue<'a>) -> CursorItemIter<'a> {
+        let cnt = cursor.item_count().unwrap_or(0);
+        CursorItemIter {
+            cursor: cursor,
+            key: key.to_mdb_value(),
+            pos: 0,
+            cnt: cnt,
+            initialized: false,
+        }
+    }
+}
+
+impl<'a> Iterator<CursorValue<'a>> for CursorItemIter<'a> {
+    fn next(&mut self) -> Option<CursorValue<'a>> {
+        let move_res = if !self.initialized {
+            self.initialized = true;
+            let tmp = MdbValue {
+                value: self.key.value
+            };
+            unsafe {
+                self.cursor.to_key(mem::transmute::<&MdbValue, &'a MdbValue<'a>>(&tmp))
+            }
+        } else {
+            self.cursor.to_next_key_item()
+        };
+
+        if move_res.is_err() {
+            None
+        } else {
+            let (k, v) = self.cursor.get_plain();
+            if self.pos < self.cnt {
+                Some(CursorValue {
+                    key: k,
+                    value: v
+                })
+            } else {
+                None
+            }
+        }
+    }
+
+    fn size_hint(&self) -> (uint, Option<uint>) {
+        (self.cnt as uint, None)
+    }
+}
+
+
 #[cfg(test)]
 mod test {
     use std::io::fs::{mod, PathExtensions};
@@ -1267,6 +1336,41 @@ mod test {
             assert!(cursor.to_key(&test_key1).is_err());
 
             assert!(cursor.to_key(&test_key2).is_ok());
+        });
+    }
+
+    #[test]
+    fn test_item_iter() {
+        let path = Path::new("item_iter");
+        test_db_in_path(&path, || {
+            let mut env = Environment::new().unwrap();
+            let _ = env.open(&path, EnvFlags::empty(), 0o755);
+            let _ = env.set_maxdbs(5);
+
+            let db = env.get_default_db(super::DbAllowDups).unwrap();
+            let txn = env.new_transaction().unwrap();
+
+            let test_key1 = "key1".to_string();
+            let test_data1 = "value1".to_string();
+            let test_data2 = "value2".to_string();
+            let test_key2 = "key2".to_string();
+            let test_key3 = "key3".to_string();
+
+            let _ = db.set(&txn, &test_key1, &test_data1);
+            let _ = db.set(&txn, &test_key1, &test_data2);
+            let _ = db.set(&txn, &test_key2, &test_data1);
+
+            let iter = db.item_iter(&txn, &test_key1).unwrap();
+            let values: Vec<String> = iter.map(|cv| cv.get_value()).collect();
+            assert_eq!(values.as_slice(), vec![test_data1.clone(), test_data2.clone()].as_slice());
+
+            let iter = db.item_iter(&txn, &test_key2).unwrap();
+            let values: Vec<String> = iter.map(|cv| cv.get_value()).collect();
+            assert_eq!(values.as_slice(), vec![test_data1.clone()].as_slice());
+
+            let iter = db.item_iter(&txn, &test_key3).unwrap();
+            let values: Vec<String> = iter.map(|cv| cv.get_value()).collect();
+            assert_eq!(values.len(), 0);
         });
     }
 
