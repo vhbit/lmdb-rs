@@ -19,6 +19,7 @@ pub use core::{Environment, EnvFlags, Database, DbFlags};
 pub use core::{Transaction, ReadonlyTransaction, MdbError};
 pub use core::{Cursor, CursorValue, CursorIter, CursorKeyRangeIter};
 pub use core::errors;
+pub use traits::{FromMdbValue, ToMdbValue};
 
 mod traits;
 mod utils;
