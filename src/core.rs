@@ -366,17 +366,17 @@ impl Environment {
         lift_mdb!(unsafe { mdb_env_sync(self.env, if force {1} else {0})})
     }
 
-    pub fn set_flags(&mut self, flags: c_uint, turn_on: bool) -> MdbResult<()> {
+    pub fn set_flags(&mut self, flags: EnvFlags, turn_on: bool) -> MdbResult<()> {
         assert_state_not!(env, self.state, EnvClosed)
         lift_mdb!(unsafe {
-            mdb_env_set_flags(self.env, flags, if turn_on {1} else {0})
+            mdb_env_set_flags(self.env, flags.bits(), if turn_on {1} else {0})
         })
     }
 
-    pub fn get_flags(&self) -> MdbResult<c_uint> {
+    pub fn get_flags(&self) -> MdbResult<EnvFlags> {
         assert_state_not!(env, self.state, EnvClosed);
         let mut flags: c_uint = 0;
-        lift_mdb!(unsafe {mdb_env_get_flags(self.env, &mut flags)}, flags)
+        lift_mdb!(unsafe {mdb_env_get_flags(self.env, &mut flags)}, EnvFlags::from_bits_truncate(flags))
     }
 
     pub fn set_mapsize(&mut self, size: size_t) -> MdbResult<()> {
