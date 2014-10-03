@@ -1099,12 +1099,11 @@ pub struct CursorItemIter<'a> {
 
 impl<'a> CursorItemIter<'a> {
     pub fn new(cursor: Cursor<'a>, key: &'a ToMdbValue<'a>) -> CursorItemIter<'a> {
-        let cnt = cursor.item_count().unwrap_or(0);
         CursorItemIter {
             cursor: cursor,
             key: key.to_mdb_value(),
             pos: 0,
-            cnt: cnt,
+            cnt: 0,
             initialized: false,
         }
     }
@@ -1118,7 +1117,14 @@ impl<'a> Iterator<CursorValue<'a>> for CursorItemIter<'a> {
                 value: self.key.value
             };
             unsafe {
-                self.cursor.to_key(mem::transmute::<&MdbValue, &'a MdbValue<'a>>(&tmp))
+                let res = self.cursor.to_key(mem::transmute::<&MdbValue, &'a MdbValue<'a>>(&tmp));
+                let res = res
+                    .and_then(|_| self.cursor.item_count())
+                    .and_then(|c| {
+                        self.cnt = c;
+                        Ok(())
+                    });
+                res
             }
         } else {
             self.cursor.to_next_key_item()
@@ -1139,9 +1145,11 @@ impl<'a> Iterator<CursorValue<'a>> for CursorItemIter<'a> {
         }
     }
 
+    /*
     fn size_hint(&self) -> (uint, Option<uint>) {
         (self.cnt as uint, None)
     }
+    */
 }
 
 
