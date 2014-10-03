@@ -5,11 +5,8 @@ pub mod types {
     pub use self::os::{mdb_mode_t, mdb_filehandle_t};
     use libc::{c_int, c_uint, c_void, c_char, size_t, pthread_t, c_uchar, c_ushort};
 
-    #[cfg(target_os = "macos")]
-    #[cfg(target_os = "ios")]
-    #[cfg(target_os = "linux")]
-    #[cfg(target_os = "freebsd")]
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "macos", target_os = "ios", target_os = "linux",
+              target_os = "freebsd", target_os = "android"))]
     mod os {
         use libc;
 
@@ -27,8 +24,7 @@ pub mod types {
             pub type pthread_mutex_t = *const libc::c_void;
         }
 
-        #[cfg(target_os = "macos")]
-        #[cfg(target_os = "ios")]
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
         mod mutex {
             use libc;
 

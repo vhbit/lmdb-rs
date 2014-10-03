@@ -1145,6 +1145,7 @@ impl<'a> Iterator<CursorValue<'a>> for CursorItemIter<'a> {
         }
     }
 
+    // FIXME: find a better way to initialize
     /*
     fn size_hint(&self) -> (uint, Option<uint>) {
         (self.cnt as uint, None)
@@ -1159,8 +1160,7 @@ mod test {
     use std::rt::unwind;
     use std::path::Path;
 
-    use ffi::consts;
-    use super::{Environment, EnvFlags, DbFlags};
+    use super::{Environment, EnvFlags, DbFlags, EnvNoMemInit, EnvNoMetaSync};
 
     fn test_db_in_path(path: &Path, f: ||) {
         // Delete dir to be sure nothing existed before test
@@ -1204,7 +1204,7 @@ mod test {
                                 Err(err) => fail!("Failed to sync: {}", err)
                             };
 
-                            let test_flags = consts::MDB_NOMEMINIT | consts::MDB_NOMETASYNC;
+                            let test_flags = EnvNoMemInit | EnvNoMetaSync;
 
                             match env.set_flags(test_flags, true) {
                                 Ok(_) => {
