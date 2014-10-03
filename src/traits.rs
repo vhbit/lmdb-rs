@@ -53,6 +53,14 @@ impl<'a> ToMdbValue<'a> for String {
     }
 }
 
+impl<'a> ToMdbValue<'a> for bool {
+    fn to_mdb_value(&'a self) -> MdbValue<'a> {
+        unsafe {
+            MdbValue::new(std::mem::transmute(self), std::mem::size_of::<bool>())
+        }
+    }
+}
+
 /*
 impl<'a> ToMdbValue<'a> for &'a str {
     fn to_mdb_value<'a>(&'a self) -> MdbValue<'a> {
@@ -80,7 +88,7 @@ impl<'a> ToMdbValue<'a> for MdbValue<'a> {
 impl<'a> FromMdbValue<'a> for String {
     fn from_mdb_value(value: &'a MdbValue<'a>) -> String {
         unsafe {
-            string::raw::from_buf_len(std::mem::transmute(value.value.mv_data), 
+            string::raw::from_buf_len(std::mem::transmute(value.value.mv_data),
                                       value.value.mv_size as uint).to_string()
         }
     }
