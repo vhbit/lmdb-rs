@@ -64,7 +64,7 @@ macro_rules! assert_state_not {
 
 /// MdbError wraps information about LMDB error
 pub mod errors {
-    use ffi::*;
+    use ffi::consts::*;
     use libc::{c_int};
     use std;
     use utils::{error_msg};

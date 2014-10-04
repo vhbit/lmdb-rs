@@ -349,6 +349,7 @@ pub mod types {
     }
 }
 
+#[allow(dead_code)]
 pub mod consts {
     use libc::{c_int, c_uint};
 
