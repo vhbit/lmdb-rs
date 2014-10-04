@@ -25,3 +25,6 @@ pub mod traits;
 mod utils;
 mod ffi;
 pub mod core;
+
+#[cfg(test)]
+mod tests;
