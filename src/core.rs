@@ -393,6 +393,10 @@ pub struct Environment {
 }
 
 impl Environment {
+    pub fn new() -> EnvBuilder {
+        EnvBuilder::new()
+    }
+
     fn from_raw(env: *const ffi::MDB_env) -> Environment {
         Environment {
             env: env,
