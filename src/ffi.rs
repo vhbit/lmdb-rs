@@ -1,3 +1,7 @@
+pub use self::consts::*;
+pub use self::funcs::*;
+pub use self::types::*;
+
 #[allow(non_camel_case_types)]
 #[allow(dead_code)]
 pub mod types {
@@ -5,11 +9,8 @@ pub mod types {
     pub use self::os::{mdb_mode_t, mdb_filehandle_t};
     use libc::{c_int, c_uint, c_void, c_char, size_t, pthread_t, c_uchar, c_ushort};
 
-    #[cfg(target_os = "macos")]
-    #[cfg(target_os = "ios")]
-    #[cfg(target_os = "linux")]
-    #[cfg(target_os = "freebsd")]
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "macos", target_os = "ios", target_os = "linux",
+              target_os = "freebsd", target_os = "android"))]
     mod os {
         use libc;
 
@@ -27,8 +28,7 @@ pub mod types {
             pub type pthread_mutex_t = *const libc::c_void;
         }
 
-        #[cfg(target_os = "macos")]
-        #[cfg(target_os = "ios")]
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
         mod mutex {
             use libc;
 
@@ -127,16 +127,16 @@ pub mod types {
         mrb_tid: pthread_t
     }
 
-/*
-enum MDB_reader_mru {
-    mrx: MDB_rxbody,
-    pad: char[] // PADDING
-}
+    /*
+    enum MDB_reader_mru {
+        mrx: MDB_rxbody,
+        pad: char[] // PADDING
+    }
 
-struct MDB_reader {
-    mru: MDB_reader_mru
-}
-*/
+    struct MDB_reader {
+        mru: MDB_reader_mru
+    }
+     */
     #[repr(C)]
     struct MDB_txbody {
         mtb_magic: u32,
@@ -146,43 +146,43 @@ struct MDB_reader {
         mtb_numreaders: c_uint
     }
 
-/*
-enum MDB_txninfo_mt1 {
-    mtb: MDB_txbody,
-    pad: c_char[] // PADDING
-}
+    /*
+    enum MDB_txninfo_mt1 {
+        mtb: MDB_txbody,
+        pad: c_char[] // PADDING
+    }
 
-enum MDB_txninfo_mt2{
-    mt2_wmutex: pthread_mutex_t,
-    pad: c_char[] // PADDING
-}
+    enum MDB_txninfo_mt2{
+        mt2_wmutex: pthread_mutex_t,
+        pad: c_char[] // PADDING
+    }
 
-struct MDB_txninfo {
-    mt1: MDB_txninfo_mt1,
-    mt2: MDB_txninfo_mt2,
-    mti_readers: [MDB_reader, ..1]
-}
-*/
+    struct MDB_txninfo {
+        mt1: MDB_txninfo_mt1,
+        mt2: MDB_txninfo_mt2,
+        mti_readers: [MDB_reader, ..1]
+    }
+     */
     #[repr(C)]
     struct MDB_pgstate {
         mf_pghead: *const pgno_t,
         mf_pglast: txnid_t
     }
 
-/*
-enum MDB_page_p {
-    p_pgno: pgno_t,
-    p_next: *c_void
-}
+    /*
+    enum MDB_page_p {
+        p_pgno: pgno_t,
+        p_next: *c_void
+    }
 
-enum MDB_page_pb {
-    struct {
-        pb_lower: indx_t,
-        pb_upper: indx_t
-    },
-    pb_pages: u32
-}
-*/
+    enum MDB_page_pb {
+        struct {
+            pb_lower: indx_t,
+            pb_upper: indx_t
+        },
+        pb_pages: u32
+    }
+     */
     #[repr(C)]
     struct MDB_page {
         mp_p: size_t,
@@ -257,7 +257,7 @@ enum MDB_page_pb {
         md_rel: *MDB_rel_func,
         md_relctx: c_void
     }
-    */
+     */
 
     #[repr(C)]
     pub struct MDB_txn {
@@ -407,14 +407,11 @@ pub mod consts {
 }
 
 
-#[allow(dead_code)]
 pub mod funcs {
-    use libc::{c_int, c_void, c_char, c_uint, size_t};
-    //use super::{MDB_val, MDB_env, MDB_txn, MDB_dbi, MDB_cursor, MDB_cursor_op, MDB_stat, MDB_envinfo};
-    //use super::{MDB_cmp_func, MDB_rel_func, MDB_msg_func};
-    //use super::{mdb_mode_t, mdb_filehandle_t};
+    use libc::{c_int, c_char, c_void, c_uint, size_t};
     use super::types::*;
 
+    #[allow(dead_code)]
     // Embedding should work better for now
     #[link(name = "lmdb", kind = "static")]
     extern "C" {

@@ -5,20 +5,27 @@
 #![feature(globs)]
 #![feature(macro_rules)]
 #![feature(unsafe_destructor)]
+#![feature(if_let)]
 
 #[phase(plugin, link)] extern crate log;
 extern crate libc;
+extern crate sync;
 
 #[cfg(test)]
 extern crate debug;
 
 pub use ffi::consts as consts;
 pub use ffi::types::{mdb_mode_t, mdb_filehandle_t, MDB_stat, MDB_envinfo};
-pub use base::{Environment, Database, Transaction, ReadonlyTransaction, MdbError};
-pub use base::{Cursor, CursorValue, CursorIter, CursorKeyRangeIter};
-pub use base::errors;
+pub use core::{EnvBuilder, Environment, EnvFlags, EnvCreateFlags, Database, DbFlags};
+pub use core::{Transaction, ReadonlyTransaction, MdbError};
+pub use core::{Cursor, CursorValue, CursorIter, CursorKeyRangeIter};
+pub use core::errors;
+pub use traits::{FromMdbValue, ToMdbValue};
 
-mod traits;
+pub mod traits;
 mod utils;
 mod ffi;
-pub mod base;
+pub mod core;
+
+#[cfg(test)]
+mod tests;
