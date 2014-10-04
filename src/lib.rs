@@ -21,7 +21,7 @@ pub use core::{Cursor, CursorValue, CursorIter, CursorKeyRangeIter};
 pub use core::errors;
 pub use traits::{FromMdbValue, ToMdbValue};
 
-mod traits;
+pub mod traits;
 mod utils;
 mod ffi;
 pub mod core;

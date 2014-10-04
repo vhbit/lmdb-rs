@@ -1,3 +1,21 @@
+//! Conversion of data structures to and from MDB_val
+//!
+//! Since MDB_val is valid through whole transaction, it is kind of safe
+//! to keep plain data, i.e. to keep raw pointers and transmute them back
+//! and forward into corresponding data structures to avoid any unnecessary
+//! copying.
+//!
+//! `MdbValue` is a simple wrapper with bounded lifetime which should help
+//! keep it sane, i.e. provide compile errors when data retrieved outlives
+//! transaction.
+//!
+//! It would be extremely helpful to create `compile-fail` tests to ensure
+//! this, but unfortunately there is no way yet.
+//!
+//! Note that due to https://github.com/rust-lang/rust/issues/17322 it is
+//! impossible to convert `&'a str` and `&'a [u8]` for now
+
+
 use libc::{c_void};
 use std;
 use std::string;
@@ -61,12 +79,25 @@ impl<'a> ToMdbValue<'a> for bool {
     }
 }
 
+// Conversion from `&'a str` and `&'a [u8]` is broken due:
+// https://github.com/rust-lang/rust/issues/17322
 /*
 impl<'a> ToMdbValue<'a> for &'a str {
     fn to_mdb_value<'a>(&'a self) -> MdbValue<'a> {
         unsafe {
             MdbValue::new(std::mem::transmute(self.as_ptr()),
-                self.len())
+                          self.len())
+        }
+    }
+}
+*/
+
+/*
+impl<'a> ToMdbValue<'a> for &'a [u8] {
+    fn to_mdb_value<'a>(&'a self) -> MdbValue<'a> {
+        unsafe {
+            MdbValue::new(std::mem::transmute(self.as_ptr()),
+                          self.len())
         }
     }
 }
