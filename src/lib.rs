@@ -14,6 +14,7 @@ extern crate sync;
 #[cfg(test)]
 extern crate debug;
 
+#[stable]
 pub use ffi::types::{mdb_filehandle_t, MDB_stat, MDB_envinfo};
 pub use core::{EnvBuilder, Environment, EnvFlags, EnvCreateFlags, Database, DbFlags};
 pub use core::{Transaction, ReadonlyTransaction, MdbError};

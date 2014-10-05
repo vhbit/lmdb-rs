@@ -1,7 +1,13 @@
+//! FFI wrapper
+//!
+//! Low level definitions of consts, types, APIs
+//!
+//! Shouldn't be used directly
 pub use self::consts::*;
 pub use self::funcs::*;
 pub use self::types::*;
 
+#[experimental]
 #[allow(non_camel_case_types)]
 #[allow(dead_code)]
 pub mod types {
@@ -16,7 +22,9 @@ pub mod types {
 
         pub use self::mutex::pthread_mutex_t as pthread_mutex_t;
 
+        #[stable]
         pub type mdb_mode_t = libc::mode_t;
+        #[stable]
         pub type mdb_filehandle_t = libc::c_int;
         pub type MDB_PID_T = libc::pid_t;
 
@@ -80,7 +88,9 @@ pub mod types {
     mod os {
         use libc::{c_int, c_void};
 
+        #[stable]
         pub type mdb_mode_t = c_int;
+        #[stable]
         pub type mdb_filehandle_t = *const c_void;
         pub type pthread_key_t = u32;
         pub type MDB_PID_T = c_uint;
@@ -94,6 +104,7 @@ pub mod types {
     type txnid_t = MDB_ID;
     type indx_t = u16;
 
+    #[stable]
     pub type MDB_dbi = c_uint;
     type MDB_ID = size_t;
     type MDB_IDL = *const MDB_ID;
@@ -115,6 +126,7 @@ pub mod types {
     #[deriving(Clone)]
     #[allow(raw_pointer_deriving)]
     #[repr(C)]
+    #[stable]
     pub struct MDB_val {
         pub mv_size: size_t,
         pub mv_data: *const c_void,
@@ -282,6 +294,7 @@ pub mod types {
     }
 
     #[repr(C)]
+    #[stable]
     pub struct MDB_stat {
         pub ms_psize: c_uint,
         pub ms_depth: c_uint,
@@ -292,6 +305,7 @@ pub mod types {
     }
 
     #[repr(C)]
+    #[stable]
     pub struct MDB_envinfo {
         pub me_mapaddr: *const c_void,
         pub me_mapsize: size_t,
@@ -349,6 +363,7 @@ pub mod types {
     }
 }
 
+#[stable]
 #[allow(dead_code)]
 pub mod consts {
     use libc::{c_int, c_uint};
@@ -408,6 +423,7 @@ pub mod consts {
 }
 
 
+#[stable]
 pub mod funcs {
     use libc::{c_int, c_char, c_void, c_uint, size_t};
     use super::types::*;

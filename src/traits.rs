@@ -23,11 +23,13 @@ use libc::size_t;
 use ffi::types::MDB_val;
 
 #[deriving(Clone)]
+#[stable]
 pub struct MdbValue<'a> {
     pub value: MDB_val
 }
 
 impl<'a> MdbValue<'a> {
+    #[unstable]
     fn new(data: *const c_void, len: uint) -> MdbValue<'a> {
         MdbValue {
             value: MDB_val {
@@ -38,10 +40,12 @@ impl<'a> MdbValue<'a> {
     }
 }
 
+#[experimental]
 pub trait ToMdbValue<'a> {
     fn to_mdb_value(&'a self) -> MdbValue<'a>;
 }
 
+#[experimental]
 pub trait FromMdbValue<'a> {
     fn from_mdb_value(value: &'a MdbValue<'a>) -> Self;
 }

@@ -1,3 +1,43 @@
+//! High level wrapper of LMDB APIs
+//!
+//! Requires knowledge of LMDB terminology
+//!
+//! # Environment
+//!
+//! Environment is actually the center point of LMDB, it's a container
+//! of everything else. As some settings couldn't be adjusted after
+//! opening, `Environment` is constructed using `EnvBuilder`, which
+//! sets up maximum size, maximum count of named databases, maximum
+//! readers which could be used from different threads without locking
+//! and so on.
+//!
+//! # Database
+//!
+//! Actual key-value store. The most crucial aspect is whether a database
+//! allows duplicates or not. It is specified on creation and couldn't be
+//! changed later. Entries for the same key are called `items`.
+//!
+//! There are a couple of optmizations to use, like marking
+//! keys or data as integer, allowing sorting using reverse key, marking
+//! keys/data as fixed size.
+//!
+//! # Transaction
+//!
+//! Absolutely every db operation happens in a transaction. It could
+//! be a read-only transaction (reader), which is lockless and therefore
+//! cheap. Or it could be a read-write transaction, which is unique, i.e.
+//! there could be only one writer at a time.
+//!
+//! While readers are cheap and lockless, they work better being short-lived
+//! as in other case they may lock pages from being reused. Readers have
+//! a special API for marking as finished and renewing.
+//!
+//! It is perfectly fine to create nested transactions.
+//!
+//!
+//! # Example
+//!
+
 use std;
 use std::cell::{UnsafeCell};
 use std::collections::HashMap;
@@ -69,6 +109,7 @@ pub mod errors {
     use std;
     use utils::{error_msg};
 
+    #[unstable]
     pub enum MdbError {
         NotFound,
         KeyExists,
@@ -82,6 +123,7 @@ pub mod errors {
         Custom(c_int, String)
     }
 
+    #[unstable]
     impl MdbError {
         pub fn new_with_code(code: c_int) -> MdbError {
             match code {
@@ -116,19 +158,22 @@ pub mod errors {
     }
 }
 
+#[stable]
 pub type MdbResult<T> = Result<T, MdbError>;
 
-
+#[experimental]
 pub trait ReadTransaction<'a> {
     fn get_read_transaction(&'a self) -> &'a NativeTransaction;
 }
 
+#[experimental]
 pub trait WriteTransaction<'a>: ReadTransaction<'a> {
     fn get_write_transaction(&'a self) -> &'a NativeTransaction;
 }
 
 bitflags! {
     #[doc = "A set of environment flags which could be changed after opening"]
+    #[unstable]
     flags EnvFlags: c_uint {
         #[doc="Don't flush system buffers to disk when committing a transaction. This optimization means a system crash can corrupt the database or lose the last transactions if buffers are not yet flushed to disk. The risk is governed by how often the system flushes dirty buffers to disk and how often mdb_env_sync() is called. However, if the filesystem preserves write order and the MDB_WRITEMAP flag is not used, transactions exhibit ACI (atomicity, consistency, isolation) properties and only lose D (durability). I.e. database integrity is maintained, but a system crash may undo the final transactions. Note that (MDB_NOSYNC | MDB_WRITEMAP) leaves the system with no hint for when to write transactions to disk, unless mdb_env_sync() is called. (MDB_MAPASYNC | MDB_WRITEMAP) may be preferable. This flag may be changed at any time using mdb_env_set_flags()."]
         static EnvNoSync      = ffi::MDB_NOSYNC,
@@ -143,6 +188,7 @@ bitflags! {
 
 bitflags! {
     #[doc = "A set of all environment flags"]
+    #[unstable]
     flags EnvCreateFlags: c_uint {
         #[doc="Use a fixed address for the mmap region. This flag must be specified when creating the environment, and is stored persistently in the environment. If successful, the memory map will always reside at the same virtual address and pointers used to reference data items in the database will be constant across multiple invocations. This option may not always work, depending on how the operating system has allocated memory to shared libraries and other uses. The feature is highly experimental."]
         static EnvCreateFixedMap    = ffi::MDB_FIXEDMAP,
@@ -169,9 +215,9 @@ bitflags! {
     }
 }
 
-
 bitflags! {
     #[doc = "A set of database flags"]
+    #[stable]
     flags DbFlags: c_uint {
         #[doc="Keys are strings to be compared in reverse order, from the end of the strings to the beginning. By default, Keys are treated as strings and compared from beginning to end."]
         static DbReverseKey   = ffi::MDB_REVERSEKEY,
@@ -191,11 +237,13 @@ bitflags! {
 }
 
 /// Database
+#[unstable]
 pub struct Database {
     handle: ffi::MDB_dbi,
     owns: bool
 }
 
+#[unstable]
 impl Database {
     fn new_with_handle(handle: ffi::MDB_dbi, owns: bool) -> Database {
         Database { handle: handle, owns: owns }
@@ -269,7 +317,7 @@ impl Drop for Database {
 
 }
 
-
+#[stable]
 pub struct EnvBuilder {
     flags: EnvCreateFlags,
     max_readers: Option<uint>,
@@ -279,6 +327,7 @@ pub struct EnvBuilder {
 
 /// Constructs environment with settigs which couldn't be
 /// changed after opening
+#[stable]
 impl EnvBuilder {
     pub fn new() -> EnvBuilder {
         EnvBuilder {
@@ -286,7 +335,6 @@ impl EnvBuilder {
             max_readers: None,
             max_dbs: None,
             map_size: None,
-            // max_keysize: None
         }
     }
 
@@ -308,7 +356,8 @@ impl EnvBuilder {
         self
     }
 
-    /// Sets max environment size
+    /// Sets max environment size, i.e. size in memory/disk of
+    /// all data
     pub fn map_size(mut self, map_size: u64) -> EnvBuilder {
         self.map_size = Some(map_size);
         self
@@ -381,11 +430,13 @@ impl EnvBuilder {
 }
 
 /// Represents LMDB Environment. Should be opened using `EnvBuilder`
+#[unstable]
 pub struct Environment {
     env: *const ffi::MDB_env,
     db_cache: Mutex<UnsafeCell<HashMap<String, Database>>>,
 }
 
+#[unstable]
 impl Environment {
     pub fn new() -> EnvBuilder {
         EnvBuilder::new()
@@ -414,7 +465,7 @@ impl Environment {
     }
 
     /// This one sets only flags which are available for change even
-    /// after opening, see also `get_flags` and `get_all_flags`
+    /// after opening, see also [get_flags](#method.get_flags) and [get_all_flags](#method.get_all_flags)
     pub fn set_flags(&mut self, flags: EnvFlags, turn_on: bool) -> MdbResult<()> {
         lift_mdb!(unsafe {
             ffi::mdb_env_set_flags(self.env, flags.bits(), if turn_on {1} else {0})
@@ -422,14 +473,14 @@ impl Environment {
     }
 
     /// Get flags of environment, which could be changed after it was opened
-    /// use `get_all_flags` if you need also creation time flags
+    /// use [get_all_flags](#method.get_all_flags) if you need also creation time flags
     pub fn get_flags(&self) -> MdbResult<EnvFlags> {
         let tmp = try!(self.get_all_flags());
         Ok(EnvFlags::from_bits_truncate(tmp.bits()))
     }
 
     /// Get all flags of environment, including which were specified on creation
-    /// See also `get_flags` if you're interested only in modifiable flags
+    /// See also [get_flags](#method.get_flags) if you're interested only in modifiable flags
     pub fn get_all_flags(&self) -> MdbResult<EnvCreateFlags> {
         let mut flags: c_uint = 0;
         lift_mdb!(unsafe {ffi::mdb_env_get_flags(self.env, &mut flags)}, EnvCreateFlags::from_bits_truncate(flags))
@@ -560,12 +611,14 @@ enum TransactionState {
     TxnStateInvalid,  // Invalid, no further operation possible
 }
 
+#[experimental]
 pub struct NativeTransaction<'a> {
     handle: *const ffi::MDB_txn,
     flags: uint,
     state: TransactionState,
 }
 
+#[experimental]
 impl<'a> NativeTransaction<'a> {
     fn new_with_handle(h: *const ffi::MDB_txn, flags: uint) -> NativeTransaction<'a> {
         NativeTransaction {
@@ -724,14 +777,17 @@ impl<'a> NativeTransaction<'a> {
     }
 }
 
+#[unstable]
 pub struct Transaction<'a> {
     inner: NativeTransaction<'a>,
 }
 
+#[unstable]
 pub struct ReadonlyTransaction<'a> {
     inner: NativeTransaction<'a>,
 }
 
+#[unstable]
 impl<'a> Transaction<'a> {
     fn new_with_native(txn: NativeTransaction<'a>) -> Transaction<'a> {
         Transaction {
@@ -782,6 +838,7 @@ impl<'a> Drop for Transaction<'a> {
     }
 }
 
+#[unstable]
 impl<'a> ReadonlyTransaction<'a> {
     fn new_with_native(txn: NativeTransaction<'a>) -> ReadonlyTransaction<'a> {
         ReadonlyTransaction {
@@ -827,6 +884,7 @@ impl<'a> Drop for ReadonlyTransaction<'a> {
     }
 }
 
+#[unstable]
 pub struct Cursor<'a> {
     handle: *const ffi::MDB_cursor,
     data_val: ffi::MDB_val,
@@ -835,6 +893,7 @@ pub struct Cursor<'a> {
     db: &'a Database
 }
 
+#[unstable]
 impl<'a> Cursor<'a> {
     fn new(txn: &'a NativeTransaction, db: &'a Database) -> MdbResult<Cursor<'a>> {
         let mut tmp: *const ffi::MDB_cursor = std::ptr::null();
@@ -986,6 +1045,7 @@ impl<'a> Drop for Cursor<'a> {
     }
 }
 
+#[experimental]
 pub struct CursorValue<'cursor> {
     key: MdbValue<'cursor>,
     value: MdbValue<'cursor>,
@@ -994,6 +1054,7 @@ pub struct CursorValue<'cursor> {
 /// CursorValue performs lazy data extraction from iterator
 /// avoiding any data conversions and memory copy. Lifetime
 /// is limited to iterator lifetime
+#[experimental]
 impl<'cursor> CursorValue<'cursor> {
     pub fn get_key<T: FromMdbValue<'cursor>>(&'cursor self) -> T {
         FromMdbValue::from_mdb_value(&self.key)
@@ -1008,6 +1069,7 @@ impl<'cursor> CursorValue<'cursor> {
     }
 }
 
+#[experimental]
 pub struct CursorKeyRangeIter<'a> {
     cursor: Cursor<'a>,
     start_key: MdbValue<'a>,
@@ -1015,6 +1077,7 @@ pub struct CursorKeyRangeIter<'a> {
     initialized: bool
 }
 
+#[experimental]
 impl<'a> CursorKeyRangeIter<'a> {
     pub fn new(cursor: Cursor<'a>, start_key: &'a ToMdbValue<'a>, end_key: &'a ToMdbValue<'a>) -> CursorKeyRangeIter<'a> {
         CursorKeyRangeIter {
@@ -1070,11 +1133,13 @@ impl<'a> Iterator<CursorValue<'a>> for CursorKeyRangeIter<'a> {
     }
 }
 
+#[experimental]
 pub struct CursorIter<'a> {
     cursor: Cursor<'a>,
     initialized: bool
 }
 
+#[experimental]
 impl<'a> CursorIter<'a> {
     pub fn new(cursor: Cursor<'a>) -> CursorIter<'a> {
         CursorIter {
@@ -1118,6 +1183,7 @@ impl<'a> Iterator<CursorValue<'a>> for CursorIter<'a> {
 }
 
 
+#[experimental]
 pub struct CursorItemIter<'a> {
     cursor: Cursor<'a>,
     key: MdbValue<'a>,
@@ -1126,6 +1192,7 @@ pub struct CursorItemIter<'a> {
     initialized: bool
 }
 
+#[experimental]
 impl<'a> CursorItemIter<'a> {
     pub fn new(cursor: Cursor<'a>, key: &'a ToMdbValue<'a>) -> CursorItemIter<'a> {
         CursorItemIter {
