@@ -2,10 +2,11 @@ language: rust
 
 env:
   global:
-    - secure: edQRoXsRT78rbDxWTW8JFDVBBcb1IoUxOGe117OCAX9SC38dFIXZ6q67GQZ+IvNPUJTSquwI/zj93nC/w/t4z4LATKp9cAevfeB1BqE7UxbxFj5/YioYiZUq6iNA2DSFXSvV3bqtvuV0i43Imkk+1dyLqhBM7QniISVhUUugA70=
+    - secure: C6dtZjIXukGFq+dV0/w6INZX1dps6kDfONDzubEqT+0UjsrGgXSugBNspuDE4kTv8yJ9qFNv/69LfvjuYpERRaJZuv66nS2MDpBWugXwZ/4mdsaBfho/Zhuajl4ff4Dn0hvYs9olrZpJK6L/byTLd1w4ugw77ngTyc+rwR+rB4U=
+    - secure: CF2BlYNHixofAFZVM1BplYfCYWMQA4bidBs5NYKI1pF37Sv9v7a+Viw4EWJT0/lsvePQ3vmEHcyLMSvQJweK3cQatIrvPrHX7QMk10f9X0rC9BeGt5kIS7IexThKNsM3CxYJYy4znO6GkqbTVIWVhEVOBIevgyM5/GZTH5o4pYc=
 
 script:
     - cargo test --verbose && cargo doc --verbose --no-deps
 
 after_script:
-  - cd target && (curl http://www.rust-ci.org/artifacts/put?t=$RUSTCI_TOKEN | sh)
+  - ./up_doc.sh
