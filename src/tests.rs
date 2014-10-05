@@ -130,7 +130,7 @@ fn test_multiple_values() {
         let v: String = db.get(&txn, &test_key1).unwrap();
         assert!(v.as_slice() == test_data1.as_slice(), "It should still return first value");
 
-        let _ = db.del_exact(&txn, &test_key1, &test_data1);
+        let _ = db.del_item(&txn, &test_key1, &test_data1);
 
         let v: String = db.get(&txn, &test_key1).unwrap();
         assert!(v.as_slice() == test_data2.as_slice(), "It should return second value");

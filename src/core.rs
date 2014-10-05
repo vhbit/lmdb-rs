@@ -217,8 +217,8 @@ impl Database {
     }
 
     /// Should be used only with DbAllowDups. Deletes corresponding (key, value)
-    pub fn del_exact<'a>(&self, txn: &'a WriteTransaction<'a>, key: &'a ToMdbValue<'a>, data: &'a ToMdbValue<'a>) -> MdbResult<()> {
-        txn.get_write_transaction().del_exact_value(self, key, data)
+    pub fn del_item<'a>(&self, txn: &'a WriteTransaction<'a>, key: &'a ToMdbValue<'a>, data: &'a ToMdbValue<'a>) -> MdbResult<()> {
+        txn.get_write_transaction().del_item(self, key, data)
     }
 
     /// Returns a new cursor
@@ -228,13 +228,7 @@ impl Database {
 
     /// Deletes current db, also moves it out
     pub fn del_db<'a>(self, txn: &'a WriteTransaction<'a>) -> MdbResult<()> {
-        let res = txn.get_write_transaction().del_db(&self);
-        if res.is_ok() {
-            let _ = self;
-            Ok(())
-        } else {
-            res
-        }
+        txn.get_write_transaction().del_db(self)
     }
 
     /// Removes all key/values from db
@@ -685,7 +679,7 @@ impl<'a> NativeTransaction<'a> {
     }
 
     /// If duplicate keys are allowed deletes value for key which is equal to data
-    pub fn del_exact_value<'a>(&'a self, db: &Database, key: &'a ToMdbValue<'a>, data: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    pub fn del_item<'a>(&'a self, db: &Database, key: &'a ToMdbValue<'a>, data: &'a ToMdbValue<'a>) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         unsafe {
             let key_val = key.to_mdb_value();
@@ -714,7 +708,7 @@ impl<'a> NativeTransaction<'a> {
     }
 
     /// Deletes provided database completely
-    pub fn del_db(&self, db: &Database) -> MdbResult<()> {
+    pub fn del_db(&self, db: Database) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         unsafe {
             lift_mdb!(ffi::mdb_drop(self.handle, db.handle, 1))
