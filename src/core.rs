@@ -43,7 +43,7 @@
 use std;
 use std::cell::{UnsafeCell};
 use std::collections::HashMap;
-use libc::{mod, c_int, c_uint, size_t};
+use libc::{mod, c_int, c_uint, size_t, c_void};
 use std::io::fs::PathExtensions;
 use std::io::FilePermission;
 use std::mem;
@@ -53,7 +53,8 @@ use sync::{Mutex};
 
 pub use self::errors::{MdbError, NotFound, InvalidPath, StateError};
 use ffi;
-use traits::{MdbValue, ToMdbValue, FromMdbValue};
+use ffi::types::MDB_val;
+use traits::{ToMdbValue, FromMdbValue};
 
 macro_rules! lift_mdb {
     ($e:expr) => (lift_mdb!($e, ()));
@@ -1004,7 +1005,7 @@ impl<'a> Cursor<'a> {
     }
 
     fn move_to<T: 'a>(&mut self, key: Option<&'a T>, op: ffi::MDB_cursor_op) -> MdbResult<()>
-        where T: ToMdbValue<'a> + Clone {
+        where T: ToMdbValue<'a> {
         // Even if we don't ask for any data and want only to set a position
         // MDB still insists in writing back key and data to provided pointers
         // it's actually not that big deal, considering no actual data copy happens
@@ -1028,13 +1029,13 @@ impl<'a> Cursor<'a> {
     }
 
     /// Moves cursor to first entry for key if it exists
-    pub fn to_key<T:'a>(&mut self, key: &'a T) -> MdbResult<()> where T: ToMdbValue<'a>+Clone{
+    pub fn to_key<T:'a>(&mut self, key: &'a T) -> MdbResult<()> where T: ToMdbValue<'a>{
         self.move_to(Some(key), ffi::MDB_SET)
     }
 
     /// Moves cursor to first entry for key greater than
     /// or equal to ke
-    pub fn to_gte_key<T: 'a>(&mut self, key: &'a T) -> MdbResult<()> where T: ToMdbValue<'a>+Clone{
+    pub fn to_gte_key<T: 'a>(&mut self, key: &'a T) -> MdbResult<()> where T: ToMdbValue<'a>{
         self.move_to(Some(key), ffi::MDB_SET_RANGE)
     }
 
@@ -1343,4 +1344,36 @@ impl<'a> Iterator<CursorValue<'a>> for CursorItemIter<'a> {
         (self.cnt as uint, None)
     }
     */
+}
+
+
+#[stable]
+pub struct MdbValue<'a> {
+    value: MDB_val
+}
+
+impl<'a> MdbValue<'a> {
+    #[unstable]
+    pub unsafe fn new(data: *const c_void, len: uint) -> MdbValue<'a> {
+        MdbValue {
+            value: MDB_val {
+                mv_data: data,
+                mv_size: len as size_t
+            }
+        }
+    }
+
+    pub fn new_from_sized<T>(data: &'a T) -> MdbValue<'a> {
+        unsafe {
+            MdbValue::new(mem::transmute(data), mem::size_of::<T>())
+        }
+    }
+
+    pub unsafe fn get_ref<'a>(&'a self) -> *const c_void {
+        self.value.mv_data
+    }
+
+    pub fn get_size(&self) -> uint {
+        self.value.mv_size as uint
+    }
 }

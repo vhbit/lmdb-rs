@@ -17,7 +17,7 @@ extern crate debug;
 #[stable]
 pub use ffi::types::{mdb_filehandle_t, MDB_stat, MDB_envinfo};
 pub use core::{EnvBuilder, Environment, EnvFlags, EnvCreateFlags, Database, DbFlags};
-pub use core::{Transaction, ReadonlyTransaction, MdbError};
+pub use core::{Transaction, ReadonlyTransaction, MdbError, MdbValue};
 pub use core::{Cursor, CursorValue, CursorIter, CursorKeyRangeIter};
 pub use core::errors;
 pub use traits::{FromMdbValue, ToMdbValue};
