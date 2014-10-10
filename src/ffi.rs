@@ -41,11 +41,11 @@ pub mod types {
             use libc;
 
             #[cfg(target_arch = "x86_64")]
-            static __PTHREAD_MUTEX_SIZE__: uint = 56;
+            const __PTHREAD_MUTEX_SIZE__: uint = 56;
             #[cfg(target_arch = "x86")]
-            static __PTHREAD_MUTEX_SIZE__: uint = 40;
+            const __PTHREAD_MUTEX_SIZE__: uint = 40;
             #[cfg(target_arch = "arm")]
-            static __PTHREAD_MUTEX_SIZE__: uint = 40;
+            const __PTHREAD_MUTEX_SIZE__: uint = 40;
 
             #[repr(C)]
             pub struct pthread_mutex_t {
@@ -60,13 +60,13 @@ pub mod types {
 
             // minus 8 because we have an 'align' field
             #[cfg(target_arch = "x86_64")]
-            static __SIZEOF_PTHREAD_MUTEX_T: uint = 40 - 8;
+            const __SIZEOF_PTHREAD_MUTEX_T: uint = 40 - 8;
             #[cfg(target_arch = "x86")]
-            static __SIZEOF_PTHREAD_MUTEX_T: uint = 24 - 8;
+            const __SIZEOF_PTHREAD_MUTEX_T: uint = 24 - 8;
             #[cfg(target_arch = "arm")]
-            static __SIZEOF_PTHREAD_MUTEX_T: uint = 24 - 8;
+            const __SIZEOF_PTHREAD_MUTEX_T: uint = 24 - 8;
             #[cfg(target_arch = "mips")]
-            static __SIZEOF_PTHREAD_MUTEX_T: uint = 24 - 8;
+            const __SIZEOF_PTHREAD_MUTEX_T: uint = 24 - 8;
 
             #[repr(C)]
             pub struct pthread_mutex_t {
@@ -369,57 +369,57 @@ pub mod consts {
     use libc::{c_int, c_uint};
 
     // Return codes
-    pub static MDB_SUCCESS: c_int = 0;
-    pub static MDB_KEYEXIST: c_int = -30799;
-    pub static MDB_NOTFOUND: c_int = -30798;
-    pub static MDB_PAGE_NOTFOUND: c_int = -30797;
-    pub static MDB_CORRUPTED: c_int = -30796;
-    pub static MDB_PANIC: c_int = -30795;
-    pub static MDB_VERSION_MISMATCH: c_int = -30794;
-    pub static MDB_INVALID: c_int = -30793;
-    pub static MDB_MAP_FULL: c_int = -30792;
-    pub static MDB_DBS_FULL: c_int = -30791;
-    pub static MDB_READERS_FULL: c_int = -30790;
-    pub static MDB_TLS_FULL: c_int = -30789;
-    pub static MDB_TXN_FULL: c_int = -30788;
-    pub static MDB_CURSOR_FULL: c_int = -30787;
-    pub static MDB_PAGE_FULL: c_int = -30786;
-    pub static MDB_MAP_RESIZED: c_int = -30785;
-    pub static MDB_INCOMPATIBLE: c_int = -30784;
-    pub static MDB_BAD_RSLOT: c_int = -30783;
-    pub static MDB_BAD_TXN: c_int = -30782;
-    pub static MDB_BAD_VALSIZE: c_int = -30781;
+    pub const MDB_SUCCESS: c_int = 0;
+    pub const MDB_KEYEXIST: c_int = -30799;
+    pub const MDB_NOTFOUND: c_int = -30798;
+    pub const MDB_PAGE_NOTFOUND: c_int = -30797;
+    pub const MDB_CORRUPTED: c_int = -30796;
+    pub const MDB_PANIC: c_int = -30795;
+    pub const MDB_VERSION_MISMATCH: c_int = -30794;
+    pub const MDB_INVALID: c_int = -30793;
+    pub const MDB_MAP_FULL: c_int = -30792;
+    pub const MDB_DBS_FULL: c_int = -30791;
+    pub const MDB_READERS_FULL: c_int = -30790;
+    pub const MDB_TLS_FULL: c_int = -30789;
+    pub const MDB_TXN_FULL: c_int = -30788;
+    pub const MDB_CURSOR_FULL: c_int = -30787;
+    pub const MDB_PAGE_FULL: c_int = -30786;
+    pub const MDB_MAP_RESIZED: c_int = -30785;
+    pub const MDB_INCOMPATIBLE: c_int = -30784;
+    pub const MDB_BAD_RSLOT: c_int = -30783;
+    pub const MDB_BAD_TXN: c_int = -30782;
+    pub const MDB_BAD_VALSIZE: c_int = -30781;
 
     // Write flags
-    pub static MDB_NOOVERWRITE: c_uint = 0x10;
-    pub static MDB_NODUPDATA: c_uint = 0x20;
-    pub static MDB_CURRENT: c_uint = 0x40;
-    pub static MDB_RESERVE: c_uint = 0x10000;
-    pub static MDB_APPEND: c_uint = 0x20000;
-    pub static MDB_APPENDDUP: c_uint = 0x40000;
-    pub static MDB_MULTIPLE: c_uint = 0x80000;
+    pub const MDB_NOOVERWRITE: c_uint = 0x10;
+    pub const MDB_NODUPDATA: c_uint = 0x20;
+    pub const MDB_CURRENT: c_uint = 0x40;
+    pub const MDB_RESERVE: c_uint = 0x10000;
+    pub const MDB_APPEND: c_uint = 0x20000;
+    pub const MDB_APPENDDUP: c_uint = 0x40000;
+    pub const MDB_MULTIPLE: c_uint = 0x80000;
 
     // Database flags
-    pub static MDB_REVERSEKEY: c_uint = 0x02;
-    pub static MDB_DUPSORT: c_uint = 0x04;
-    pub static MDB_INTEGERKEY: c_uint = 0x08;
-    pub static MDB_DUPFIXED: c_uint = 0x10;
-    pub static MDB_INTEGERDUP: c_uint = 0x20;
-    pub static MDB_REVERSEDUP: c_uint =  0x40;
-    pub static MDB_CREATE: c_uint = 0x40000;
+    pub const MDB_REVERSEKEY: c_uint = 0x02;
+    pub const MDB_DUPSORT: c_uint = 0x04;
+    pub const MDB_INTEGERKEY: c_uint = 0x08;
+    pub const MDB_DUPFIXED: c_uint = 0x10;
+    pub const MDB_INTEGERDUP: c_uint = 0x20;
+    pub const MDB_REVERSEDUP: c_uint =  0x40;
+    pub const MDB_CREATE: c_uint = 0x40000;
 
     // Environment flags
-    pub static MDB_FIXEDMAP: c_uint =  0x01;
-    pub static MDB_NOSUBDIR: c_uint = 0x4000;
-    pub static MDB_NOSYNC: c_uint = 0x10000;
-    pub static MDB_RDONLY: c_uint = 0x20000;
-    pub static MDB_NOMETASYNC: c_uint = 0x40000;
-    pub static MDB_WRITEMAP: c_uint = 0x80000;
-    pub static MDB_MAPASYNC: c_uint = 0x100000;
-    pub static MDB_NOTLS: c_uint = 0x200000;
-    pub static MDB_NOLOCK: c_uint =  0x400000;
-    pub static MDB_NORDAHEAD: c_uint = 0x800000;
-    pub static MDB_NOMEMINIT: c_uint =  0x1000000;
+    pub const MDB_FIXEDMAP: c_uint =  0x01;
+    pub const MDB_NOSUBDIR: c_uint = 0x4000;
+    pub const MDB_NOSYNC: c_uint = 0x10000;
+    pub const MDB_RDONLY: c_uint = 0x20000;
+    pub const MDB_NOMETASYNC: c_uint = 0x40000;
+    pub const MDB_WRITEMAP: c_uint = 0x80000;
+    pub const MDB_MAPASYNC: c_uint = 0x100000;
+    pub const MDB_NOTLS: c_uint = 0x200000;
+    pub const MDB_NOLOCK: c_uint =  0x400000;
+    pub const MDB_NORDAHEAD: c_uint = 0x800000;
+    pub const MDB_NOMEMINIT: c_uint =  0x1000000;
 }
 
 
