@@ -1,5 +1,5 @@
 use std::io::fs::{mod, PathExtensions};
-use std::io::UserDir;
+use std::io::USER_DIR;
 use std::rt::unwind;
 use std::path::Path;
 
@@ -24,7 +24,7 @@ fn test_environment() {
         // it expected to produce easy traceable results
         let env = EnvBuilder::new()
             .max_readers(33)
-            .open(&path, UserDir);
+            .open(&path, USER_DIR);
 
         match env {
             Ok(mut env) => {
@@ -79,7 +79,7 @@ fn test_single_values() {
     test_db_in_path(&path, || {
         let env = EnvBuilder::new()
             .max_dbs(5)
-            .open(&path, UserDir)
+            .open(&path, USER_DIR)
             .unwrap();
 
         let db = env.get_default_db(DbFlags::empty()).unwrap();
@@ -110,7 +110,7 @@ fn test_multiple_values() {
     test_db_in_path(&path, || {
         let env = EnvBuilder::new()
             .max_dbs(5)
-            .open(&path, UserDir)
+            .open(&path, USER_DIR)
             .unwrap();
 
         let db = env.get_default_db(core::DbAllowDups).unwrap();
@@ -146,7 +146,7 @@ fn test_cursors() {
     test_db_in_path(&path, || {
         let env = EnvBuilder::new()
             .max_dbs(5)
-            .open(&path, UserDir)
+            .open(&path, USER_DIR)
             .unwrap();
 
         let db = env.get_default_db(core::DbAllowDups).unwrap();
@@ -195,7 +195,7 @@ fn test_item_iter() {
     test_db_in_path(&path, || {
         let env = EnvBuilder::new()
             .max_dbs(5)
-            .open(&path, UserDir)
+            .open(&path, USER_DIR)
             .unwrap();
 
         let db = env.get_default_db(core::DbAllowDups).unwrap();
@@ -231,7 +231,7 @@ fn test_db_creation() {
     test_db_in_path(&path, || {
         let env = EnvBuilder::new()
             .max_dbs(5)
-            .open(&path, UserDir)
+            .open(&path, USER_DIR)
             .unwrap();
         assert!(env.get_or_create_db("test-db", DbFlags::empty()).is_ok());
     });
