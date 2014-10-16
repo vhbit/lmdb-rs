@@ -21,11 +21,17 @@ use std::{mod, mem, string};
 use core::MdbValue;
 use ffi::types::MDB_val;
 
+/// `ToMdbValue` is supposed to convert a value to a memory
+/// slice which `lmdb` uses to prevent multiple copying data
+/// multiple times. May be unsafe.
 #[experimental]
 pub trait ToMdbValue<'a> {
     fn to_mdb_value(&'a self) -> MdbValue<'a>;
 }
 
+/// `FromMdbValue` is supposed to reconstruct a value from
+/// memory slice. It allows to use zero copy where it is
+/// required.
 #[experimental]
 pub trait FromMdbValue<'a> {
     fn from_mdb_value(value: &'a MdbValue<'a>) -> Self;
