@@ -55,7 +55,7 @@ fn test_environment() {
                                 match db.set(&txn, &key, &value) {
                                     Ok(_) => {
                                         match db.get::<String>(&txn, &key) {
-                                            Ok(v) => assert!(v.as_slice() == value.as_slice(), "Written {:?} and read {:?}", value.as_slice(), v.as_slice()),
+                                            Ok(v) => assert!(v.as_slice() == value.as_slice(), "Written {} and read {}", value.as_slice(), v.as_slice()),
                                             Err(err) => fail!("Failed to read value: {}", err)
                                         }
                                     },
