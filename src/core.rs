@@ -382,9 +382,9 @@ impl Database {
     }
 
     /// Returns an iterator for all values in database
-    pub fn iter<'a>(&'a self, txn: &'a ReadTransaction<'a>) -> MdbResult<CursorIter<'a>> {
+    pub fn iter<'a>(&'a self, txn: &'a ReadTransaction<'a>) -> MdbResult<CursorIterator<'a, CursorIter>> {
         txn.get_read_transaction().new_cursor(self)
-            .and_then(|c| Ok(CursorIter::new(c)))
+            .and_then(|c| Ok(CursorIterator::wrap(c, CursorIter)))
     }
 
     /// Returns an iterator for values between start_key and end_key.
@@ -392,14 +392,19 @@ impl Database {
     /// multiple items when DB created with ffi::MDB_DUPSORT).
     /// Iterator is valid while cursor is valid
     pub fn keyrange<'a, T: 'a>(&'a self, txn: &'a ReadTransaction<'a>, start_key: &'a T, end_key: &'a T)
-                                             -> MdbResult<CursorKeyRangeIter<'a>>
-                                             where T: ToMdbValue<'a> + Clone {
+                                             -> MdbResult<CursorIterator<'a, CursorKeyRangeIter>>
+        where T: ToMdbValue<'a> + Clone
+    {
         txn.get_read_transaction().new_cursor(self)
-            .and_then(|c| Ok(CursorKeyRangeIter::new(c, start_key, end_key)))
+            .and_then(|c| {
+                let key_range = CursorKeyRangeIter::new(start_key, end_key);
+                let wrap = CursorIterator::wrap(c, key_range);
+                Ok(wrap)
+            })
     }
 
     /// Returns an iterator for all items (i.e. values with same key)
-    pub fn item_iter<'a>(&'a self, txn: &'a ReadTransaction<'a>, key: &'a ToMdbValue<'a>) -> MdbResult<CursorItemIter<'a>> {
+    pub fn item_iter<'a>(&'a self, txn: &'a ReadTransaction<'a>, key: &'a ToMdbValue<'a>) -> MdbResult<CursorIterator<'a, CursorItemIter<'a>>> {
         txn.get_read_transaction().new_item_iter(self, key)
     }
 }
@@ -852,9 +857,10 @@ impl<'a> NativeTransaction<'a> {
 
     /// Creates a new item cursor, i.e. cursor which navigates all
     /// values with the same key (if AllowsDup was specified)
-    pub fn new_item_iter(&'a self, db: &'a Database, key: &'a ToMdbValue<'a>) -> MdbResult<CursorItemIter<'a>> {
+    pub fn new_item_iter(&'a self, db: &'a Database, key: &'a ToMdbValue<'a>) -> MdbResult<CursorIterator<'a, CursorItemIter>> {
         let cursor = try!(self.new_cursor(db));
-        Ok(CursorItemIter::<'a>::new(cursor, key))
+        let inner_iter = CursorItemIter::new(key);
+        Ok(CursorIterator::wrap(cursor, inner_iter))
     }
 
     /// Deletes provided database completely
@@ -1147,6 +1153,7 @@ impl<'a> Drop for Cursor<'a> {
     }
 }
 
+
 #[experimental]
 pub struct CursorValue<'cursor> {
     key: MdbValue<'cursor>,
@@ -1171,156 +1178,54 @@ impl<'cursor> CursorValue<'cursor> {
     }
 }
 
+/// This one should once become public and allow to create custom
+/// iterators
 #[experimental]
-pub struct CursorKeyRangeIter<'a> {
-    cursor: Cursor<'a>,
-    start_key: MdbValue<'a>,
-    end_key: MdbValue<'a>,
-    initialized: bool
+trait CursorIteratorInner {
+    /// Returns true if initialization successful, for example that
+    /// the key exists.
+    fn init_cursor<'a, 'b: 'a>(&'a self, cursor: &mut Cursor<'b>) -> bool;
+
+    /// Returns true if there is still data and iterator is in correct range
+    fn move_to_next(&self, cursor: &mut Cursor) -> bool;
+
+    /// Returns size hint considering current state of cursor
+    fn get_size_hint(&self, _cursor: &Cursor) -> (uint, Option<uint>) {
+        (0, None)
+    }
 }
 
 #[experimental]
-impl<'a> CursorKeyRangeIter<'a> {
-    pub fn new(cursor: Cursor<'a>, start_key: &'a ToMdbValue<'a>, end_key: &'a ToMdbValue<'a>) -> CursorKeyRangeIter<'a> {
-        CursorKeyRangeIter {
-            cursor: cursor,
-            start_key: start_key.to_mdb_value(),
-            end_key: end_key.to_mdb_value(),
-            initialized: false
+pub struct CursorIterator<'a, I> {
+    inner: I,
+    has_data: bool,
+    cursor: Cursor<'a>
+}
+
+impl<'a, I: CursorIteratorInner + 'a> CursorIterator<'a, I> {
+    fn wrap(cursor: Cursor<'a>, inner: I) -> CursorIterator<'a, I> {
+        let mut cursor = cursor;
+        let has_data = inner.init_cursor(&mut cursor);
+        CursorIterator {
+            inner: inner,
+            has_data: has_data,
+            cursor: cursor
         }
     }
 
-    // Moves out cursor for further usage
-    pub fn unwrap(self) -> Cursor<'a> {
+    #[allow(dead_code)]
+    fn unwrap(self) -> Cursor<'a> {
         self.cursor
     }
 }
 
-impl<'a> Iterator<CursorValue<'a>> for CursorKeyRangeIter<'a> {
+impl<'a, I: CursorIteratorInner + 'a> Iterator<CursorValue<'a>> for CursorIterator<'a, I> {
     fn next(&mut self) -> Option<CursorValue<'a>> {
-        let move_res = if !self.initialized {
-            self.initialized = true;
-            let tmp = MdbValue {
-                value: self.start_key.value
-            };
-            unsafe {
-                self.cursor.to_gte_key(mem::transmute::<&MdbValue, &'a MdbValue<'a>>(&tmp))
-            }
-        } else {
-            self.cursor.to_next_key()
-        };
-
-        if move_res.is_err() {
+        if !self.has_data {
             None
         } else {
             let (k, v) = self.cursor.get_plain();
-            let cmp_res = unsafe {ffi::mdb_cmp(self.cursor.txn.handle, self.cursor.db.handle, &k.value, &self.end_key.value)};
-
-            if cmp_res > 0 {
-                Some(CursorValue {
-                    key: k,
-                    value: v
-                })
-            } else {
-                None
-            }
-        }
-    }
-}
-
-#[experimental]
-pub struct CursorIter<'a> {
-    cursor: Cursor<'a>,
-    initialized: bool
-}
-
-#[experimental]
-impl<'a> CursorIter<'a> {
-    pub fn new(cursor: Cursor<'a>) -> CursorIter<'a> {
-        CursorIter {
-            cursor: cursor,
-            initialized: false
-        }
-    }
-
-    // Moves out corresponding cursor
-    pub fn unwrap(self) -> Cursor<'a> {
-        self.cursor
-    }
-}
-
-impl<'a> Iterator<CursorValue<'a>> for CursorIter<'a> {
-    fn next(&mut self) -> Option<CursorValue<'a>> {
-        let move_res = if !self.initialized {
-            self.initialized = true;
-            self.cursor.to_first()
-        } else {
-            self.cursor.to_next_key()
-        };
-
-        if move_res.is_err() {
-            None
-        } else {
-            let (k, v) = self.cursor.get_plain();
-            Some(CursorValue {
-                key: k,
-                value: v
-            })
-        }
-    }
-}
-
-
-#[experimental]
-pub struct CursorItemIter<'a> {
-    cursor: Cursor<'a>,
-    key: MdbValue<'a>,
-    cnt: Option<uint>,
-    initialized: bool
-}
-
-#[experimental]
-impl<'a> CursorItemIter<'a> {
-    pub fn new(cursor: Cursor<'a>, key: &'a ToMdbValue<'a>) -> CursorItemIter<'a> {
-        CursorItemIter {
-            cursor: cursor,
-            key: key.to_mdb_value(),
-            cnt: None,
-            initialized: false,
-        }
-    }
-
-    // Moves out corresponding cursor
-    pub fn unwrap(self) -> Cursor<'a> {
-        self.cursor
-    }
-}
-
-impl<'a> Iterator<CursorValue<'a>> for CursorItemIter<'a> {
-    fn next(&mut self) -> Option<CursorValue<'a>> {
-        let move_res = if !self.initialized {
-            self.initialized = true;
-            let tmp = MdbValue {
-                value: self.key.value
-            };
-            unsafe {
-                let res = self.cursor.to_key(mem::transmute::<&MdbValue, &'a MdbValue<'a>>(&tmp));
-                let res = res
-                    .and_then(|_| self.cursor.item_count())
-                    .and_then(|c| {
-                        self.cnt = Some(c as uint); // FIXME: uint might be not enough
-                        Ok(())
-                    });
-                res
-            }
-        } else {
-            self.cursor.to_next_item()
-        };
-
-        if move_res.is_err() {
-            None
-        } else {
-            let (k, v) = self.cursor.get_plain();
+            self.has_data = unsafe { self.inner.move_to_next(mem::transmute(&mut self.cursor)) };
             Some(CursorValue {
                 key: k,
                 value: v
@@ -1329,7 +1234,90 @@ impl<'a> Iterator<CursorValue<'a>> for CursorItemIter<'a> {
     }
 
     fn size_hint(&self) -> (uint, Option<uint>) {
-        (0, self.cnt)
+        self.inner.get_size_hint(&self.cursor)
+    }
+}
+
+#[experimental]
+pub struct CursorKeyRangeIter<'a> {
+    start_key: MdbValue<'a>,
+    end_key: MdbValue<'a>,
+}
+
+#[experimental]
+impl<'a> CursorKeyRangeIter<'a> {
+    pub fn new(start_key: &'a ToMdbValue<'a>, end_key: &'a ToMdbValue<'a>) -> CursorKeyRangeIter<'a> {
+        CursorKeyRangeIter {
+            start_key: start_key.to_mdb_value(),
+            end_key: end_key.to_mdb_value(),
+        }
+    }
+}
+
+impl<'a> CursorIteratorInner for CursorKeyRangeIter<'a> {
+    fn init_cursor<'a, 'b: 'a>(&'a self, cursor: & mut Cursor<'b>) -> bool {
+        unsafe {
+            cursor.to_gte_key(mem::transmute::<&'a MdbValue<'a>, &'b MdbValue<'b>>(&self.start_key)).is_ok()
+        }
+    }
+
+    fn move_to_next(&self, cursor: &mut Cursor) -> bool {
+        let moved = cursor.to_next_key().is_ok();
+        if !moved {
+            false
+        } else {
+            let (k, _) = cursor.get_plain();
+            let cmp_res = unsafe {ffi::mdb_cmp(cursor.txn.handle, cursor.db.handle, &k.value, &self.end_key.value)};
+            cmp_res > 0
+        }
+    }
+}
+
+
+#[experimental]
+pub struct CursorIter;
+
+#[experimental]
+impl<'a> CursorIteratorInner for CursorIter {
+    fn init_cursor<'a, 'b: 'a>(&'a self, cursor: & mut Cursor<'b>) -> bool {
+        cursor.to_first().is_ok()
+    }
+
+    fn move_to_next(&self, cursor: &mut Cursor) -> bool {
+        cursor.to_next_key().is_ok()
+    }
+}
+
+#[experimental]
+pub struct CursorItemIter<'a> {
+    key: MdbValue<'a>,
+}
+
+#[experimental]
+impl<'a> CursorItemIter<'a> {
+    pub fn new(key: &'a ToMdbValue<'a>) -> CursorItemIter<'a> {
+        CursorItemIter {
+            key: key.to_mdb_value(),
+        }
+    }
+}
+
+impl<'a> CursorIteratorInner for CursorItemIter<'a> {
+    fn init_cursor<'a, 'b: 'a>(&'a self, cursor: & mut Cursor<'b>) -> bool {
+        unsafe {
+            cursor.to_key(mem::transmute::<&MdbValue, &'b MdbValue<'b>>(&self.key)).is_ok()
+        }
+    }
+
+    fn move_to_next(&self, cursor: &mut Cursor) -> bool {
+        cursor.to_next_item().is_ok()
+    }
+
+    fn get_size_hint(&self, c: &Cursor) -> (uint, Option<uint>) {
+        match c.item_count() {
+            Err(_) => (0, None),
+            Ok(cnt) => (0, Some(cnt as uint))
+        }
     }
 }
 
