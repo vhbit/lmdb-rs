@@ -91,15 +91,15 @@ fn test_single_values() {
 
         assert!(db.get::<()>(&txn, &test_key1).is_err(), "Key shouldn't exist yet");
 
-        let _ = db.set(&txn, &test_key1, &test_data1);
+        assert!(db.set(&txn, &test_key1, &test_data1).is_ok());
         let v: String = db.get(&txn, &test_key1).unwrap();
         assert!(v.as_slice() == test_data1.as_slice(), "Data written differs from data read");
 
-        let _ = db.set(&txn, &test_key1, &test_data2);
+        assert!(db.set(&txn, &test_key1, &test_data2).is_ok());
         let v: String = db.get(&txn, &test_key1).unwrap();
         assert!(v.as_slice() == test_data2.as_slice(), "Data written differs from data read");
 
-        let _ = db.del(&txn, &test_key1);
+        assert!(db.del(&txn, &test_key1).is_ok());
         assert!(db.get::<()>(&txn, &test_key1).is_err(), "Key should be deleted");
     });
 }
@@ -122,19 +122,19 @@ fn test_multiple_values() {
 
         assert!(db.get::<()>(&txn, &test_key1).is_err(), "Key shouldn't exist yet");
 
-        let _ = db.set(&txn, &test_key1, &test_data1);
+        assert!(db.set(&txn, &test_key1, &test_data1).is_ok());
         let v: String = db.get(&txn, &test_key1).unwrap();
         assert!(v.as_slice() == test_data1.as_slice(), "Data written differs from data read");
 
-        let _ = db.set(&txn, &test_key1, &test_data2);
+        assert!(db.set(&txn, &test_key1, &test_data2).is_ok());
         let v: String = db.get(&txn, &test_key1).unwrap();
         assert!(v.as_slice() == test_data1.as_slice(), "It should still return first value");
 
-        let _ = db.del_item(&txn, &test_key1, &test_data1);
+        assert!(db.del_item(&txn, &test_key1, &test_data1).is_ok());
 
         let v: String = db.get(&txn, &test_key1).unwrap();
         assert!(v.as_slice() == test_data2.as_slice(), "It should return second value");
-        let _ = db.del(&txn, &test_key1);
+        assert!(db.del(&txn, &test_key1).is_ok());
 
         assert!(db.get::<()>(&txn, &test_key1).is_err(), "Key shouldn't exist anymore!");
     });
@@ -207,9 +207,9 @@ fn test_item_iter() {
         let test_key2 = "key2".to_string();
         let test_key3 = "key3".to_string();
 
-        let _ = db.set(&txn, &test_key1, &test_data1);
-        let _ = db.set(&txn, &test_key1, &test_data2);
-        let _ = db.set(&txn, &test_key2, &test_data1);
+        assert!(db.set(&txn, &test_key1, &test_data1).is_ok());
+        assert!(db.set(&txn, &test_key1, &test_data2).is_ok());
+        assert!(db.set(&txn, &test_key2, &test_data1).is_ok());
 
         let iter = db.item_iter(&txn, &test_key1).unwrap();
         let values: Vec<String> = iter.map(|cv| cv.get_value()).collect();
