@@ -1289,7 +1289,6 @@ impl<'a> Iterator<CursorValue<'a>> for CursorIter<'a> {
 pub struct CursorItemIter<'a> {
     cursor: Cursor<'a>,
     key: MdbValue<'a>,
-    pos: u64,
     cnt: u64,
     initialized: bool
 }
@@ -1300,10 +1299,14 @@ impl<'a> CursorItemIter<'a> {
         CursorItemIter {
             cursor: cursor,
             key: key.to_mdb_value(),
-            pos: 0,
             cnt: 0,
             initialized: false,
         }
+    }
+
+    // Moves out corresponding cursor
+    pub fn unwrap(self) -> Cursor<'a> {
+        self.cursor
     }
 }
 
@@ -1332,14 +1335,10 @@ impl<'a> Iterator<CursorValue<'a>> for CursorItemIter<'a> {
             None
         } else {
             let (k, v) = self.cursor.get_plain();
-            if self.pos < self.cnt {
-                Some(CursorValue {
-                    key: k,
-                    value: v
-                })
-            } else {
-                None
-            }
+            Some(CursorValue {
+                key: k,
+                value: v
+            })
         }
     }
 
