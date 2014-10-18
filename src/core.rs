@@ -1046,7 +1046,7 @@ impl<'a> Cursor<'a> {
     }
 
     /// Moves cursor to next item with the same key as current
-    pub fn to_next_key_item(&mut self) -> MdbResult<()> {
+    pub fn to_next_item(&mut self) -> MdbResult<()> {
         self.move_to(None::<&String>, ffi::MDB_NEXT_DUP)
     }
 
@@ -1057,17 +1057,17 @@ impl<'a> Cursor<'a> {
     }
 
     /// Moves cursor to prev item with the same key as current
-    pub fn to_prev_key_item(&mut self) -> MdbResult<()> {
+    pub fn to_prev_item(&mut self) -> MdbResult<()> {
         self.move_to(None::<&String>, ffi::MDB_PREV_DUP)
     }
 
     /// Moves cursor to first item with the same key as current
-    pub fn to_first_key_item(&mut self) -> MdbResult<()> {
+    pub fn to_first_item(&mut self) -> MdbResult<()> {
         self.move_to(None::<&String>, ffi::MDB_FIRST_DUP)
     }
 
     /// Moves cursor to last item with the same key as current
-    pub fn to_last_key_item(&mut self) -> MdbResult<()> {
+    pub fn to_last_item(&mut self) -> MdbResult<()> {
         self.move_to(None::<&String>, ffi::MDB_LAST_DUP)
     }
 
@@ -1118,8 +1118,13 @@ impl<'a> Cursor<'a> {
         lift_mdb!(unsafe { ffi::mdb_cursor_del(self.handle, flags) })
     }
 
+    /// Deletes current key
+    pub fn del(&mut self) -> MdbResult<()> {
+        self.del_all()
+    }
+
     /// Deletes only current item
-    pub fn del_single(&mut self) -> MdbResult<()> {
+    pub fn del_item(&mut self) -> MdbResult<()> {
         self.del_value(0)
     }
 
@@ -1320,7 +1325,7 @@ impl<'a> Iterator<CursorValue<'a>> for CursorItemIter<'a> {
                 res
             }
         } else {
-            self.cursor.to_next_key_item()
+            self.cursor.to_next_item()
         };
 
         if move_res.is_err() {

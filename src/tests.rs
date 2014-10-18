@@ -169,7 +169,7 @@ fn test_cursors() {
         assert!(cursor.to_key(&test_key1).is_ok());
         assert!(cursor.item_count().unwrap() == 4);
 
-        assert!(cursor.del_single().is_ok());
+        assert!(cursor.del_item().is_ok());
         assert!(cursor.item_count().unwrap() == 3);
 
         assert!(cursor.to_key(&test_key1).is_ok());
