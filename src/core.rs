@@ -1226,13 +1226,6 @@ impl<'a> Iterator<CursorValue<'a>> for CursorKeyRangeIter<'a> {
             }
         }
     }
-
-    fn size_hint(&self) -> (uint, Option<uint>) {
-        match self.cursor.item_count() {
-            Err(_) => (0, None),
-            Ok(x) => (x as uint, None)
-        }
-    }
 }
 
 #[experimental]
@@ -1275,13 +1268,6 @@ impl<'a> Iterator<CursorValue<'a>> for CursorIter<'a> {
             })
         }
     }
-
-    fn size_hint(&self) -> (uint, Option<uint>) {
-        match self.cursor.item_count() {
-            Err(_) => (0, None),
-            Ok(x) => (x as uint, None)
-        }
-    }
 }
 
 
@@ -1289,7 +1275,7 @@ impl<'a> Iterator<CursorValue<'a>> for CursorIter<'a> {
 pub struct CursorItemIter<'a> {
     cursor: Cursor<'a>,
     key: MdbValue<'a>,
-    cnt: u64,
+    cnt: Option<uint>,
     initialized: bool
 }
 
@@ -1299,7 +1285,7 @@ impl<'a> CursorItemIter<'a> {
         CursorItemIter {
             cursor: cursor,
             key: key.to_mdb_value(),
-            cnt: 0,
+            cnt: None,
             initialized: false,
         }
     }
@@ -1322,7 +1308,7 @@ impl<'a> Iterator<CursorValue<'a>> for CursorItemIter<'a> {
                 let res = res
                     .and_then(|_| self.cursor.item_count())
                     .and_then(|c| {
-                        self.cnt = c;
+                        self.cnt = Some(c as uint); // FIXME: uint might be not enough
                         Ok(())
                     });
                 res
@@ -1342,12 +1328,9 @@ impl<'a> Iterator<CursorValue<'a>> for CursorItemIter<'a> {
         }
     }
 
-    // FIXME: find a better way to initialize
-    /*
     fn size_hint(&self) -> (uint, Option<uint>) {
-        (self.cnt as uint, None)
+        (0, self.cnt)
     }
-    */
 }
 
 
