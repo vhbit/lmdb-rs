@@ -476,7 +476,7 @@ impl EnvBuilder {
         try_mdb!(unsafe { ffi::mdb_env_set_flags(env, self.flags.bits(), 1)});
 
         if let Some(map_size) = self.map_size {
-            try_mdb!(unsafe { ffi::mdb_env_set_mapsize(env, map_size)});
+            try_mdb!(unsafe { ffi::mdb_env_set_mapsize(env, map_size as size_t)});
         }
 
         if let Some(max_readers) = self.max_readers {
