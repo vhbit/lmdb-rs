@@ -1115,7 +1115,7 @@ impl<'a> Cursor<'a> {
     }
 
     #[inline]
-    fn get_plain(&mut self) -> MdbResult<(MdbValue<'a>, MdbValue<'a>)> {
+    fn ensure_key_valid(&mut self) -> MdbResult<()> {
         // If key might be invalid simply perform cursor get to be sure
         // it points to database memory instead of user one
         if !self.valid_key {
@@ -1126,34 +1126,33 @@ impl<'a> Cursor<'a> {
             }
             self.valid_key = true;
         }
+        Ok(())
+    }
 
+    #[inline]
+    fn get_plain(&mut self) -> MdbResult<(MdbValue<'a>, MdbValue<'a>)> {
+        try!(self.ensure_key_valid());
         let k = MdbValue {value: self.key_val};
         let v = MdbValue {value: self.data_val};
 
         Ok((k, v))
     }
 
-    fn set_value<'a>(&mut self, key:Option<&'a ToMdbValue<'a>>, value: &'a ToMdbValue<'a>, flags: c_uint) -> MdbResult<()> {
-        let data_val = value.to_mdb_value();
-        let key_val = unsafe {
-            match  key {
-                Some(k) => k.to_mdb_value(),
-                _ => std::mem::zeroed()
-            }
-        };
-
-        lift_mdb!(unsafe {ffi::mdb_cursor_put(self.handle, &key_val.value, &data_val.value, flags)})
+    fn set_value<'a>(&mut self, value: &'a ToMdbValue<'a>, flags: c_uint) -> MdbResult<()> {
+        try!(self.ensure_key_valid());
+        self.data_val = value.to_mdb_value().value;
+        lift_mdb!(unsafe {ffi::mdb_cursor_put(self.handle, &self.key_val, &self.data_val, flags)})
     }
 
     /// Overwrites value for current item
     /// Note: overwrites max cur_value.len() bytes
     pub fn replace<'a>(&mut self, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
-        self.set_value(None, value, ffi::MDB_CURRENT)
+        self.set_value(value, ffi::MDB_CURRENT)
     }
 
     /// Adds a new item when created with allowed duplicates
     pub fn add_item<'a>(&mut self, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
-        self.set_value(None, value, 0)
+        self.set_value(value, 0)
     }
 
     fn del_value(&mut self, flags: c_uint) -> MdbResult<()> {

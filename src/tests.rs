@@ -177,7 +177,6 @@ fn test_cursors() {
 
         assert!(cursor.replace(&new_value).is_ok());
         let (_, v): ((), String) = cursor.get().unwrap();
-
         // NOTE: this asserting will work once new_value is
         // of the same length as it is inplace change
         assert!(v.as_slice() == new_value.as_slice());
@@ -188,6 +187,48 @@ fn test_cursors() {
         assert!(cursor.to_key(&test_key2).is_ok());
     });
 }
+
+
+#[test]
+fn test_cursor_item_manip() {
+    let path = Path::new("cursors-items");
+    test_db_in_path(&path, || {
+        let env = EnvBuilder::new()
+            .max_dbs(5)
+            .open(&path, USER_DIR)
+            .unwrap();
+
+        let db = env.get_default_db(core::DbAllowDups | core::DbAllowIntDups).unwrap();
+        let txn = env.new_transaction().unwrap();
+
+        let test_key1 = "key1".to_string();
+
+        assert!(db.set(&txn, &test_key1, &3u64).is_ok());
+        let mut cursor = db.new_cursor(&txn).unwrap();
+        assert!(cursor.to_key(&test_key1).is_ok());
+
+        let values: Vec<u64> = db.item_iter(&txn, &test_key1).unwrap()
+            .map(|cv| cv.get_value())
+            .collect();
+        assert_eq!(values, vec![3u64]);
+
+        assert!(cursor.add_item(&4u64).is_ok());
+        assert!(cursor.add_item(&5u64).is_ok());
+
+        let values: Vec<u64> = db.item_iter(&txn, &test_key1).unwrap()
+            .map(|cv| cv.get_value())
+            .collect();
+        assert_eq!(values, vec![3u64, 4, 5]);
+
+        assert!(cursor.replace(&6u64).is_ok());
+        let values: Vec<u64> = db.item_iter(&txn, &test_key1).unwrap()
+            .map(|cv| cv.get_value())
+            .collect();
+
+        assert_eq!(values, vec![3u64, 4, 6]);
+    });
+}
+
 
 #[test]
 fn test_item_iter() {
