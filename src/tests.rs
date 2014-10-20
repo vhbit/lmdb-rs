@@ -175,7 +175,7 @@ fn test_cursors() {
         assert!(cursor.to_key(&test_key1).is_ok());
         let new_value = "testme".to_string();
 
-        assert!(cursor.set(&new_value).is_ok());
+        assert!(cursor.replace(&new_value).is_ok());
         let (_, v): ((), String) = cursor.get().unwrap();
 
         // NOTE: this asserting will work once new_value is

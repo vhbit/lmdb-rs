@@ -1147,16 +1147,14 @@ impl<'a> Cursor<'a> {
 
     /// Overwrites value for current item
     /// Note: overwrites max cur_value.len() bytes
-    pub fn set<'a>(&mut self, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    pub fn replace<'a>(&mut self, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
         self.set_value(None, value, ffi::MDB_CURRENT)
     }
 
-    /*
-    /// Adds a new value if it doesn't exist yet
-    pub fn upsert(&mut self, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
-        self.set_value(Some(key), value, ffi::MDB_NOOVERWRITE)
+    /// Adds a new item when created with allowed duplicates
+    pub fn add_item<'a>(&mut self, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
+        self.set_value(None, value, 0)
     }
-    */
 
     fn del_value(&mut self, flags: c_uint) -> MdbResult<()> {
         lift_mdb!(unsafe { ffi::mdb_cursor_del(self.handle, flags) })
