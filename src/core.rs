@@ -993,7 +993,8 @@ pub struct Cursor<'a> {
     data_val: ffi::MDB_val,
     key_val: ffi::MDB_val,
     txn: &'a NativeTransaction<'a>,
-    db: &'a Database
+    db: &'a Database,
+    valid_key: bool,
 }
 
 #[unstable]
@@ -1007,92 +1008,129 @@ impl<'a> Cursor<'a> {
             key_val: unsafe { std::mem::zeroed() },
             txn: txn,
             db: db,
+            valid_key: false,
         })
     }
 
-    fn move_to<T: 'a>(&mut self, key: Option<&'a T>, op: ffi::MDB_cursor_op) -> MdbResult<()>
-        where T: ToMdbValue<'a> {
-        // Even if we don't ask for any data and want only to set a position
-        // MDB still insists in writing back key and data to provided pointers
-        // it's actually not that big deal, considering no actual data copy happens
-        self.data_val = unsafe {std::mem::zeroed()};
-        self.key_val = match key {
-            Some(k) => k.to_mdb_value().value,
-            _ => unsafe {std::mem::zeroed()}
+    fn navigate(&mut self, op: ffi::MDB_cursor_op) -> MdbResult<()> {
+        self.valid_key = false;
+
+        let res = unsafe {
+            ffi::mdb_cursor_get(self.handle, &mut self.key_val, &mut self.data_val, op)
+        };
+        match res {
+            ffi::MDB_SUCCESS => {
+                // MDB_SET is the only cursor operation which doesn't
+                // writes back a new value. In this case any access to
+                // cursor key value should cause a cursor retrieval
+                // to get back pointer to database owned memory instead
+                // of value used to set the cursor as it might be
+                // already destroyed and there is no need to borrow it
+                self.valid_key = op != ffi::MDB_SET;
+                Ok(())
+            },
+            e => Err(MdbError::new_with_code(e))
+        }
+    }
+
+    fn move_to<'k, 'v, K, V>(&mut self, key: &'k K, value: Option<&'v V>, op: ffi::MDB_cursor_op) -> MdbResult<()>
+        where K: ToMdbValue<'k>, V: ToMdbValue<'v> {
+        self.key_val = key.to_mdb_value().value;
+        self.data_val = match value {
+            Some(v) => v.to_mdb_value().value,
+            _ => unsafe {std::mem::zeroed() }
         };
 
-        lift_mdb!(unsafe { ffi::mdb_cursor_get(self.handle, &mut self.key_val, &mut self.data_val, op) })
+        self.navigate(op)
     }
 
     /// Moves cursor to first entry
     pub fn to_first(&mut self) -> MdbResult<()> {
-        self.move_to(None::<&String>, ffi::MDB_FIRST)
+        self.navigate(ffi::MDB_FIRST)
     }
 
     /// Moves cursor to last entry
     pub fn to_last(&mut self) -> MdbResult<()> {
-        self.move_to(None::<&String>, ffi::MDB_LAST)
+        self.navigate(ffi::MDB_LAST)
     }
 
     /// Moves cursor to first entry for key if it exists
-    pub fn to_key<T:'a>(&mut self, key: &'a T) -> MdbResult<()> where T: ToMdbValue<'a>{
-        self.move_to(Some(key), ffi::MDB_SET)
+    pub fn to_key<'k, K: ToMdbValue<'k>>(&mut self, key: &'k K) -> MdbResult<()> {
+        self.move_to(key, None::<&MdbValue<'k>>, ffi::MDB_SET)
     }
 
     /// Moves cursor to first entry for key greater than
     /// or equal to ke
-    pub fn to_gte_key<T: 'a>(&mut self, key: &'a T) -> MdbResult<()> where T: ToMdbValue<'a>{
-        self.move_to(Some(key), ffi::MDB_SET_RANGE)
+    pub fn to_gte_key<'k, K: ToMdbValue<'k>>(&mut self, key: &'k K) -> MdbResult<()> {
+        self.move_to(key, None::<&MdbValue<'k>>, ffi::MDB_SET_RANGE)
+    }
+
+    /// Moves cursor to specific item (for example, if cursor
+    /// already points to a correct key and you need to delete
+    /// a specific item through cursor)
+    pub fn to_item<'k, 'v, K, V>(&mut self, key: &'k K, value: &'v V) -> MdbResult<()> where K: ToMdbValue<'k>, V: ToMdbValue<'v> {
+        self.move_to(key, Some(value), ffi::MDB_SET)
     }
 
     /// Moves cursor to next key, i.e. skip items
     /// with duplicate keys
     pub fn to_next_key(&mut self) -> MdbResult<()> {
-        self.move_to(None::<&String>, ffi::MDB_NEXT_NODUP)
+        self.navigate(ffi::MDB_NEXT_NODUP)
     }
 
     /// Moves cursor to next item with the same key as current
     pub fn to_next_item(&mut self) -> MdbResult<()> {
-        self.move_to(None::<&String>, ffi::MDB_NEXT_DUP)
+        self.navigate(ffi::MDB_NEXT_DUP)
     }
 
     /// Moves cursor to prev entry, i.e. skips items
     /// with duplicate keys
     pub fn to_prev_key(&mut self) -> MdbResult<()> {
-        self.move_to(None::<&String>, ffi::MDB_PREV_NODUP)
+        self.navigate(ffi::MDB_PREV_NODUP)
     }
 
     /// Moves cursor to prev item with the same key as current
     pub fn to_prev_item(&mut self) -> MdbResult<()> {
-        self.move_to(None::<&String>, ffi::MDB_PREV_DUP)
+        self.navigate(ffi::MDB_PREV_DUP)
     }
 
     /// Moves cursor to first item with the same key as current
     pub fn to_first_item(&mut self) -> MdbResult<()> {
-        self.move_to(None::<&String>, ffi::MDB_FIRST_DUP)
+        self.navigate(ffi::MDB_FIRST_DUP)
     }
 
     /// Moves cursor to last item with the same key as current
     pub fn to_last_item(&mut self) -> MdbResult<()> {
-        self.move_to(None::<&String>, ffi::MDB_LAST_DUP)
+        self.navigate(ffi::MDB_LAST_DUP)
     }
 
     /// Retrieves current key/value as tuple
     pub fn get<T: FromMdbValue<'a>, U: FromMdbValue<'a>>(&mut self) -> MdbResult<(T, U)> {
-        unsafe {
-            let mut key_val: MdbValue = std::mem::zeroed();
-            let mut data_val: MdbValue = std::mem::zeroed();
-            try_mdb!(ffi::mdb_cursor_get(self.handle, &mut key_val.value, &mut data_val.value, ffi::MDB_GET_CURRENT));
+        let (k, v) = try!(self.get_plain());
 
-            Ok((FromMdbValue::from_mdb_value(mem::transmute(&key_val)),
-                FromMdbValue::from_mdb_value(mem::transmute(&data_val))))
+        unsafe {
+            Ok((FromMdbValue::from_mdb_value(mem::transmute(&k)),
+                FromMdbValue::from_mdb_value(mem::transmute(&v))))
         }
     }
 
-    fn get_plain(&self) -> (MdbValue<'a>, MdbValue<'a>) {
-        let k: MdbValue<'a> = MdbValue { value: self.key_val };
-        let v: MdbValue<'a> = MdbValue { value: self.data_val };
-        (k, v)
+    #[inline]
+    fn get_plain(&mut self) -> MdbResult<(MdbValue<'a>, MdbValue<'a>)> {
+        // If key might be invalid simply perform cursor get to be sure
+        // it points to database memory instead of user one
+        if !self.valid_key {
+            unsafe {
+                try_mdb!(ffi::mdb_cursor_get(self.handle, &mut self.key_val,
+                                             &mut self.data_val,
+                                             ffi::MDB_GET_CURRENT));
+            }
+            self.valid_key = true;
+        }
+
+        let k = MdbValue {value: self.key_val};
+        let v = MdbValue {value: self.data_val};
+
+        Ok((k, v))
     }
 
     fn set_value<'a>(&mut self, key:Option<&'a ToMdbValue<'a>>, value: &'a ToMdbValue<'a>, flags: c_uint) -> MdbResult<()> {
@@ -1187,7 +1225,7 @@ trait CursorIteratorInner {
     fn init_cursor<'a, 'b: 'a>(&'a self, cursor: &mut Cursor<'b>) -> bool;
 
     /// Returns true if there is still data and iterator is in correct range
-    fn move_to_next(&self, cursor: &mut Cursor) -> bool;
+    fn move_to_next<'iter, 'cursor: 'iter>(&'iter self, cursor: &'cursor mut Cursor<'cursor>) -> bool;
 
     /// Returns size hint considering current state of cursor
     fn get_size_hint(&self, _cursor: &Cursor) -> (uint, Option<uint>) {
@@ -1196,14 +1234,14 @@ trait CursorIteratorInner {
 }
 
 #[experimental]
-pub struct CursorIterator<'a, I> {
+pub struct CursorIterator<'c, I> {
     inner: I,
     has_data: bool,
-    cursor: Cursor<'a>
+    cursor: Cursor<'c>,
 }
 
-impl<'a, I: CursorIteratorInner + 'a> CursorIterator<'a, I> {
-    fn wrap(cursor: Cursor<'a>, inner: I) -> CursorIterator<'a, I> {
+impl<'c, I: CursorIteratorInner + 'c> CursorIterator<'c, I> {
+    fn wrap(cursor: Cursor<'c>, inner: I) -> CursorIterator<'c, I> {
         let mut cursor = cursor;
         let has_data = inner.init_cursor(&mut cursor);
         CursorIterator {
@@ -1214,22 +1252,26 @@ impl<'a, I: CursorIteratorInner + 'a> CursorIterator<'a, I> {
     }
 
     #[allow(dead_code)]
-    fn unwrap(self) -> Cursor<'a> {
+    fn unwrap(self) -> Cursor<'c> {
         self.cursor
     }
 }
 
-impl<'a, I: CursorIteratorInner + 'a> Iterator<CursorValue<'a>> for CursorIterator<'a, I> {
-    fn next(&mut self) -> Option<CursorValue<'a>> {
+impl<'c, I: CursorIteratorInner + 'c> Iterator<CursorValue<'c>> for CursorIterator<'c, I> {
+    fn next(&mut self) -> Option<CursorValue> {
         if !self.has_data {
             None
         } else {
-            let (k, v) = self.cursor.get_plain();
-            self.has_data = unsafe { self.inner.move_to_next(mem::transmute(&mut self.cursor)) };
-            Some(CursorValue {
-                key: k,
-                value: v
-            })
+            match self.cursor.get_plain() {
+                Err(_) => None,
+                Ok((k, v)) => {
+                    self.has_data = unsafe { self.inner.move_to_next(mem::transmute(&mut self.cursor)) };
+                    Some(CursorValue {
+                        key: k,
+                        value: v
+                    })
+                }
+            }
         }
     }
 
@@ -1261,14 +1303,30 @@ impl<'a> CursorIteratorInner for CursorKeyRangeIter<'a> {
         }
     }
 
-    fn move_to_next(&self, cursor: &mut Cursor) -> bool {
+    fn move_to_next<'i, 'c: 'i>(&'i self, cursor: &'c mut Cursor<'c>) -> bool {
         let moved = cursor.to_next_key().is_ok();
         if !moved {
             false
         } else {
-            let (k, _) = cursor.get_plain();
-            let cmp_res = unsafe {ffi::mdb_cmp(cursor.txn.handle, cursor.db.handle, &k.value, &self.end_key.value)};
-            cmp_res > 0
+            // As `get_plain` borrows mutably there is no
+            // way to get comparison straight after
+            // so here goes the workaround
+            let k = match cursor.get_plain() {
+                Err(_) => None,
+                Ok((k, _)) => {
+                    Some(MdbValue {
+                        value: k.value
+                    })
+                }
+            };
+
+            match k {
+                None => false,
+                Some(k) => {
+                    let cmp_res = unsafe {ffi::mdb_cmp(cursor.txn.handle, cursor.db.handle, &k.value, &self.end_key.value)};
+                    cmp_res > 0
+                }
+            }
         }
     }
 }
@@ -1283,7 +1341,7 @@ impl<'a> CursorIteratorInner for CursorIter {
         cursor.to_first().is_ok()
     }
 
-    fn move_to_next(&self, cursor: &mut Cursor) -> bool {
+    fn move_to_next<'i, 'c: 'i>(&'i self, cursor: &'c mut Cursor<'c>) -> bool {
         cursor.to_next_key().is_ok()
     }
 }
@@ -1309,7 +1367,7 @@ impl<'a> CursorIteratorInner for CursorItemIter<'a> {
         }
     }
 
-    fn move_to_next(&self, cursor: &mut Cursor) -> bool {
+    fn move_to_next<'i, 'c: 'i>(&'i self, cursor: &'c mut Cursor<'c>) -> bool {
         cursor.to_next_item().is_ok()
     }
 

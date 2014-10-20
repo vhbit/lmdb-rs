@@ -316,6 +316,7 @@ pub mod types {
     }
 
     #[repr(C)]
+    #[deriving(Eq, PartialEq)]
     pub enum MDB_cursor_op {
         MDB_FIRST,
         MDB_FIRST_DUP,
