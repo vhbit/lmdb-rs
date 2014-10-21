@@ -467,9 +467,9 @@ impl EnvBuilder {
 
     /// Opens environment in specified path
     pub fn open(self, path: &Path, perms: FilePermission) -> MdbResult<Environment> {
-        let env: *const ffi::MDB_env = ptr::null();
+        let env: *mut ffi::MDB_env = ptr::null_mut();
         unsafe {
-            let p_env: *mut *const ffi::MDB_env = std::mem::transmute(&env);
+            let p_env: *mut *mut ffi::MDB_env = std::mem::transmute(&env);
             let _ = try_mdb!(ffi::mdb_env_create(p_env));
         }
 
@@ -534,7 +534,7 @@ impl EnvBuilder {
 /// Represents LMDB Environment. Should be opened using `EnvBuilder`
 #[unstable]
 pub struct Environment {
-    env: *const ffi::MDB_env,
+    env: *mut ffi::MDB_env,
     db_cache: Mutex<UnsafeCell<HashMap<String, Database>>>,
 }
 
@@ -544,7 +544,7 @@ impl Environment {
         EnvBuilder::new()
     }
 
-    fn from_raw(env: *const ffi::MDB_env) -> Environment {
+    fn from_raw(env: *mut ffi::MDB_env) -> Environment {
         Environment {
             env: env,
             db_cache: Mutex::new(UnsafeCell::new(HashMap::new())),
@@ -619,10 +619,10 @@ impl Environment {
     }
 
     fn create_transaction(&self, parent: Option<NativeTransaction>, flags: c_uint) -> MdbResult<NativeTransaction> {
-        let mut handle: *const ffi::MDB_txn = ptr::null();
+        let mut handle: *mut ffi::MDB_txn = ptr::null_mut();
         let parent_handle = match parent {
             Some(t) => t.handle,
-            _ => ptr::null()
+            _ => ptr::null_mut()
         };
 
         lift_mdb!(unsafe { ffi::mdb_txn_begin(self.env, parent_handle, flags, &mut handle) },
@@ -715,14 +715,14 @@ enum TransactionState {
 
 #[experimental]
 pub struct NativeTransaction<'a> {
-    handle: *const ffi::MDB_txn,
+    handle: *mut ffi::MDB_txn,
     flags: uint,
     state: TransactionState,
 }
 
 #[experimental]
 impl<'a> NativeTransaction<'a> {
-    fn new_with_handle(h: *const ffi::MDB_txn, flags: uint) -> NativeTransaction<'a> {
+    fn new_with_handle(h: *mut ffi::MDB_txn, flags: uint) -> NativeTransaction<'a> {
         NativeTransaction {
             handle: h,
             flags: flags,
@@ -777,7 +777,7 @@ impl<'a> NativeTransaction<'a> {
     }
 
     fn new_child(&self, flags: c_uint) -> MdbResult<NativeTransaction> {
-        let mut out: *const ffi::MDB_txn = ptr::null();
+        let mut out: *mut ffi::MDB_txn = ptr::null_mut();
         try_mdb!(unsafe { ffi::mdb_txn_begin(ffi::mdb_txn_env(self.handle), self.handle, flags, &mut out) });
         Ok(NativeTransaction::new_with_handle(out, flags as uint))
     }
@@ -789,10 +789,10 @@ impl<'a> NativeTransaction<'a> {
     }
 
     fn get_value<T: FromMdbValue<'a>>(&'a self, db: &Database, key: &'a ToMdbValue<'a>) -> MdbResult<T> {
-        let key_val = key.to_mdb_value();
+        let mut key_val = key.to_mdb_value();
         unsafe {
             let mut data_val: MdbValue = std::mem::zeroed();
-            try_mdb!(ffi::mdb_get(self.handle, db.handle, &key_val.value, &mut data_val.value));
+            try_mdb!(ffi::mdb_get(self.handle, db.handle, &mut key_val.value, &mut data_val.value));
             Ok(FromMdbValue::from_mdb_value(mem::transmute(&data_val)))
         }
     }
@@ -808,10 +808,10 @@ impl<'a> NativeTransaction<'a> {
 
     fn set_value_with_flags<'a>(&'a self, db: &Database, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>, flags: c_uint) -> MdbResult<()> {
         unsafe {
-            let key_val = key.to_mdb_value();
-            let data_val = value.to_mdb_value();
+            let mut key_val = key.to_mdb_value();
+            let mut data_val = value.to_mdb_value();
 
-            lift_mdb!(ffi::mdb_put(self.handle, db.handle, &key_val.value, &data_val.value, flags))
+            lift_mdb!(ffi::mdb_put(self.handle, db.handle, &mut key_val.value, &mut data_val.value, flags))
         }
     }
 
@@ -828,8 +828,8 @@ impl<'a> NativeTransaction<'a> {
     /// Deletes all values by key
     fn del_value<'a>(&'a self, db: &Database, key: &'a ToMdbValue<'a>) -> MdbResult<()> {
         unsafe {
-            let key_val = key.to_mdb_value();
-            lift_mdb!(ffi::mdb_del(self.handle, db.handle, &key_val.value, std::ptr::null()))
+            let mut key_val = key.to_mdb_value();
+            lift_mdb!(ffi::mdb_del(self.handle, db.handle, &mut key_val.value, ptr::null_mut()))
         }
     }
 
@@ -837,10 +837,10 @@ impl<'a> NativeTransaction<'a> {
     pub fn del_item<'a>(&'a self, db: &Database, key: &'a ToMdbValue<'a>, data: &'a ToMdbValue<'a>) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         unsafe {
-            let key_val = key.to_mdb_value();
-            let data_val = data.to_mdb_value();
+            let mut key_val = key.to_mdb_value();
+            let mut data_val = data.to_mdb_value();
 
-            lift_mdb!(ffi::mdb_del(self.handle, db.handle, &key_val.value, &data_val.value))
+            lift_mdb!(ffi::mdb_del(self.handle, db.handle, &mut key_val.value, &mut data_val.value))
         }
     }
 
@@ -989,7 +989,7 @@ impl<'a> Drop for ReadonlyTransaction<'a> {
 
 #[unstable]
 pub struct Cursor<'a> {
-    handle: *const ffi::MDB_cursor,
+    handle: *mut ffi::MDB_cursor,
     data_val: ffi::MDB_val,
     key_val: ffi::MDB_val,
     txn: &'a NativeTransaction<'a>,
@@ -1000,7 +1000,7 @@ pub struct Cursor<'a> {
 #[unstable]
 impl<'a> Cursor<'a> {
     fn new(txn: &'a NativeTransaction, db: &'a Database) -> MdbResult<Cursor<'a>> {
-        let mut tmp: *const ffi::MDB_cursor = std::ptr::null();
+        let mut tmp: *mut ffi::MDB_cursor = std::ptr::null_mut();
         try_mdb!(unsafe { ffi::mdb_cursor_open(txn.handle, db.handle, &mut tmp) });
         Ok(Cursor {
             handle: tmp,
@@ -1141,7 +1141,7 @@ impl<'a> Cursor<'a> {
     fn set_value<'a>(&mut self, value: &'a ToMdbValue<'a>, flags: c_uint) -> MdbResult<()> {
         try!(self.ensure_key_valid());
         self.data_val = value.to_mdb_value().value;
-        lift_mdb!(unsafe {ffi::mdb_cursor_put(self.handle, &self.key_val, &self.data_val, flags)})
+        lift_mdb!(unsafe {ffi::mdb_cursor_put(self.handle, &mut self.key_val, &mut self.data_val, flags)})
     }
 
     /// Overwrites value for current item
@@ -1319,8 +1319,11 @@ impl<'a> CursorIteratorInner for CursorKeyRangeIter<'a> {
 
             match k {
                 None => false,
-                Some(k) => {
-                    let cmp_res = unsafe {ffi::mdb_cmp(cursor.txn.handle, cursor.db.handle, &k.value, &self.end_key.value)};
+                Some(mut k) => {
+                    let cmp_res = unsafe {
+                        ffi::mdb_cmp(cursor.txn.handle, cursor.db.handle,
+                                     &mut k.value, mem::transmute(&self.end_key.value))
+                    };
                     cmp_res > 0
                 }
             }
