@@ -34,12 +34,12 @@ fn test_environment() {
 
         let txn = env.new_transaction().unwrap();
         let db = txn.get_default_db(DbFlags::empty()).unwrap();
-        let key = "hello".to_string();
-        let value = "world".to_string();
+        let key = "hello";
+        let value = "world";
 
         db.set(&key, &value).unwrap();
 
-        let v = db.get::<String>(&key).unwrap();
+        let v = db.get::<&str>(&key).unwrap();
         assert!(v.as_slice() == value.as_slice(), "Written {} and read {}", value.as_slice(), v.as_slice());
     });
 }
@@ -56,18 +56,18 @@ fn test_single_values() {
         let txn = env.new_transaction().unwrap();
         let db = txn.get_default_db(DbFlags::empty()).unwrap();
 
-        let test_key1 = "key1".to_string();
-        let test_data1 = "value1".to_string();
-        let test_data2 = "value2".to_string();
+        let test_key1 = "key1";
+        let test_data1 = "value1";
+        let test_data2 = "value2";
 
         assert!(db.get::<()>(&test_key1).is_err(), "Key shouldn't exist yet");
 
         assert!(db.set(&test_key1, &test_data1).is_ok());
-        let v: String = db.get(&test_key1).unwrap();
+        let v = db.get::<&str>(&test_key1).unwrap();
         assert!(v.as_slice() == test_data1.as_slice(), "Data written differs from data read");
 
         assert!(db.set(&test_key1, &test_data2).is_ok());
-        let v: String = db.get(&test_key1).unwrap();
+        let v = db.get::<&str>(&test_key1).unwrap();
         assert!(v.as_slice() == test_data2.as_slice(), "Data written differs from data read");
 
         assert!(db.del(&test_key1).is_ok());
@@ -87,23 +87,23 @@ fn test_multiple_values() {
         let txn = env.new_transaction().unwrap();
         let db = txn.get_default_db(core::DbAllowDups).unwrap();
 
-        let test_key1 = "key1".to_string();
-        let test_data1 = "value1".to_string();
-        let test_data2 = "value2".to_string();
+        let test_key1 = "key1";
+        let test_data1 = "value1";
+        let test_data2 = "value2";
 
         assert!(db.get::<()>(&test_key1).is_err(), "Key shouldn't exist yet");
 
         assert!(db.set(&test_key1, &test_data1).is_ok());
-        let v: String = db.get(&test_key1).unwrap();
+        let v = db.get::<&str>(&test_key1).unwrap();
         assert!(v.as_slice() == test_data1.as_slice(), "Data written differs from data read");
 
         assert!(db.set(&test_key1, &test_data2).is_ok());
-        let v: String = db.get(&test_key1).unwrap();
+        let v = db.get::<&str>(&test_key1).unwrap();
         assert!(v.as_slice() == test_data1.as_slice(), "It should still return first value");
 
-        assert!(db.del_item( &test_key1, &test_data1).is_ok());
+        assert!(db.del_item(&test_key1, &test_data1).is_ok());
 
-        let v: String = db.get(&test_key1).unwrap();
+        let v = db.get::<&str>(&test_key1).unwrap();
         assert!(v.as_slice() == test_data2.as_slice(), "It should return second value");
         assert!(db.del(&test_key1).is_ok());
 
@@ -123,9 +123,9 @@ fn test_cursors() {
         let txn = env.new_transaction().unwrap();
         let db = txn.get_default_db(core::DbAllowDups).unwrap();
 
-        let test_key1 = "key1".to_string();
-        let test_key2 = "key2".to_string();
-        let test_values: Vec<String> = vec!("value1".to_string(), "value2".to_string(), "value3".to_string(), "value4".to_string());
+        let test_key1 = "key1";
+        let test_key2 = "key2";
+        let test_values: Vec<&str> = vec!("value1", "value2", "value3", "value4");
 
         assert!(db.get::<()>(&test_key1).is_err(), "Key shouldn't exist yet");
 
@@ -144,13 +144,15 @@ fn test_cursors() {
         assert!(cursor.item_count().unwrap() == 3);
 
         assert!(cursor.to_key(&test_key1).is_ok());
-        let new_value = "testme".to_string();
+        let new_value = "testme";
 
         assert!(cursor.replace(&new_value).is_ok());
-        let (_, v): ((), String) = cursor.get().unwrap();
-        // NOTE: this asserting will work once new_value is
-        // of the same length as it is inplace change
-        assert!(v.as_slice() == new_value.as_slice());
+        {
+            let (_, v) = cursor.get::<(), &str>().unwrap();
+            // NOTE: this asserting will work once new_value is
+            // of the same length as it is inplace change
+            assert!(v.as_slice() == new_value.as_slice());
+        }
 
         assert!(cursor.del_all().is_ok());
         assert!(cursor.to_key(&test_key1).is_err());
@@ -172,14 +174,14 @@ fn test_cursor_item_manip() {
         let txn = env.new_transaction().unwrap();
         let db = txn.get_default_db(core::DbAllowDups | core::DbAllowIntDups).unwrap();
 
-        let test_key1 = "key1".to_string();
+        let test_key1 = "key1";
 
         assert!(db.set(&test_key1, &3u64).is_ok());
         let mut cursor = db.new_cursor().unwrap();
         assert!(cursor.to_key(&test_key1).is_ok());
 
         let values: Vec<u64> = db.item_iter(&test_key1).unwrap()
-            .map(|cv| cv.get_value())
+            .map(|cv| *cv.get_value::<u64>())
             .collect();
         assert_eq!(values, vec![3u64]);
 
@@ -187,19 +189,22 @@ fn test_cursor_item_manip() {
         assert!(cursor.add_item(&5u64).is_ok());
 
         let values: Vec<u64> = db.item_iter(&test_key1).unwrap()
-            .map(|cv| cv.get_value())
+            .map(|cv| *cv.get_value::<u64>())
             .collect();
         assert_eq!(values, vec![3u64, 4, 5]);
 
         assert!(cursor.replace(&6u64).is_ok());
         let values: Vec<u64> = db.item_iter(&test_key1).unwrap()
-            .map(|cv| cv.get_value())
+            .map(|cv| *cv.get_value::<u64>())
             .collect();
 
         assert_eq!(values, vec![3u64, 4, 6]);
     });
 }
 
+fn as_slices(v: &Vec<String>) -> Vec<&str> {
+    v.iter().map(|s| s.as_slice()).collect::<Vec<&str>>()
+}
 
 #[test]
 fn test_item_iter() {
@@ -213,26 +218,26 @@ fn test_item_iter() {
         let txn = env.new_transaction().unwrap();
         let db = txn.get_default_db(core::DbAllowDups).unwrap();
 
-        let test_key1 = "key1".to_string();
-        let test_data1 = "value1".to_string();
-        let test_data2 = "value2".to_string();
-        let test_key2 = "key2".to_string();
-        let test_key3 = "key3".to_string();
+        let test_key1 = "key1";
+        let test_data1 = "value1";
+        let test_data2 = "value2";
+        let test_key2 = "key2";
+        let test_key3 = "key3";
 
         assert!(db.set(&test_key1, &test_data1).is_ok());
         assert!(db.set(&test_key1, &test_data2).is_ok());
         assert!(db.set(&test_key2, &test_data1).is_ok());
 
         let iter = db.item_iter(&test_key1).unwrap();
-        let values: Vec<String> = iter.map(|cv| cv.get_value()).collect();
-        assert_eq!(values.as_slice(), vec![test_data1.clone(), test_data2.clone()].as_slice());
+        let values: Vec<String> = iter.map(|cv| cv.get_value::<String>().to_owned()).collect();
+        assert_eq!(as_slices(&values).as_slice(), vec![test_data1, test_data2].as_slice());
 
         let iter = db.item_iter(&test_key2).unwrap();
-        let values: Vec<String> = iter.map(|cv| cv.get_value()).collect();
-        assert_eq!(values.as_slice(), vec![test_data1.clone()].as_slice());
+        let values: Vec<String> = iter.map(|cv| cv.get_value::<String>().to_owned()).collect();
+        assert_eq!(as_slices(&values).as_slice(), vec![test_data1].as_slice());
 
         let iter = db.item_iter(&test_key3).unwrap();
-        let values: Vec<String> = iter.map(|cv| cv.get_value()).collect();
+        let values: Vec<String> = iter.map(|cv| cv.get_value::<String>().to_owned()).collect();
         assert_eq!(values.len(), 0);
     });
 }
@@ -266,39 +271,23 @@ fn test_read_only_txn() {
 
 /*
 #[test]
-fn test_env_clone() {
-let path = Path::new("clone");
-test_db_in_path(&path, || {
-let mut env = Environment::new().unwrap();
-assert!(env.set_maxdbs(5).is_ok());
-assert!(env.open(&path, EnvFlags::empty(), 0o755).is_ok());
+fn test_compilation_of_moved_items() {
+    let path = Path::new("dbcom");
+    test_db_in_path(&path, || {
+        let mut env = EnvBuilder::new()
+            .max_dbs(5)
+            .open(&path, USER_DIR)
+            .unwrap();
 
-let env2 = env;
+        let db = env.get_default_db(DbFlags::empty()).unwrap();
+        let mut txn = env.new_transaction().unwrap();
 
-env.set_maxdbs(4);
-        });
-    }
-     */
+        txn.commit();
 
-    /*
+        let test_key1 = "key1";
+        let test_data1 = "value1";
 
-    #[test]
-    fn test_compilation_of_moved_items() {
-        let path = Path::new("dbcom");
-        test_db_in_path(&path, || {
-            let mut env = Environment::new().unwrap();
-            assert!(env.set_maxdbs(5).is_ok());
-            assert!(env.open(&path, 0, 0o755).is_ok());
-
-            let db = env.get_default_db(0).unwrap();
-            let mut txn = env.new_transaction().unwrap();
-
-            txn.commit();
-
-            let test_key1 = "key1";
-            let test_data1 = "value1";
-
-            assert!(txn.get::<()>(&db, &test_key1).is_err(), "Key shouldn't exist yet");
-        })
-    }
-     */
+        assert!(db.get::<()>(&txn, &test_key1).is_err(), "Key shouldn't exist yet"); // ~ERROR: use of moved value
+    })
+}
+*/

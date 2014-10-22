@@ -359,22 +359,22 @@ impl<'a> Database<'a> {
     }
 
     /// Retrieves a value by key. In case of DbAllowDups it will be the first value
-    pub fn get<T: FromMdbValue<'a>>(&'a self, key: &'a ToMdbValue<'a>) -> MdbResult<T> {
+    pub fn get<V: FromMdbValue<'a, V>+'a>(&'a self, key: &ToMdbValue) -> MdbResult<MdbWrapper<'a, V>> {
         self.txn.get(self.handle, key)
     }
 
     /// Sets value for key. In case of DbAllowDups it will add a new item
-    pub fn set<'a>(&self, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    pub fn set<K: ToMdbValue, V: ToMdbValue>(&self, key: &K, value: &V) -> MdbResult<()> {
         self.txn.set(self.handle, key, value)
     }
 
     /// Deletes value for key.
-    pub fn del<'a>(&self, key: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    pub fn del<K: ToMdbValue>(&self, key: &K) -> MdbResult<()> {
         self.txn.del(self.handle, key)
     }
 
     /// Should be used only with DbAllowDups. Deletes corresponding (key, value)
-    pub fn del_item<'a>(&self, key: &'a ToMdbValue<'a>, data: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    pub fn del_item<'a>(&self, key: &ToMdbValue, data: &ToMdbValue) -> MdbResult<()> {
         self.txn.del_item(self.handle, key, data)
     }
 
@@ -403,9 +403,8 @@ impl<'a> Database<'a> {
     /// Currently it works only for unique keys (i.e. it will skip
     /// multiple items when DB created with ffi::MDB_DUPSORT).
     /// Iterator is valid while cursor is valid
-    pub fn keyrange<'a, T: 'a>(&'a self, start_key: &'a T, end_key: &'a T)
-                               -> MdbResult<CursorIterator<'a, CursorKeyRangeIter>>
-                               where T: ToMdbValue<'a> + Clone
+    pub fn keyrange<'c, 'db: 'c, K: ToMdbValue + 'c>(&'db self, start_key: &'c K, end_key: &'c K)
+                               -> MdbResult<CursorIterator<'c, CursorKeyRangeIter>>
     {
         self.txn.new_cursor(self.handle)
             .and_then(|c| {
@@ -416,7 +415,7 @@ impl<'a> Database<'a> {
     }
 
     /// Returns an iterator for all items (i.e. values with same key)
-    pub fn item_iter<'a>(&'a self, key: &'a ToMdbValue<'a>) -> MdbResult<CursorIterator<'a, CursorItemIter<'a>>> {
+    pub fn item_iter<'c, 'db: 'c, K: ToMdbValue>(&'db self, key: &K) -> MdbResult<CursorIterator<'c, CursorItemIter<'c>>> {
         self.txn.new_item_iter(self.handle, key)
     }
 }
@@ -565,7 +564,7 @@ impl Environment {
     }
 
     /// Sync environment to disk
-    pub fn sync(&mut self, force: bool) -> MdbResult<()> {
+    pub fn sync(&self, force: bool) -> MdbResult<()> {
         lift_mdb!(unsafe { ffi::mdb_env_sync(self.env, if force {1} else {0})})
     }
 
@@ -831,25 +830,25 @@ impl<'a> NativeTransaction<'a> {
         self.state = TransactionState::Invalid;
     }
 
-    fn get_value<T: FromMdbValue<'a>>(&'a self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>) -> MdbResult<T> {
+    fn get_value<V: FromMdbValue<'a, V> + 'a>(&'a self, db: ffi::MDB_dbi, key: &ToMdbValue) -> MdbResult<MdbWrapper<'a, V>> {
         let mut key_val = key.to_mdb_value();
         unsafe {
             let mut data_val: MdbValue = std::mem::zeroed();
             try_mdb!(ffi::mdb_get(self.handle, db, &mut key_val.value, &mut data_val.value));
-            Ok(FromMdbValue::from_mdb_value(mem::transmute(&data_val)))
+            Ok(MdbWrapper::new(FromMdbValue::from_mdb_value(mem::transmute(&data_val))))
         }
     }
 
-    fn get<'a, T: FromMdbValue<'a>>(&'a self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>) -> MdbResult<T> {
+    fn get<'a, V: FromMdbValue<'a, V>+'a>(&'a self, db: ffi::MDB_dbi, key: &ToMdbValue) -> MdbResult<MdbWrapper<'a, V>> {
         assert_state_eq!(txn, self.state, TransactionState::Normal);
         self.get_value(db, key)
     }
 
-    fn set_value<'a>(&self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    fn set_value<'a>(&self, db: ffi::MDB_dbi, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
         self.set_value_with_flags(db, key, value, 0)
     }
 
-    fn set_value_with_flags<'a>(&self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>, flags: c_uint) -> MdbResult<()> {
+    fn set_value_with_flags<'a>(&self, db: ffi::MDB_dbi, key: &ToMdbValue, value: &ToMdbValue, flags: c_uint) -> MdbResult<()> {
         unsafe {
             let mut key_val = key.to_mdb_value();
             let mut data_val = value.to_mdb_value();
@@ -863,13 +862,13 @@ impl<'a> NativeTransaction<'a> {
     // FIXME: add explicit append function
     // FIXME: think about creating explicit separation of
     // all traits for databases with dup keys
-    fn set<'a>(&self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    fn set<'a>(&self, db: ffi::MDB_dbi, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TransactionState::Normal);
         self.set_value(db, key, value)
     }
 
     /// Deletes all values by key
-    fn del_value<'a>(&self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    fn del_value<'a>(&self, db: ffi::MDB_dbi, key: &ToMdbValue) -> MdbResult<()> {
         unsafe {
             let mut key_val = key.to_mdb_value();
             lift_mdb!(ffi::mdb_del(self.handle, db, &mut key_val.value, ptr::null_mut()))
@@ -877,7 +876,7 @@ impl<'a> NativeTransaction<'a> {
     }
 
     /// If duplicate keys are allowed deletes value for key which is equal to data
-    fn del_item<'a>(&self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>, data: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    fn del_item<'a>(&self, db: ffi::MDB_dbi, key: &ToMdbValue, data: &ToMdbValue) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TransactionState::Normal);
         unsafe {
             let mut key_val = key.to_mdb_value();
@@ -888,7 +887,7 @@ impl<'a> NativeTransaction<'a> {
     }
 
     /// Deletes all values for key
-    fn del<'a>(&self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    fn del<'a>(&self, db: ffi::MDB_dbi, key: &ToMdbValue) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TransactionState::Normal);
         self.del_value(db, key)
     }
@@ -900,7 +899,7 @@ impl<'a> NativeTransaction<'a> {
 
     /// Creates a new item cursor, i.e. cursor which navigates all
     /// values with the same key (if AllowsDup was specified)
-    fn new_item_iter(&'a self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>) -> MdbResult<CursorIterator<'a, CursorItemIter>> {
+    fn new_item_iter<K: ToMdbValue>(&'a self, db: ffi::MDB_dbi, key: &K) -> MdbResult<CursorIterator<'a, CursorItemIter>> {
         let cursor = try!(self.new_cursor(db));
         let inner_iter = CursorItemIter::new(key);
         Ok(CursorIterator::wrap(cursor, inner_iter))
@@ -935,11 +934,6 @@ impl<'a> NativeTransaction<'a> {
 
 #[unstable]
 pub struct Transaction<'a> {
-    inner: NativeTransaction<'a>,
-}
-
-#[unstable]
-pub struct ReadonlyTransaction<'a> {
     inner: NativeTransaction<'a>,
 }
 
@@ -996,6 +990,11 @@ impl<'a> Drop for Transaction<'a> {
 }
 
 #[unstable]
+pub struct ReadonlyTransaction<'a> {
+    inner: NativeTransaction<'a>,
+}
+
+#[unstable]
 impl<'a> ReadonlyTransaction<'a> {
     fn new_with_native(txn: NativeTransaction<'a>) -> ReadonlyTransaction<'a> {
         ReadonlyTransaction {
@@ -1048,18 +1047,18 @@ impl<'a> Drop for ReadonlyTransaction<'a> {
 }
 
 #[unstable]
-pub struct Cursor<'a> {
+pub struct Cursor<'txn> {
     handle: *mut ffi::MDB_cursor,
     data_val: ffi::MDB_val,
     key_val: ffi::MDB_val,
-    txn: &'a NativeTransaction<'a>,
+    txn: &'txn NativeTransaction<'txn>,
     db: ffi::MDB_dbi,
     valid_key: bool,
 }
 
 #[unstable]
-impl<'a> Cursor<'a> {
-    fn new(txn: &'a NativeTransaction, db: ffi::MDB_dbi) -> MdbResult<Cursor<'a>> {
+impl<'txn> Cursor<'txn> {
+    fn new(txn: &'txn NativeTransaction, db: ffi::MDB_dbi) -> MdbResult<Cursor<'txn>> {
         let mut tmp: *mut ffi::MDB_cursor = std::ptr::null_mut();
         try_mdb!(unsafe { ffi::mdb_cursor_open(txn.handle, db, &mut tmp) });
         Ok(Cursor {
@@ -1093,8 +1092,8 @@ impl<'a> Cursor<'a> {
         }
     }
 
-    fn move_to<'k, 'v, K, V>(&mut self, key: &'k K, value: Option<&'v V>, op: ffi::MDB_cursor_op) -> MdbResult<()>
-        where K: ToMdbValue<'k>, V: ToMdbValue<'v> {
+    fn move_to<K, V>(&mut self, key: &K, value: Option<&V>, op: ffi::MDB_cursor_op) -> MdbResult<()>
+        where K: ToMdbValue, V: ToMdbValue {
         self.key_val = key.to_mdb_value().value;
         self.data_val = match value {
             Some(v) => v.to_mdb_value().value,
@@ -1115,20 +1114,20 @@ impl<'a> Cursor<'a> {
     }
 
     /// Moves cursor to first entry for key if it exists
-    pub fn to_key<'k, K: ToMdbValue<'k>>(&mut self, key: &'k K) -> MdbResult<()> {
+    pub fn to_key<'k, K: ToMdbValue>(&mut self, key: &'k K) -> MdbResult<()> {
         self.move_to(key, None::<&MdbValue<'k>>, ffi::MDB_cursor_op::MDB_SET)
     }
 
     /// Moves cursor to first entry for key greater than
     /// or equal to ke
-    pub fn to_gte_key<'k, K: ToMdbValue<'k>>(&mut self, key: &'k K) -> MdbResult<()> {
+    pub fn to_gte_key<'k, K: ToMdbValue>(&mut self, key: &'k K) -> MdbResult<()> {
         self.move_to(key, None::<&MdbValue<'k>>, ffi::MDB_cursor_op::MDB_SET_RANGE)
     }
 
     /// Moves cursor to specific item (for example, if cursor
     /// already points to a correct key and you need to delete
     /// a specific item through cursor)
-    pub fn to_item<'k, 'v, K, V>(&mut self, key: &'k K, value: &'v V) -> MdbResult<()> where K: ToMdbValue<'k>, V: ToMdbValue<'v> {
+    pub fn to_item<K, V>(&mut self, key: &K, value: & V) -> MdbResult<()> where K: ToMdbValue, V: ToMdbValue {
         self.move_to(key, Some(value), ffi::MDB_cursor_op::MDB_SET)
     }
 
@@ -1165,12 +1164,30 @@ impl<'a> Cursor<'a> {
     }
 
     /// Retrieves current key/value as tuple
-    pub fn get<T: FromMdbValue<'a>, U: FromMdbValue<'a>>(&mut self) -> MdbResult<(T, U)> {
+    pub fn get<'a, T: FromMdbValue<'a, T>+'a, U: FromMdbValue<'a, U>+'a>(&'a mut self) -> MdbResult<(MdbWrapper<'a, T>, MdbWrapper<'a, U>)> {
         let (k, v) = try!(self.get_plain());
 
         unsafe {
-            Ok((FromMdbValue::from_mdb_value(mem::transmute(&k)),
-                FromMdbValue::from_mdb_value(mem::transmute(&v))))
+            Ok((MdbWrapper::new(FromMdbValue::from_mdb_value(mem::transmute(&k))),
+                MdbWrapper::new(FromMdbValue::from_mdb_value(mem::transmute(&v)))))
+        }
+    }
+
+    /// Retrieves current value
+    pub fn get_value<'a, V: FromMdbValue<'a, V>+'a>(&'a mut self) -> MdbResult<MdbWrapper<'a, V>> {
+        let (_, v) = try!(self.get_plain());
+
+        unsafe {
+            Ok(MdbWrapper::new(FromMdbValue::from_mdb_value(mem::transmute(&v))))
+        }
+    }
+
+    /// Retrieves current key
+    pub fn get_key<'a, K: FromMdbValue<'a, K>+'a>(&'a mut self) -> MdbResult<MdbWrapper<'a, K>> {
+        let (k, _) = try!(self.get_plain());
+
+        unsafe {
+            Ok(MdbWrapper::new(FromMdbValue::from_mdb_value(mem::transmute(&k))))
         }
     }
 
@@ -1190,7 +1207,7 @@ impl<'a> Cursor<'a> {
     }
 
     #[inline]
-    fn get_plain(&mut self) -> MdbResult<(MdbValue<'a>, MdbValue<'a>)> {
+    fn get_plain(&mut self) -> MdbResult<(MdbValue<'txn>, MdbValue<'txn>)> {
         try!(self.ensure_key_valid());
         let k = MdbValue {value: self.key_val};
         let v = MdbValue {value: self.data_val};
@@ -1198,20 +1215,28 @@ impl<'a> Cursor<'a> {
         Ok((k, v))
     }
 
-    fn set_value<'a>(&mut self, value: &'a ToMdbValue<'a>, flags: c_uint) -> MdbResult<()> {
+    fn set_value<V: ToMdbValue>(&mut self, value: &V, flags: c_uint) -> MdbResult<()> {
         try!(self.ensure_key_valid());
         self.data_val = value.to_mdb_value().value;
         lift_mdb!(unsafe {ffi::mdb_cursor_put(self.handle, &mut self.key_val, &mut self.data_val, flags)})
     }
 
+    pub fn set<K: ToMdbValue, V: ToMdbValue>(&mut self, key: &K, value: &V, flags: c_uint) -> MdbResult<()> {
+        self.key_val = key.to_mdb_value().value;
+        self.valid_key = true;
+        let res = self.set_value(value, flags);
+        self.valid_key = false;
+        res
+    }
+
     /// Overwrites value for current item
     /// Note: overwrites max cur_value.len() bytes
-    pub fn replace<'a>(&mut self, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    pub fn replace<V: ToMdbValue>(&mut self, value: &V) -> MdbResult<()> {
         self.set_value(value, ffi::MDB_CURRENT)
     }
 
     /// Adds a new item when created with allowed duplicates
-    pub fn add_item<'a>(&mut self, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    pub fn add_item<V: ToMdbValue>(&mut self, value: &V) -> MdbResult<()> {
         self.set_value(value, 0)
     }
 
@@ -1239,15 +1264,53 @@ impl<'a> Cursor<'a> {
         let mut tmp: size_t = 0;
         lift_mdb!(unsafe {ffi::mdb_cursor_count(self.handle, &mut tmp)}, tmp)
     }
-}
 
-#[unsafe_destructor]
-impl<'a> Drop for Cursor<'a> {
-    fn drop(&mut self) {
-        unsafe { ffi::mdb_cursor_close(std::mem::transmute(self.handle)) };
+    pub fn get_item<'k, K: ToMdbValue>(&'txn self, k: &'k K) -> CursorItemAccessor<'txn, 'k, K> {
+        CursorItemAccessor {
+            cursor: self,
+            key: k
+        }
     }
 }
 
+#[unsafe_destructor]
+impl<'txn> Drop for Cursor<'txn> {
+    fn drop(&mut self) {
+        unsafe { ffi::mdb_cursor_close(self.handle) };
+    }
+}
+
+
+#[experimental]
+pub struct CursorItemAccessor<'c, 'k, K: 'k> {
+    cursor: &'c Cursor<'c>,
+    key: &'k K,
+}
+
+impl<'k, 'c: 'k, K: ToMdbValue> CursorItemAccessor<'c, 'k, K> {
+    pub fn get<'a, V: FromMdbValue<'a,V> + 'a>(&'a mut self) -> MdbResult<MdbWrapper<'a, V>> {
+        let c: &'c mut Cursor<'c> = unsafe { mem::transmute(self.cursor) };
+        try!(c.to_key(self.key));
+        c.get_value()
+    }
+
+    pub fn add<V: ToMdbValue>(&mut self, v: &V) -> MdbResult<()> {
+        let c: &mut Cursor = unsafe { mem::transmute(self.cursor)};
+        c.set(self.key, v, 0)
+    }
+
+    pub fn del<V: ToMdbValue>(&mut self, v: &V) -> MdbResult<()> {
+        let c: &mut Cursor = unsafe {mem::transmute(self.cursor)};
+        try!(c.to_item(self.key, v));
+        c.del_item()
+    }
+
+    pub fn del_all(&mut self) -> MdbResult<()> {
+        let c: &mut Cursor = unsafe {mem::transmute(self.cursor)};
+        try!(c.to_key(self.key));
+        c.del_all()
+    }
+}
 
 #[experimental]
 pub struct CursorValue<'cursor> {
@@ -1260,16 +1323,17 @@ pub struct CursorValue<'cursor> {
 /// is limited to iterator lifetime
 #[experimental]
 impl<'cursor> CursorValue<'cursor> {
-    pub fn get_key<T: FromMdbValue<'cursor>>(&'cursor self) -> T {
-        FromMdbValue::from_mdb_value(&self.key)
+    pub fn get_key<T: FromMdbValue<'cursor, T>+'cursor>(&'cursor self) -> MdbWrapper<'cursor, T> {
+        MdbWrapper::new(FromMdbValue::from_mdb_value(&self.key))
     }
 
-    pub fn get_value<T: FromMdbValue<'cursor>>(&'cursor self) -> T {
-        FromMdbValue::from_mdb_value(&self.value)
+    pub fn get_value<T: FromMdbValue<'cursor, T>+'cursor>(&'cursor self) -> MdbWrapper<'cursor, T> {
+        MdbWrapper::new(FromMdbValue::from_mdb_value(&self.value))
     }
 
-    pub fn get<T: FromMdbValue<'cursor>, U: FromMdbValue<'cursor>>(&'cursor self) -> (T, U) {
-        (FromMdbValue::from_mdb_value(&self.key),  FromMdbValue::from_mdb_value(&self.value))
+    pub fn get<T: FromMdbValue<'cursor, T>+'cursor, U: FromMdbValue<'cursor, U>+'cursor>(&'cursor self) -> (MdbWrapper<'cursor, T>, MdbWrapper<'cursor, U>) {
+        (MdbWrapper::new(FromMdbValue::from_mdb_value(&self.key)),
+         MdbWrapper::new(FromMdbValue::from_mdb_value(&self.value)))
     }
 }
 
@@ -1345,7 +1409,7 @@ pub struct CursorKeyRangeIter<'a> {
 
 #[experimental]
 impl<'a> CursorKeyRangeIter<'a> {
-    pub fn new(start_key: &'a ToMdbValue<'a>, end_key: &'a ToMdbValue<'a>) -> CursorKeyRangeIter<'a> {
+    pub fn new<K: ToMdbValue+'a>(start_key: &'a K, end_key: &'a K) -> CursorKeyRangeIter<'a> {
         CursorKeyRangeIter {
             start_key: start_key.to_mdb_value(),
             end_key: end_key.to_mdb_value(),
@@ -1414,7 +1478,7 @@ pub struct CursorItemIter<'a> {
 
 #[experimental]
 impl<'a> CursorItemIter<'a> {
-    pub fn new(key: &'a ToMdbValue<'a>) -> CursorItemIter<'a> {
+    pub fn new<K: ToMdbValue+'a>(key: &'a K) -> CursorItemIter<'a> {
         CursorItemIter {
             key: key.to_mdb_value(),
         }
@@ -1439,7 +1503,6 @@ impl<'a> CursorIteratorInner for CursorItemIter<'a> {
         }
     }
 }
-
 
 #[stable]
 #[deriving(Copy)]
@@ -1470,5 +1533,44 @@ impl<'a> MdbValue<'a> {
 
     pub fn get_size(&self) -> uint {
         self.value.mv_size as uint
+    }
+}
+
+
+/// Smart wrapper which allows to access
+/// value without copying it
+pub struct MdbWrapper<'a, T> {
+    value: Option<T>
+}
+
+impl<'a, T> MdbWrapper<'a, T> {
+    fn new(value: T) -> MdbWrapper<'a, T> {
+        MdbWrapper {
+            value: Some(value)
+        }
+    }
+}
+
+#[allow(dead_code)]
+impl<'a, T: Clone> MdbWrapper<'a, T> {
+    /// Converts into owned if required
+    pub fn to_owned(&self) -> T {
+        self.value.as_ref().unwrap().clone()
+    }
+}
+
+#[unsafe_destructor]
+impl<'a, T> Drop for MdbWrapper<'a, T> {
+    fn drop(&mut self) {
+        if self.value.is_some() {
+            let tmp = self.value.take();
+            unsafe {mem::forget(tmp)}
+        }
+    }
+}
+
+impl<'a, T> Deref<T> for MdbWrapper<'a, T> {
+    fn deref<'a>(&'a self) -> &'a T {
+        self.value.as_ref().unwrap()
     }
 }
