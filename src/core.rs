@@ -165,13 +165,13 @@ pub mod errors {
 pub type MdbResult<T> = Result<T, MdbError>;
 
 #[experimental]
-pub trait ReadTransaction<'a>: 'a {
-    fn get_read_transaction(&'a self) -> &'a NativeTransaction;
+pub trait ReadTransaction {
+    fn get_read_transaction<'a>(&'a self) -> &'a NativeTransaction;
 }
 
 #[experimental]
-pub trait WriteTransaction<'a>: ReadTransaction<'a> {
-    fn get_write_transaction(&'a self) -> &'a NativeTransaction;
+pub trait WriteTransaction: ReadTransaction {
+    fn get_write_transaction<'a>(&'a self) -> &'a NativeTransaction;
 }
 
 bitflags! {
@@ -347,42 +347,42 @@ impl Database {
     }
 
     /// Retrieves a value by key. In case of DbAllowDups it will be the first value
-    pub fn get<'a,  V: FromMdbValue<'a, V>+'a>(&self, txn: &'a ReadTransaction<'a>, key: &ToMdbValue) -> MdbResult<MdbWrapper<'a, V>> {
+    pub fn get<'a,  V: FromMdbValue<'a, V>+'a>(&self, txn: &'a ReadTransaction, key: &ToMdbValue) -> MdbResult<MdbWrapper<'a, V>> {
         txn.get_read_transaction().get(self, key)
     }
 
     /// Sets value for key. In case of DbAllowDups it will add a new item
-    pub fn set<'t, K: ToMdbValue, V: ToMdbValue>(&self, txn: &'t WriteTransaction<'t>, key: &K, value: &V) -> MdbResult<()> {
+    pub fn set<K: ToMdbValue, V: ToMdbValue>(&self, txn: &WriteTransaction, key: &K, value: &V) -> MdbResult<()> {
         txn.get_write_transaction().set(self, key, value)
     }
 
     /// Deletes value for key.
-    pub fn del<'a, K: ToMdbValue>(&self, txn: &'a WriteTransaction<'a>, key: &K) -> MdbResult<()> {
+    pub fn del<K: ToMdbValue>(&self, txn: &WriteTransaction, key: &K) -> MdbResult<()> {
         txn.get_write_transaction().del(self, key)
     }
 
     /// Should be used only with DbAllowDups. Deletes corresponding (key, value)
-    pub fn del_item<'a, K: ToMdbValue, V: ToMdbValue>(&self, txn: &'a WriteTransaction<'a>, key: &K, data: &V) -> MdbResult<()> {
+    pub fn del_item<K: ToMdbValue, V: ToMdbValue>(&self, txn: &WriteTransaction, key: &K, data: &V) -> MdbResult<()> {
         txn.get_write_transaction().del_item(self, key, data)
     }
 
     /// Returns a new cursor
-    pub fn new_cursor<'a>(&'a self, txn: &'a ReadTransaction<'a>) -> MdbResult<Cursor<'a>> {
+    pub fn new_cursor<'a>(&'a self, txn: &'a ReadTransaction) -> MdbResult<Cursor<'a>> {
         txn.get_read_transaction().new_cursor(self)
     }
 
     /// Deletes current db, also moves it out
-    pub fn del_db<'a>(self, txn: &'a WriteTransaction<'a>) -> MdbResult<()> {
+    pub fn del_db(self, txn: &WriteTransaction) -> MdbResult<()> {
         txn.get_write_transaction().del_db(self)
     }
 
     /// Removes all key/values from db
-    pub fn clear<'a>(&self, txn: &'a WriteTransaction<'a>) -> MdbResult<()> {
+    pub fn clear<'a>(&self, txn: &'a WriteTransaction) -> MdbResult<()> {
         txn.get_write_transaction().empty_db(self)
     }
 
     /// Returns an iterator for all values in database
-    pub fn iter<'a>(&'a self, txn: &'a ReadTransaction<'a>) -> MdbResult<CursorIterator<'a, CursorIter>> {
+    pub fn iter<'a>(&'a self, txn: &'a ReadTransaction) -> MdbResult<CursorIterator<'a, CursorIter>> {
         txn.get_read_transaction().new_cursor(self)
             .and_then(|c| Ok(CursorIterator::wrap(c, CursorIter)))
     }
@@ -391,7 +391,7 @@ impl Database {
     /// Currently it works only for unique keys (i.e. it will skip
     /// multiple items when DB created with ffi::MDB_DUPSORT).
     /// Iterator is valid while cursor is valid
-    pub fn keyrange<'c, 't: 'c, 'db: 't, K: ToMdbValue + 'c>(&'db self, txn: &'t ReadTransaction<'t>, start_key: &'c K, end_key: &'c K)
+    pub fn keyrange<'c, 't: 'c, 'db: 't, K: ToMdbValue + 'c>(&'db self, txn: &'t ReadTransaction, start_key: &'c K, end_key: &'c K)
                                        -> MdbResult<CursorIterator<'c, CursorKeyRangeIter>> {
         txn.get_read_transaction().new_cursor(self)
             .and_then(|c| {
@@ -402,7 +402,7 @@ impl Database {
     }
 
     /// Returns an iterator for all items (i.e. values with same key)
-    pub fn item_iter<'c, 't: 'c, 'db:'t, K: ToMdbValue>(&'db self, txn: &'t ReadTransaction<'t>,
+    pub fn item_iter<'c, 't: 'c, 'db:'t, K: ToMdbValue>(&'db self, txn: &'t ReadTransaction,
                                                 key: &K) -> MdbResult<CursorIterator<'c, CursorItemIter<'c>>> {
         txn.get_read_transaction().new_item_iter(self, key)
     }
@@ -919,14 +919,14 @@ impl Transaction {
     }
 }
 
-impl<'a> WriteTransaction<'a> for Transaction {
-    fn get_write_transaction(&'a self) -> &'a NativeTransaction {
+impl WriteTransaction for Transaction {
+    fn get_write_transaction<'a>(&'a self) -> &'a NativeTransaction {
         &self.inner
     }
 }
 
-impl<'a> ReadTransaction<'a> for Transaction {
-    fn get_read_transaction(&'a self) -> &'a NativeTransaction {
+impl ReadTransaction for Transaction {
+    fn get_read_transaction<'a>(&'a self) -> &'a NativeTransaction {
         &self.inner
     }
 }
@@ -975,8 +975,8 @@ impl ReadonlyTransaction {
     }
 }
 
-impl<'a> ReadTransaction<'a> for ReadonlyTransaction {
-    fn get_read_transaction(&'a self) -> &'a NativeTransaction {
+impl ReadTransaction for ReadonlyTransaction {
+    fn get_read_transaction<'a>(&'a self) -> &'a NativeTransaction {
         &self.inner
     }
 }
