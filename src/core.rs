@@ -347,7 +347,7 @@ impl Database {
     }
 
     /// Retrieves a value by key. In case of DbAllowDups it will be the first value
-    pub fn get<'a,  V: FromMdbValue+'a>(&self, txn: &'a ReadTransaction<'a>, key: &ToMdbValue) -> MdbResult<MdbWrapper<'a, V>> {
+    pub fn get<'a,  V: FromMdbValue<'a, V>+'a>(&self, txn: &'a ReadTransaction<'a>, key: &ToMdbValue) -> MdbResult<MdbWrapper<'a, V>> {
         txn.get_read_transaction().get(self, key)
     }
 
@@ -790,7 +790,7 @@ impl NativeTransaction {
         self.state = TxnStateInvalid;
     }
 
-    fn get_value<'a, V: FromMdbValue>(&'a self, db: &Database, key: &ToMdbValue) -> MdbResult<MdbWrapper<'a, V>> {
+    fn get_value<'a, V: FromMdbValue<'a, V>+'a>(&'a self, db: &Database, key: &ToMdbValue) -> MdbResult<MdbWrapper<'a, V>> {
         let key_val = key.to_mdb_value();
         unsafe {
             let mut data_val: MdbValue = std::mem::zeroed();
@@ -799,7 +799,7 @@ impl NativeTransaction {
         }
     }
 
-    pub fn get<'a, V: FromMdbValue>(&'a self, db: &Database, key: &ToMdbValue) -> MdbResult<MdbWrapper<'a, V>> {
+    pub fn get<'a, V: FromMdbValue<'a, V>+'a>(&'a self, db: &Database, key: &ToMdbValue) -> MdbResult<MdbWrapper<'a, V>> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         self.get_value(db, key)
     }
@@ -1105,7 +1105,7 @@ impl<'a> Cursor<'a> {
     }
 
     /// Retrieves current key/value as tuple
-    pub fn get<'a, T: FromMdbValue, U: FromMdbValue>(&'a mut self) -> MdbResult<(MdbWrapper<'a, T>, MdbWrapper<'a, U>)> {
+    pub fn get<'a, T: FromMdbValue<'a, T>+'a, U: FromMdbValue<'a, U>+'a>(&'a mut self) -> MdbResult<(MdbWrapper<'a, T>, MdbWrapper<'a, U>)> {
         let (k, v) = try!(self.get_plain());
 
         unsafe {
@@ -1115,7 +1115,7 @@ impl<'a> Cursor<'a> {
     }
 
     /// Retrieves current value
-    pub fn get_value<'a, V: FromMdbValue>(&'a mut self) -> MdbResult<MdbWrapper<'a, V>> {
+    pub fn get_value<'a, V: FromMdbValue<'a, V>+'a>(&'a mut self) -> MdbResult<MdbWrapper<'a, V>> {
         let (_, v) = try!(self.get_plain());
 
         unsafe {
@@ -1124,7 +1124,7 @@ impl<'a> Cursor<'a> {
     }
 
     /// Retrieves current key
-    pub fn get_key<'a, K: FromMdbValue>(&'a mut self) -> MdbResult<MdbWrapper<'a, K>> {
+    pub fn get_key<'a, K: FromMdbValue<'a, K>+'a>(&'a mut self) -> MdbResult<MdbWrapper<'a, K>> {
         let (k, _) = try!(self.get_plain());
 
         unsafe {
@@ -1218,16 +1218,17 @@ pub struct CursorValue<'cursor> {
 /// is limited to iterator lifetime
 #[experimental]
 impl<'cursor> CursorValue<'cursor> {
-    pub fn get_key<T: FromMdbValue+'cursor>(&'cursor self) -> T {
-        FromMdbValue::from_mdb_value(&self.key)
+    pub fn get_key<T: FromMdbValue<'cursor, T>+'cursor>(&'cursor self) -> MdbWrapper<'cursor, T> {
+        MdbWrapper::new(FromMdbValue::from_mdb_value(&self.key))
     }
 
-    pub fn get_value<T: FromMdbValue+'cursor>(&'cursor self) -> T {
-        FromMdbValue::from_mdb_value(&self.value)
+    pub fn get_value<T: FromMdbValue<'cursor, T>+'cursor>(&'cursor self) -> MdbWrapper<'cursor, T> {
+        MdbWrapper::new(FromMdbValue::from_mdb_value(&self.value))
     }
 
-    pub fn get<T: FromMdbValue+'cursor, U: FromMdbValue+'cursor>(&'cursor self) -> (T, U) {
-        (FromMdbValue::from_mdb_value(&self.key),  FromMdbValue::from_mdb_value(&self.value))
+    pub fn get<T: FromMdbValue<'cursor, T>+'cursor, U: FromMdbValue<'cursor, U>+'cursor>(&'cursor self) -> (MdbWrapper<'cursor, T>, MdbWrapper<'cursor, U>) {
+        (MdbWrapper::new(FromMdbValue::from_mdb_value(&self.key)),
+         MdbWrapper::new(FromMdbValue::from_mdb_value(&self.value)))
     }
 }
 
