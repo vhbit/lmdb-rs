@@ -352,12 +352,12 @@ impl Database {
     }
 
     /// Sets value for key. In case of DbAllowDups it will add a new item
-    pub fn set<'t, K: ToMdbValue+, V: ToMdbValue>(&self, txn: &'t WriteTransaction<'t>, key: &K, value: &V) -> MdbResult<()> {
+    pub fn set<'t, K: ToMdbValue, V: ToMdbValue>(&self, txn: &'t WriteTransaction<'t>, key: &K, value: &V) -> MdbResult<()> {
         txn.get_write_transaction().set(self, key, value)
     }
 
     /// Deletes value for key.
-    pub fn del<'a, T: ToMdbValue + 'a>(&self, txn: &'a WriteTransaction<'a>, key: &'a T) -> MdbResult<()> {
+    pub fn del<'a, K: ToMdbValue>(&self, txn: &'a WriteTransaction<'a>, key: &K) -> MdbResult<()> {
         txn.get_write_transaction().del(self, key)
     }
 
@@ -391,10 +391,8 @@ impl Database {
     /// Currently it works only for unique keys (i.e. it will skip
     /// multiple items when DB created with ffi::MDB_DUPSORT).
     /// Iterator is valid while cursor is valid
-    pub fn keyrange<'a, T: 'a>(&'a self, txn: &'a ReadTransaction<'a>, start_key: &'a T, end_key: &'a T)
-                                             -> MdbResult<CursorIterator<'a, CursorKeyRangeIter>>
-        where T: ToMdbValue + Clone
-    {
+    pub fn keyrange<'c, 't: 'c, 'db: 't, K: ToMdbValue + 'c>(&'db self, txn: &'t ReadTransaction<'t>, start_key: &'c K, end_key: &'c K)
+                                       -> MdbResult<CursorIterator<'c, CursorKeyRangeIter>> {
         txn.get_read_transaction().new_cursor(self)
             .and_then(|c| {
                 let key_range = CursorKeyRangeIter::new(start_key, end_key);
@@ -404,7 +402,8 @@ impl Database {
     }
 
     /// Returns an iterator for all items (i.e. values with same key)
-    pub fn item_iter<'a, K: ToMdbValue>(&'a self, txn: &'a ReadTransaction<'a>, key: &K) -> MdbResult<CursorIterator<'a, CursorItemIter<'a>>> {
+    pub fn item_iter<'c, 't: 'c, 'db:'t, K: ToMdbValue>(&'db self, txn: &'t ReadTransaction<'t>,
+                                                key: &K) -> MdbResult<CursorIterator<'c, CursorItemIter<'c>>> {
         txn.get_read_transaction().new_item_iter(self, key)
     }
 }
@@ -1115,6 +1114,24 @@ impl<'a> Cursor<'a> {
         }
     }
 
+    /// Retrieves current value
+    pub fn get_value<'a, V: FromMdbValue>(&'a mut self) -> MdbResult<MdbWrapper<'a, V>> {
+        let (_, v) = try!(self.get_plain());
+
+        unsafe {
+            Ok(MdbWrapper::new(FromMdbValue::from_mdb_value(mem::transmute(&v))))
+        }
+    }
+
+    /// Retrieves current key
+    pub fn get_key<'a, K: FromMdbValue>(&'a mut self) -> MdbResult<MdbWrapper<'a, K>> {
+        let (k, _) = try!(self.get_plain());
+
+        unsafe {
+            Ok(MdbWrapper::new(FromMdbValue::from_mdb_value(mem::transmute(&k))))
+        }
+    }
+
     #[inline]
     fn ensure_key_valid(&mut self) -> MdbResult<()> {
         // If key might be invalid simply perform cursor get to be sure
@@ -1413,6 +1430,8 @@ impl<'a> MdbValue<'a> {
 }
 
 
+/// Smart wrapper which allows to access
+/// value without copying it
 pub struct MdbWrapper<'a, T> {
     value: Option<T>
 }
@@ -1422,6 +1441,14 @@ impl<'a, T> MdbWrapper<'a, T> {
         MdbWrapper {
             value: Some(value)
         }
+    }
+}
+
+#[allow(dead_code)]
+impl<'a, T: Clone> MdbWrapper<'a, T> {
+    /// Converts into owned if required
+    pub fn to_owned(&self) -> T {
+        self.value.as_ref().unwrap().clone()
     }
 }
 
