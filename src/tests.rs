@@ -92,12 +92,12 @@ fn test_single_values() {
         assert!(db.get::<()>(&txn, &test_key1).is_err(), "Key shouldn't exist yet");
 
         assert!(db.set(&txn, &test_key1, &test_data1).is_ok());
-        let v: String = db.get(&txn, &test_key1).unwrap();
-        assert!(v.as_slice() == test_data1.as_slice(), "Data written differs from data read");
+        let v = db.get::<String>(&txn, &test_key1).unwrap();
+        assert!(*v.as_slice() == test_data1.as_slice(), "Data written differs from data read");
 
         assert!(db.set(&txn, &test_key1, &test_data2).is_ok());
-        let v: String = db.get(&txn, &test_key1).unwrap();
-        assert!(v.as_slice() == test_data2.as_slice(), "Data written differs from data read");
+        let v = db.get::<String>(&txn, &test_key1).unwrap();
+        assert!(*v.as_slice() == test_data2.as_slice(), "Data written differs from data read");
 
         assert!(db.del(&txn, &test_key1).is_ok());
         assert!(db.get::<()>(&txn, &test_key1).is_err(), "Key should be deleted");
@@ -123,17 +123,17 @@ fn test_multiple_values() {
         assert!(db.get::<()>(&txn, &test_key1).is_err(), "Key shouldn't exist yet");
 
         assert!(db.set(&txn, &test_key1, &test_data1).is_ok());
-        let v: String = db.get(&txn, &test_key1).unwrap();
-        assert!(v.as_slice() == test_data1.as_slice(), "Data written differs from data read");
+        let v = db.get::<String>(&txn, &test_key1).unwrap();
+        assert!(*v.as_slice() == test_data1.as_slice(), "Data written differs from data read");
 
         assert!(db.set(&txn, &test_key1, &test_data2).is_ok());
-        let v: String = db.get(&txn, &test_key1).unwrap();
-        assert!(v.as_slice() == test_data1.as_slice(), "It should still return first value");
+        let v = db.get::<String>(&txn, &test_key1).unwrap();
+        assert!(*v.as_slice() == test_data1.as_slice(), "It should still return first value");
 
         assert!(db.del_item(&txn, &test_key1, &test_data1).is_ok());
 
-        let v: String = db.get(&txn, &test_key1).unwrap();
-        assert!(v.as_slice() == test_data2.as_slice(), "It should return second value");
+        let v = db.get::<String>(&txn, &test_key1).unwrap();
+        assert!(*v.as_slice() == test_data2.as_slice(), "It should return second value");
         assert!(db.del(&txn, &test_key1).is_ok());
 
         assert!(db.get::<()>(&txn, &test_key1).is_err(), "Key shouldn't exist anymore!");
@@ -176,10 +176,10 @@ fn test_cursors() {
         let new_value = "testme".to_string();
 
         assert!(cursor.replace(&new_value).is_ok());
-        let (_, v): ((), String) = cursor.get().unwrap();
+        let (_, v) = cursor.get::<(), String>().unwrap();
         // NOTE: this asserting will work once new_value is
         // of the same length as it is inplace change
-        assert!(v.as_slice() == new_value.as_slice());
+        assert!(*v.as_slice() == new_value.as_slice());
 
         assert!(cursor.del_all().is_ok());
         assert!(cursor.to_key(&test_key1).is_err());
