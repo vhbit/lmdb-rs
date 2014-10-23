@@ -988,18 +988,18 @@ impl Drop for ReadonlyTransaction {
 }
 
 #[unstable]
-pub struct Cursor<'a> {
+pub struct Cursor<'txn> {
     handle: *mut ffi::MDB_cursor,
     data_val: ffi::MDB_val,
     key_val: ffi::MDB_val,
-    txn: &'a NativeTransaction,
-    db: &'a Database,
+    txn: &'txn NativeTransaction,
+    db: &'txn Database,
     valid_key: bool,
 }
 
 #[unstable]
-impl<'a> Cursor<'a> {
-    fn new(txn: &'a NativeTransaction, db: &'a Database) -> MdbResult<Cursor<'a>> {
+impl<'txn> Cursor<'txn> {
+    fn new<'db: 'txn>(txn: &'txn NativeTransaction, db: &'db Database) -> MdbResult<Cursor<'txn>> {
         let mut tmp: *mut ffi::MDB_cursor = std::ptr::null_mut();
         try_mdb!(unsafe { ffi::mdb_cursor_open(txn.handle, db.handle, &mut tmp) });
         Ok(Cursor {
@@ -1148,7 +1148,7 @@ impl<'a> Cursor<'a> {
     }
 
     #[inline]
-    fn get_plain(&mut self) -> MdbResult<(MdbValue<'a>, MdbValue<'a>)> {
+    fn get_plain(&mut self) -> MdbResult<(MdbValue<'txn>, MdbValue<'txn>)> {
         try!(self.ensure_key_valid());
         let k = MdbValue {value: self.key_val};
         let v = MdbValue {value: self.data_val};
@@ -1200,7 +1200,7 @@ impl<'a> Cursor<'a> {
 }
 
 #[unsafe_destructor]
-impl<'a> Drop for Cursor<'a> {
+impl<'txn> Drop for Cursor<'txn> {
     fn drop(&mut self) {
         unsafe { ffi::mdb_cursor_close(std::mem::transmute(self.handle)) };
     }
@@ -1397,7 +1397,6 @@ impl<'a> CursorIteratorInner for CursorItemIter<'a> {
         }
     }
 }
-
 
 #[stable]
 pub struct MdbValue<'a> {
