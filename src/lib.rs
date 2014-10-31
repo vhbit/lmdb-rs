@@ -21,7 +21,7 @@ pub use traits::{FromMdbValue, ToMdbValue};
 
 pub mod traits;
 mod utils;
-mod ffi;
+pub mod ffi;
 pub mod core;
 
 #[cfg(test)]

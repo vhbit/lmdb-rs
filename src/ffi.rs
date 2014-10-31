@@ -123,7 +123,7 @@ pub mod types {
 
     type MDB_ID2L = *const MDB_ID2;
 
-    #[deriving(Clone)]
+    #[deriving(Clone, Eq, PartialEq)]
     #[allow(raw_pointer_deriving)]
     #[repr(C)]
     #[stable]

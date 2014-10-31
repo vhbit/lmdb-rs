@@ -406,6 +406,10 @@ impl Database {
                                                 key: &K) -> MdbResult<CursorIterator<'c, CursorItemIter<'c>>> {
         txn.get_read_transaction().new_item_iter(self, key)
     }
+
+    pub fn get_handle(&self) -> ffi::MDB_dbi {
+        self.handle
+    }
 }
 
 impl Drop for Database {
@@ -561,7 +565,7 @@ impl Environment {
     }
 
     /// Sync environment to disk
-    pub fn sync(&mut self, force: bool) -> MdbResult<()> {
+    pub fn sync(&self, force: bool) -> MdbResult<()> {
         lift_mdb!(unsafe { ffi::mdb_env_sync(self.env, if force {1} else {0})})
     }
 
@@ -880,6 +884,10 @@ impl NativeTransaction {
             lift_mdb!(ffi::mdb_drop(self.handle, db.handle, 0))
         }
     }
+
+    pub fn get_handle(&self) -> *mut ffi::MDB_txn {
+        self.handle
+    }
 }
 
 #[unstable]
@@ -916,6 +924,10 @@ impl Transaction {
     pub fn abort(self) {
         let mut t = self;
         t.inner.abort();
+    }
+
+    pub fn get_handle(&self) -> *mut ffi::MDB_txn {
+        self.inner.get_handle()
     }
 }
 
@@ -1069,7 +1081,7 @@ impl<'txn> Cursor<'txn> {
     /// already points to a correct key and you need to delete
     /// a specific item through cursor)
     pub fn to_item<K, V>(&mut self, key: &K, value: & V) -> MdbResult<()> where K: ToMdbValue, V: ToMdbValue {
-        self.move_to(key, Some(value), ffi::MDB_SET)
+        self.move_to(key, Some(value), ffi::MDB_GET_BOTH)
     }
 
     /// Moves cursor to next key, i.e. skip items
@@ -1139,7 +1151,7 @@ impl<'txn> Cursor<'txn> {
         if !self.valid_key {
             unsafe {
                 try_mdb!(ffi::mdb_cursor_get(self.handle, &mut self.key_val,
-                                             &mut self.data_val,
+                                             ptr::null_mut(),
                                              ffi::MDB_GET_CURRENT));
             }
             self.valid_key = true;
@@ -1160,6 +1172,13 @@ impl<'txn> Cursor<'txn> {
         try!(self.ensure_key_valid());
         self.data_val = value.to_mdb_value().value;
         lift_mdb!(unsafe {ffi::mdb_cursor_put(self.handle, &mut self.key_val, &mut self.data_val, flags)})
+
+    pub fn set<K: ToMdbValue, V: ToMdbValue>(&mut self, key: &K, value: &V, flags: c_uint) -> MdbResult<()> {
+        self.key_val = key.to_mdb_value().value;
+        self.valid_key = true;
+        let res = self.set_value(value, flags);
+        self.valid_key = false;
+        res
     }
 
     /// Overwrites value for current item
@@ -1197,15 +1216,53 @@ impl<'txn> Cursor<'txn> {
         let mut tmp: size_t = 0;
         lift_mdb!(unsafe {ffi::mdb_cursor_count(self.handle, &mut tmp)}, tmp)
     }
+
+    pub fn get_item<'k, K: ToMdbValue>(&'txn self, k: &'k K) -> CursorItemAccessor<'txn, 'k, K> {
+        CursorItemAccessor {
+            cursor: self,
+            key: k
+        }
+    }
 }
 
 #[unsafe_destructor]
 impl<'txn> Drop for Cursor<'txn> {
     fn drop(&mut self) {
-        unsafe { ffi::mdb_cursor_close(std::mem::transmute(self.handle)) };
+        unsafe { ffi::mdb_cursor_close(self.handle) };
     }
 }
 
+
+#[experimental]
+pub struct CursorItemAccessor<'c, 'k, K: 'k> {
+    cursor: &'c Cursor<'c>,
+    key: &'k K,
+}
+
+impl<'k, 'c: 'k, K: ToMdbValue> CursorItemAccessor<'c, 'k, K> {
+    pub fn get<'a, V: FromMdbValue<'a,V> + 'a>(&'a mut self) -> MdbResult<MdbWrapper<'a, V>> {
+        let c: &'c mut Cursor<'c> = unsafe { mem::transmute(self.cursor) };
+        try!(c.to_key(self.key));
+        c.get_value()
+    }
+
+    pub fn add<V: ToMdbValue>(&mut self, v: &V) -> MdbResult<()> {
+        let c: &mut Cursor = unsafe { mem::transmute(self.cursor)};
+        c.set(self.key, v, 0)
+    }
+
+    pub fn del<V: ToMdbValue>(&mut self, v: &V) -> MdbResult<()> {
+        let c: &mut Cursor = unsafe {mem::transmute(self.cursor)};
+        try!(c.to_item(self.key, v));
+        c.del_item()
+    }
+
+    pub fn del_all(&mut self) -> MdbResult<()> {
+        let c: &mut Cursor = unsafe {mem::transmute(self.cursor)};
+        try!(c.to_key(self.key));
+        c.del_all()
+    }
+}
 
 #[experimental]
 pub struct CursorValue<'cursor> {
