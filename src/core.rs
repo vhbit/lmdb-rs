@@ -38,7 +38,7 @@
 //! # Example
 //!
 
-#![allow(non_uppercase_statics)]
+#![allow(non_upper_case_globals)]
 
 use std;
 use std::cell::{UnsafeCell};
@@ -346,7 +346,7 @@ impl Database {
         Database { handle: handle, owns: owns }
     }
 
-    /// Retrieves a value by key. In case of DbAllowDups it will be the first value
+    /// Retrieves a value by key. In case of DbAllowDups it will be the first item
     pub fn get<'a,  V: FromMdbValue<'a, V>+'a>(&self, txn: &'a ReadTransaction, key: &ToMdbValue) -> MdbResult<MdbWrapper<'a, V>> {
         txn.get_read_transaction().get(self, key)
     }
@@ -669,7 +669,7 @@ impl Environment {
         let cache = unsafe { cell.get() };
 
         unsafe {
-            let tmp = (*cache).find_equiv(&db_name);
+            let tmp = (*cache).get(&db_name.to_string());
             if tmp.is_some() {
                 return Ok(Database::new_with_handle(tmp.unwrap().handle, false))
             }
@@ -679,7 +679,7 @@ impl Environment {
         let db = Database::new_with_handle(dbi, true);
         unsafe { (*cache).insert(db_name.to_string(), db) };
 
-        match unsafe { (*cache).find_equiv(&db_name) } {
+        match unsafe { (*cache).get(&db_name.to_string()) } {
             Some(db) => Ok(Database::new_with_handle(db.handle, false)),
             _ => Err(InvalidPath)
         }
