@@ -1,3 +1,3 @@
 [submodule "deps/mdb"]
 	path = deps/mdb
-	url = https://git.gitorious.org/mdb/mdb.git
+	url = https://git.gitorious.org/mdb/volokos-mdb.git
