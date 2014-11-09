@@ -30,7 +30,7 @@ fn test_environment() {
             Ok(mut env) => {
                 match env.sync(true) {
                     Ok(..) => (),
-                    Err(err) => fail!("Failed to sync: {}", err)
+                    Err(err) => panic!("Failed to sync: {}", err)
                 };
 
                 let test_flags = EnvNoMemInit | EnvNoMetaSync;
@@ -39,10 +39,10 @@ fn test_environment() {
                     Ok(_) => {
                         match env.get_flags() {
                             Ok(new_flags) => assert!((new_flags & test_flags) == test_flags, "Get flags != set flags"),
-                            Err(err) => fail!("Failed to get flags: {}", err)
+                            Err(err) => panic!("Failed to get flags: {}", err)
                         }
                     },
-                    Err(err) => fail!("Failed to set flags: {}", err)
+                    Err(err) => panic!("Failed to set flags: {}", err)
                 };
 
                 match env.get_default_db(DbFlags::empty()) {
@@ -56,19 +56,19 @@ fn test_environment() {
                                     Ok(_) => {
                                         match db.get::<String>(&txn, &key) {
                                             Ok(v) => assert!(v.as_slice() == value.as_slice(), "Written {} and read {}", value.as_slice(), v.as_slice()),
-                                            Err(err) => fail!("Failed to read value: {}", err)
+                                            Err(err) => panic!("Failed to read value: {}", err)
                                         }
                                     },
-                                    Err(err) => fail!("Failed to write value: {}", err)
+                                    Err(err) => panic!("Failed to write value: {}", err)
                                 }
                             },
-                            Err(err) => fail!("Failed to create transaction: {}", err)
+                            Err(err) => panic!("Failed to create transaction: {}", err)
                         }
                     },
-                    Err(err) => fail!("Failed to get default database: {}", err)
+                    Err(err) => panic!("Failed to get default database: {}", err)
                 }
             },
-            Err(err) => fail!("Failed to open path {}: {}", path.display(), err)
+            Err(err) => panic!("Failed to open path {}: {}", path.display(), err)
         };
     });
 }
@@ -93,11 +93,11 @@ fn test_single_values() {
 
         assert!(db.set(&txn, &test_key1, &test_data1).is_ok());
         let v = db.get::<String>(&txn, &test_key1).unwrap();
-        assert!(*v.as_slice() == test_data1.as_slice(), "Data written differs from data read");
+        assert!((*v).as_slice() == test_data1.as_slice(), "Data written differs from data read");
 
         assert!(db.set(&txn, &test_key1, &test_data2).is_ok());
         let v = db.get::<String>(&txn, &test_key1).unwrap();
-        assert!(*v.as_slice() == test_data2.as_slice(), "Data written differs from data read");
+        assert!((*v).as_slice() == test_data2.as_slice(), "Data written differs from data read");
 
         assert!(db.del(&txn, &test_key1).is_ok());
         assert!(db.get::<()>(&txn, &test_key1).is_err(), "Key should be deleted");
@@ -128,12 +128,12 @@ fn test_multiple_values() {
 
         assert!(db.set(&txn, &test_key1, &test_data2).is_ok());
         let v = db.get::<String>(&txn, &test_key1).unwrap();
-        assert!(*v.as_slice() == test_data1.as_slice(), "It should still return first value");
+        assert!((*v).as_slice() == test_data1.as_slice(), "It should still return first value");
 
         assert!(db.del_item(&txn, &test_key1, &test_data1).is_ok());
 
         let v = db.get::<String>(&txn, &test_key1).unwrap();
-        assert!(*v.as_slice() == test_data2.as_slice(), "It should return second value");
+        assert!((*v).as_slice() == test_data2.as_slice(), "It should return second value");
         assert!(db.del(&txn, &test_key1).is_ok());
 
         assert!(db.get::<()>(&txn, &test_key1).is_err(), "Key shouldn't exist anymore!");
@@ -179,7 +179,7 @@ fn test_cursors() {
         let (_, v) = cursor.get::<(), String>().unwrap();
         // NOTE: this asserting will work once new_value is
         // of the same length as it is inplace change
-        assert!(*v.as_slice() == new_value.as_slice());
+        assert!((*v).as_slice() == new_value.as_slice());
 
         assert!(cursor.del_all().is_ok());
         assert!(cursor.to_key(&test_key1).is_err());
