@@ -1172,6 +1172,7 @@ impl<'txn> Cursor<'txn> {
         try!(self.ensure_key_valid());
         self.data_val = value.to_mdb_value().value;
         lift_mdb!(unsafe {ffi::mdb_cursor_put(self.handle, &mut self.key_val, &mut self.data_val, flags)})
+    }
 
     pub fn set<K: ToMdbValue, V: ToMdbValue>(&mut self, key: &K, value: &V, flags: c_uint) -> MdbResult<()> {
         self.key_val = key.to_mdb_value().value;
