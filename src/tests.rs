@@ -30,7 +30,7 @@ fn test_environment() {
             Ok(mut env) => {
                 match env.sync(true) {
                     Ok(..) => (),
-                    Err(err) => fail!("Failed to sync: {}", err)
+                    Err(err) => panic!("Failed to sync: {}", err)
                 };
 
                 let test_flags = EnvNoMemInit | EnvNoMetaSync;
@@ -39,10 +39,10 @@ fn test_environment() {
                     Ok(_) => {
                         match env.get_flags() {
                             Ok(new_flags) => assert!((new_flags & test_flags) == test_flags, "Get flags != set flags"),
-                            Err(err) => fail!("Failed to get flags: {}", err)
+                            Err(err) => panic!("Failed to get flags: {}", err)
                         }
                     },
-                    Err(err) => fail!("Failed to set flags: {}", err)
+                    Err(err) => panic!("Failed to set flags: {}", err)
                 };
 
                 match env.get_default_db(DbFlags::empty()) {
@@ -56,19 +56,19 @@ fn test_environment() {
                                     Ok(_) => {
                                         match db.get::<String>(&txn, &key) {
                                             Ok(v) => assert!(v.as_slice() == value.as_slice(), "Written {} and read {}", value.as_slice(), v.as_slice()),
-                                            Err(err) => fail!("Failed to read value: {}", err)
+                                            Err(err) => panic!("Failed to read value: {}", err)
                                         }
                                     },
-                                    Err(err) => fail!("Failed to write value: {}", err)
+                                    Err(err) => panic!("Failed to write value: {}", err)
                                 }
                             },
-                            Err(err) => fail!("Failed to create transaction: {}", err)
+                            Err(err) => panic!("Failed to create transaction: {}", err)
                         }
                     },
-                    Err(err) => fail!("Failed to get default database: {}", err)
+                    Err(err) => panic!("Failed to get default database: {}", err)
                 }
             },
-            Err(err) => fail!("Failed to open path {}: {}", path.display(), err)
+            Err(err) => panic!("Failed to open path {}: {}", path.display(), err)
         };
     });
 }

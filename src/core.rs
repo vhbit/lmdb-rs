@@ -38,7 +38,7 @@
 //! # Example
 //!
 
-#![allow(non_uppercase_statics)]
+#![allow(non_upper_case_globals)]
 
 use std;
 use std::cell::{UnsafeCell};
@@ -49,6 +49,7 @@ use std::io::FilePermission;
 use std::mem;
 use std::ptr;
 use std::result::Result;
+use std::string::as_string;
 use sync::{Mutex};
 
 pub use self::errors::{MdbError, NotFound, InvalidPath, StateError};
@@ -665,8 +666,10 @@ impl Environment {
         let ref cell = *guard;
         let cache = unsafe { cell.get() };
 
+        let db_name_eq = as_string(db_name);
+
         unsafe {
-            let tmp = (*cache).find_equiv(&db_name);
+            let tmp = (*cache).find_equiv(db_name_eq.deref());
             if tmp.is_some() {
                 return Ok(Database::new_with_handle(tmp.unwrap().handle, false))
             }
@@ -676,7 +679,7 @@ impl Environment {
         let db = Database::new_with_handle(dbi, true);
         unsafe { (*cache).insert(db_name.to_string(), db) };
 
-        match unsafe { (*cache).find_equiv(&db_name) } {
+        match unsafe { (*cache).find_equiv(db_name_eq.deref()) } {
             Some(db) => Ok(Database::new_with_handle(db.handle, false)),
             _ => Err(InvalidPath)
         }
