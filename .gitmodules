@@ -1,3 +1,3 @@
-[submodule "deps/mdb"]
-	path = deps/mdb
+[submodule "liblmdb-sys/mdb"]
+	path = liblmdb-sys/mdb
 	url = https://git.gitorious.org/mdb/mdb.git

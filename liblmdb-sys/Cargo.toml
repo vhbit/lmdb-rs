@@ -1,0 +1,10 @@
+[package]
+name = "liblmdb-sys"
+version = "0.0.1"
+authors = ["Valerii Hiora"]
+links = "lmdb"
+build = "build.rs"
+
+[lib]
+    name = "liblmdb-sys"
+    path = "lib.rs"

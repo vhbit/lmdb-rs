@@ -19,7 +19,7 @@
 use std::{mod, mem, string};
 
 use core::MdbValue;
-use ffi::types::MDB_val;
+use ffi::MDB_val;
 
 /// `ToMdbValue` is supposed to convert a value to a memory
 /// slice which `lmdb` uses to prevent multiple copying data

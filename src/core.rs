@@ -53,8 +53,7 @@ use std::string::as_string;
 use sync::{Mutex};
 
 pub use self::errors::{MdbError, NotFound, InvalidPath, StateError};
-use ffi;
-use ffi::types::MDB_val;
+use ffi::{mod, MDB_val};
 use traits::{ToMdbValue, FromMdbValue};
 
 macro_rules! lift_mdb {
@@ -108,9 +107,10 @@ macro_rules! assert_state_not {
 
 /// MdbError wraps information about LMDB error
 pub mod errors {
-    use ffi::consts::*;
     use libc::{c_int};
     use std;
+
+    use ffi;
     use utils::{error_msg};
 
     #[unstable]
@@ -131,14 +131,14 @@ pub mod errors {
     impl MdbError {
         pub fn new_with_code(code: c_int) -> MdbError {
             match code {
-                MDB_NOTFOUND    => NotFound,
-                MDB_KEYEXIST    => KeyExists,
-                MDB_TXN_FULL    => TxnFull,
-                MDB_CURSOR_FULL => CursorFull,
-                MDB_PAGE_FULL   => PageFull,
-                MDB_CORRUPTED   => Corrupted,
-                MDB_PANIC       => Panic,
-                _               => Custom(code, error_msg(code))
+                ffi::MDB_NOTFOUND    => NotFound,
+                ffi::MDB_KEYEXIST    => KeyExists,
+                ffi::MDB_TXN_FULL    => TxnFull,
+                ffi::MDB_CURSOR_FULL => CursorFull,
+                ffi::MDB_PAGE_FULL   => PageFull,
+                ffi::MDB_CORRUPTED   => Corrupted,
+                ffi::MDB_PANIC       => Panic,
+                _                    => Custom(code, error_msg(code))
             }
         }
     }

@@ -1,5 +1,8 @@
 [package]
-build = "make mdb_for_cargo"
 name = "lmdb"
 version = "0.0.6"
 authors = ["valerii.hiora@gmail.com"]
+
+[dependencies.liblmdb-sys]
+path = "liblmdb-sys"
+version = "*"
