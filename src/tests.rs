@@ -20,56 +20,27 @@ fn test_db_in_path(path: &Path, f: ||) {
 fn test_environment() {
     let path = Path::new("test-lmdb");
     test_db_in_path(&path, || {
-        // It looks pretty tree like, because it is the simplest test and
-        // it expected to produce easy traceable results
-        let env = EnvBuilder::new()
+        let mut env = EnvBuilder::new()
             .max_readers(33)
-            .open(&path, USER_DIR);
+            .open(&path, USER_DIR).unwrap();
 
-        match env {
-            Ok(mut env) => {
-                match env.sync(true) {
-                    Ok(..) => (),
-                    Err(err) => panic!("Failed to sync: {}", err)
-                };
+        env.sync(true).unwrap();
 
-                let test_flags = EnvNoMemInit | EnvNoMetaSync;
+        let test_flags = EnvNoMemInit | EnvNoMetaSync;
 
-                match env.set_flags(test_flags, true) {
-                    Ok(_) => {
-                        match env.get_flags() {
-                            Ok(new_flags) => assert!((new_flags & test_flags) == test_flags, "Get flags != set flags"),
-                            Err(err) => panic!("Failed to get flags: {}", err)
-                        }
-                    },
-                    Err(err) => panic!("Failed to set flags: {}", err)
-                };
+        env.set_flags(test_flags, true).unwrap();
+        let new_flags = env.get_flags().unwrap();
+        assert!((new_flags & test_flags) == test_flags, "Get flags != set flags");
 
-                match env.get_default_db(DbFlags::empty()) {
-                    Ok(db) => {
-                        let key = "hello".to_string();
-                        let value = "world".to_string();
+        let db = env.get_default_db(DbFlags::empty()).unwrap();
+        let key = "hello".to_string();
+        let value = "world".to_string();
 
-                        match env.new_transaction() {
-                            Ok(txn) => {
-                                match db.set(&txn, &key, &value) {
-                                    Ok(_) => {
-                                        match db.get::<String>(&txn, &key) {
-                                            Ok(v) => assert!(v.as_slice() == value.as_slice(), "Written {} and read {}", value.as_slice(), v.as_slice()),
-                                            Err(err) => panic!("Failed to read value: {}", err)
-                                        }
-                                    },
-                                    Err(err) => panic!("Failed to write value: {}", err)
-                                }
-                            },
-                            Err(err) => panic!("Failed to create transaction: {}", err)
-                        }
-                    },
-                    Err(err) => panic!("Failed to get default database: {}", err)
-                }
-            },
-            Err(err) => panic!("Failed to open path {}: {}", path.display(), err)
-        };
+        let txn = env.new_transaction().unwrap();
+        db.set(&txn, &key, &value).unwrap();
+
+        let v = db.get::<String>(&txn, &key).unwrap();
+        assert!(v.as_slice() == value.as_slice(), "Written {} and read {}", value.as_slice(), v.as_slice());
     });
 }
 
