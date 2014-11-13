@@ -676,12 +676,25 @@ impl Environment {
         }
     }
 
-    fn drop_db(&self, handle: ffi::MDB_dbi) -> MdbResult<()> {
+    fn drop_db_from_cache(&self, handle: ffi::MDB_dbi) {
+        let guard = self.db_cache.lock();
+        let ref cell = *guard;
+
         unsafe {
-            // FIXME: remove handle from cache
-            // FIXME: drop db
+            let cache = cell.get();
+
+            let mut key = None;
+            for (k, v) in (*cache).iter() {
+                if *v == handle {
+                    key = Some(k);
+                    break;
+                }
+            }
+
+            if let Some(key) = key {
+                (*cache).remove(key);
+            }
         }
-        Ok(())
     }
 }
 
@@ -857,6 +870,7 @@ impl<'a> NativeTransaction<'a> {
     fn del_db<'a>(&self, db: Database<'a>) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         unsafe {
+            self.env.drop_db_from_cache(db.handle);
             lift_mdb!(ffi::mdb_drop(self.handle, db.handle, 1))
         }
     }
