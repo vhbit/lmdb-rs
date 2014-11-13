@@ -621,7 +621,7 @@ impl Environment {
         };
 
         lift_mdb!(unsafe { ffi::mdb_txn_begin(self.env, parent_handle, flags, &mut handle) },
-                 NativeTransaction::new_with_handle(handle, flags as uint, unsafe {mem::transmute(self)}))
+                 NativeTransaction::new_with_handle(handle, flags as uint, self))
     }
 
     /// Creates a new read-write transaction
@@ -703,14 +703,14 @@ enum TransactionState {
 #[experimental]
 struct NativeTransaction<'a> {
     handle: *mut ffi::MDB_txn,
-    env: *mut Environment, // FIXME: safer way to access it
+    env: &'a Environment,
     flags: uint,
     state: TransactionState,
 }
 
 #[experimental]
 impl<'a> NativeTransaction<'a> {
-    fn new_with_handle(h: *mut ffi::MDB_txn, flags: uint, env: *mut Environment) -> NativeTransaction<'a> {
+    fn new_with_handle(h: *mut ffi::MDB_txn, flags: uint, env: &'a Environment) -> NativeTransaction<'a> {
         NativeTransaction {
             handle: h,
             flags: flags,
@@ -875,11 +875,8 @@ impl<'a> NativeTransaction<'a> {
     }
 
     fn get_or_create_db(&self, name: &str, flags: DbFlags) -> MdbResult<Database> {
-        unsafe {
-            let env: &mut Environment = mem::transmute(self.env);
-            env.get_db_by_name(self, name, flags)
-                .and_then(|dbi| Ok(Database::new_with_handle(dbi, false, self)))
-        }
+        self.env.get_db_by_name(self, name, flags)
+            .and_then(|dbi| Ok(Database::new_with_handle(dbi, false, self)))
     }
 }
 
