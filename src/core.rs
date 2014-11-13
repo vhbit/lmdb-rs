@@ -718,6 +718,8 @@ struct NativeTransaction<'a> {
     env: &'a Environment,
     flags: uint,
     state: TransactionState,
+    no_send: std::kinds::marker::NoSend,
+    no_sync: std::kinds::marker::NoSync
 }
 
 #[experimental]
@@ -728,6 +730,8 @@ impl<'a> NativeTransaction<'a> {
             flags: flags,
             state: TxnStateNormal,
             env: env,
+            no_send: std::kinds::marker::NoSend,
+            no_sync: std::kinds::marker::NoSync,
         }
     }
 
