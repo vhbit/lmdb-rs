@@ -371,7 +371,7 @@ impl<'a> Database<'a> {
 
     /// Removes all key/values from db
     pub fn clear<'a>(&self) -> MdbResult<()> {
-        self.txn.empty_db(self.handle)
+        self.txn.clear_db(self.handle)
     }
 
     /// Returns an iterator for all values in database
@@ -700,7 +700,7 @@ impl Environment {
 impl Drop for Environment {
     fn drop(&mut self) {
         unsafe {
-            ffi::mdb_env_close(std::mem::transmute(self.env));
+            ffi::mdb_env_close(self.env);
         }
     }
 }
@@ -875,7 +875,7 @@ impl<'a> NativeTransaction<'a> {
     }
 
     /// Empties provided database
-    fn empty_db(&self, db: ffi::MDB_dbi) -> MdbResult<()> {
+    fn clear_db(&self, db: ffi::MDB_dbi) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         unsafe {
             lift_mdb!(ffi::mdb_drop(self.handle, db, 0))
