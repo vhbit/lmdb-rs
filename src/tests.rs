@@ -245,10 +245,24 @@ fn test_db_creation() {
             .max_dbs(5)
             .open(&path, USER_DIR)
             .unwrap();
-        //assert!(env.get_or_create_db("test-db", DbFlags::empty()).is_ok());
+        let txn = env.new_transaction().unwrap();
+        assert!(txn.get_or_create_db("test-db", DbFlags::empty()).is_ok());
     });
 }
 
+#[test]
+fn test_read_only_txn() {
+    let path = Path::new("ro_txn");
+    test_db_in_path(&path, || {
+        let env = EnvBuilder::new()
+            .max_dbs(5)
+            .open(&path, USER_DIR)
+            .unwrap();
+        let txn = env.get_reader().unwrap();
+        assert!(txn.get_db("test-db", DbFlags::empty()).is_err());
+        assert!(txn.get_default_db(DbFlags::empty()).is_ok());
+    });
+}
 
 /*
 #[test]
