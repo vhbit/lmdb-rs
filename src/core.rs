@@ -165,16 +165,6 @@ pub mod errors {
 #[stable]
 pub type MdbResult<T> = Result<T, MdbError>;
 
-#[experimental]
-pub trait ReadTransaction<'a> {
-    fn get_read_transaction(&'a self) -> &'a NativeTransaction;
-}
-
-#[experimental]
-pub trait WriteTransaction<'a>: ReadTransaction<'a> {
-    fn get_write_transaction(&'a self) -> &'a NativeTransaction;
-}
-
 bitflags! {
     #[doc = "A set of environment flags which could be changed after opening"]
     #[unstable]
@@ -708,7 +698,7 @@ enum TransactionState {
 }
 
 #[experimental]
-pub struct NativeTransaction<'a> {
+struct NativeTransaction<'a> {
     handle: *mut ffi::MDB_txn,
     env: *mut Environment, // FIXME: safer way to access it
     flags: uint,
@@ -794,7 +784,7 @@ impl<'a> NativeTransaction<'a> {
         }
     }
 
-    pub fn get<'a, T: FromMdbValue<'a>>(&'a self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>) -> MdbResult<T> {
+    fn get<'a, T: FromMdbValue<'a>>(&'a self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>) -> MdbResult<T> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         self.get_value(db, key)
     }
@@ -817,7 +807,7 @@ impl<'a> NativeTransaction<'a> {
     // FIXME: add explicit append function
     // FIXME: think about creating explicit separation of
     // all traits for databases with dup keys
-    pub fn set<'a>(&'a self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    fn set<'a>(&'a self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         self.set_value(db, key, value)
     }
@@ -831,7 +821,7 @@ impl<'a> NativeTransaction<'a> {
     }
 
     /// If duplicate keys are allowed deletes value for key which is equal to data
-    pub fn del_item<'a>(&'a self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>, data: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    fn del_item<'a>(&'a self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>, data: &'a ToMdbValue<'a>) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         unsafe {
             let mut key_val = key.to_mdb_value();
@@ -842,26 +832,26 @@ impl<'a> NativeTransaction<'a> {
     }
 
     /// Deletes all values for key
-    pub fn del<'a>(&'a self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    fn del<'a>(&'a self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         self.del_value(db, key)
     }
 
     /// creates a new cursor in current transaction tied to db
-    pub fn new_cursor(&'a self, db: ffi::MDB_dbi) -> MdbResult<Cursor<'a>> {
+    fn new_cursor(&'a self, db: ffi::MDB_dbi) -> MdbResult<Cursor<'a>> {
         Cursor::<'a>::new(self, db)
     }
 
     /// Creates a new item cursor, i.e. cursor which navigates all
     /// values with the same key (if AllowsDup was specified)
-    pub fn new_item_iter(&'a self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>) -> MdbResult<CursorIterator<'a, CursorItemIter>> {
+    fn new_item_iter(&'a self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>) -> MdbResult<CursorIterator<'a, CursorItemIter>> {
         let cursor = try!(self.new_cursor(db));
         let inner_iter = CursorItemIter::new(key);
         Ok(CursorIterator::wrap(cursor, inner_iter))
     }
 
     /// Deletes provided database completely
-    pub fn del_db<'a>(&self, db: Database<'a>) -> MdbResult<()> {
+    fn del_db<'a>(&self, db: Database<'a>) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         unsafe {
             lift_mdb!(ffi::mdb_drop(self.handle, db.handle, 1))
@@ -869,7 +859,7 @@ impl<'a> NativeTransaction<'a> {
     }
 
     /// Empties provided database
-    pub fn empty_db(&self, db: ffi::MDB_dbi) -> MdbResult<()> {
+    fn empty_db(&self, db: ffi::MDB_dbi) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         unsafe {
             lift_mdb!(ffi::mdb_drop(self.handle, db, 0))
@@ -941,18 +931,6 @@ impl<'a> Transaction<'a> {
     }
 }
 
-impl<'a> WriteTransaction<'a> for Transaction<'a> {
-    fn get_write_transaction(&'a self) -> &'a NativeTransaction {
-        &self.inner
-    }
-}
-
-impl<'a> ReadTransaction<'a> for Transaction<'a> {
-    fn get_read_transaction(&'a self) -> &'a NativeTransaction {
-        &self.inner
-    }
-}
-
 #[unsafe_destructor]
 impl<'a> Drop for Transaction<'a> {
     fn drop(&mut self) {
@@ -1000,12 +978,6 @@ impl<'a> ReadonlyTransaction<'a> {
         self.inner.get_db("", flags)
     }
 
-}
-
-impl<'a> ReadTransaction<'a> for ReadonlyTransaction<'a> {
-    fn get_read_transaction(&'a self) -> &'a NativeTransaction {
-        &self.inner
-    }
 }
 
 #[unsafe_destructor]
