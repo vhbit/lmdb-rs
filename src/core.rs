@@ -666,11 +666,14 @@ impl Environment {
             }
         }
 
-        // FIXME: is it possible to create db always?
-        let dbi = try!(self.create_db(txn, Some(db_name), flags));
-        unsafe { (*cache).insert(db_name.to_string(), dbi) };
+        if !flags.contains(DbCreate)  {
+            Err(errors::NotFound)
+        } else {
+            let dbi = try!(self.create_db(txn, Some(db_name), flags));
+            unsafe { (*cache).insert(db_name.to_string(), dbi) };
 
-        Ok(dbi)
+            Ok(dbi)
+        }
     }
 
     fn drop_db(&self, handle: ffi::MDB_dbi) -> MdbResult<()> {
