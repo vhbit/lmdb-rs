@@ -342,6 +342,8 @@ pub struct Database<'a> {
     txn: &'a NativeTransaction<'a>,
 }
 
+// FIXME: provide different interfaces for read-only/read-write databases
+// FIXME: provide different interfaces for simple KV and storage with duplicates
 #[unstable]
 impl<'a> Database<'a> {
     fn new_with_handle(handle: ffi::MDB_dbi, owns: bool, txn: &'a NativeTransaction<'a>) -> Database<'a> {
@@ -674,6 +676,7 @@ impl Environment {
             }
         }
 
+        // FIXME: is it possible to create db always?
         let dbi = try!(self.create_db(txn, Some(db_name), flags));
         unsafe { (*cache).insert(db_name.to_string(), dbi) };
 
