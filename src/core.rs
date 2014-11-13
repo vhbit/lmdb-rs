@@ -626,18 +626,32 @@ impl Environment {
             .and_then(|txn| Ok(ReadonlyTransaction::new_with_native(txn)))
     }
 
-    fn create_db<'a>(&'a self, txn: &NativeTransaction, db_name: Option<&'a str>, flags: DbFlags) -> MdbResult<ffi::MDB_dbi> {
+    fn open_db<'a>(&'a self, txn: &NativeTransaction, db_name: Option<&'a str>, flags: DbFlags) -> MdbResult<ffi::MDB_dbi> {
         let mut dbi: ffi::MDB_dbi = 0;
+        // From LMDB docs for mdb_dbi_open:
+        //
+        // This function must not be called from multiple concurrent
+        // transactions. A transaction that uses this function must finish
+        // (either commit or abort) before any other transaction may use
+        // this function
+        //
+        // So what we do here is creating a child transaction and
+        // creating db in it as we don't know how much time
+        // parent transaction is going to spent before committing
+        // and we do not want readers to be blocked because of it.
+        let mut open_txn = try!(txn.new_child(0));
+
         let db_res = match db_name {
-            None => unsafe { ffi::mdb_dbi_open(txn.handle, ptr::null(), (flags | DbCreate).bits(), &mut dbi) },
+            None => unsafe { ffi::mdb_dbi_open(open_txn.handle, ptr::null(), flags.bits(), &mut dbi) },
             Some(db_name) => {
                 db_name.with_c_str(|c_name| unsafe {
-                    ffi::mdb_dbi_open(txn.handle, c_name, flags.bits(), &mut dbi)
+                    ffi::mdb_dbi_open(open_txn.handle, c_name, flags.bits(), &mut dbi)
                 })
             }
         };
 
         try_mdb!(db_res);
+        try!(open_txn.commit());
         Ok(dbi)
     }
 
@@ -654,14 +668,11 @@ impl Environment {
             }
         }
 
-        if !flags.contains(DbCreate)  {
-            Err(errors::NotFound)
-        } else {
-            let dbi = try!(self.create_db(txn, Some(db_name), flags));
-            unsafe { (*cache).insert(db_name.to_string(), dbi) };
+        let opt_name = if db_name.len() > 0 { Some(db_name)} else {None};
+        let dbi = try!(self.open_db(txn, opt_name, flags));
+        unsafe { (*cache).insert(db_name.to_string(), dbi) };
 
-            Ok(dbi)
-        }
+        Ok(dbi)
     }
 
     fn drop_db_from_cache(&self, handle: ffi::MDB_dbi) {
@@ -872,13 +883,12 @@ impl<'a> NativeTransaction<'a> {
     }
 
     fn get_db(&self, name: &str, flags: DbFlags) -> MdbResult<Database> {
-        let flags = flags - DbCreate;
-        self.get_or_create_db(name, flags)
+        self.env.get_db_by_name(self, name, flags)
+            .and_then(|dbi| Ok(Database::new_with_handle(dbi, self)))
     }
 
     fn get_or_create_db(&self, name: &str, flags: DbFlags) -> MdbResult<Database> {
-        self.env.get_db_by_name(self, name, flags)
-            .and_then(|dbi| Ok(Database::new_with_handle(dbi, self)))
+        self.get_db(name, flags | DbCreate)
     }
 }
 
@@ -973,11 +983,11 @@ impl<'a> ReadonlyTransaction<'a> {
     }
 
     pub fn get_db(&self, name: &str, flags: DbFlags) -> MdbResult<Database> {
-        self.inner.get_db(name, flags)
+        self.inner.get_db(name, flags - DbCreate)
     }
 
     pub fn get_default_db(&self, flags: DbFlags) -> MdbResult<Database> {
-        self.inner.get_db("", flags)
+        self.inner.get_db("", flags - DbCreate)
     }
 
 }
