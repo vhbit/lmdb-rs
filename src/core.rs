@@ -328,7 +328,6 @@ bitflags! {
 #[unstable]
 pub struct Database<'a> {
     handle: ffi::MDB_dbi,
-    owns: bool,
     txn: &'a NativeTransaction<'a>,
 }
 
@@ -336,8 +335,8 @@ pub struct Database<'a> {
 // FIXME: provide different interfaces for simple KV and storage with duplicates
 #[unstable]
 impl<'a> Database<'a> {
-    fn new_with_handle(handle: ffi::MDB_dbi, owns: bool, txn: &'a NativeTransaction<'a>) -> Database<'a> {
-        Database { handle: handle, owns: owns, txn: txn }
+    fn new_with_handle(handle: ffi::MDB_dbi, txn: &'a NativeTransaction<'a>) -> Database<'a> {
+        Database { handle: handle, txn: txn }
     }
 
     /// Retrieves a value by key. In case of DbAllowDups it will be the first value
@@ -401,17 +400,6 @@ impl<'a> Database<'a> {
     pub fn item_iter<'a>(&'a self, key: &'a ToMdbValue<'a>) -> MdbResult<CursorIterator<'a, CursorItemIter<'a>>> {
         self.txn.new_item_iter(self.handle, key)
     }
-}
-
-#[unsafe_destructor]
-impl<'a> Drop for Database<'a> {
-    fn drop(&mut self) {
-        if self.owns {
-            // FIXME: drop dbi handle
-            // unsafe { mdb_dbi_close(self.handle) }
-        }
-    }
-
 }
 
 #[stable]
@@ -890,7 +878,7 @@ impl<'a> NativeTransaction<'a> {
 
     fn get_or_create_db(&self, name: &str, flags: DbFlags) -> MdbResult<Database> {
         self.env.get_db_by_name(self, name, flags)
-            .and_then(|dbi| Ok(Database::new_with_handle(dbi, false, self)))
+            .and_then(|dbi| Ok(Database::new_with_handle(dbi, self)))
     }
 }
 
