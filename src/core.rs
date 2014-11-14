@@ -345,17 +345,17 @@ impl<'a> Database<'a> {
     }
 
     /// Sets value for key. In case of DbAllowDups it will add a new item
-    pub fn set<'a>(&'a self, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    pub fn set<'a>(&self, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
         self.txn.set(self.handle, key, value)
     }
 
     /// Deletes value for key.
-    pub fn del(&'a self, key: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    pub fn del<'a>(&self, key: &'a ToMdbValue<'a>) -> MdbResult<()> {
         self.txn.del(self.handle, key)
     }
 
     /// Should be used only with DbAllowDups. Deletes corresponding (key, value)
-    pub fn del_item(&'a self, key: &'a ToMdbValue<'a>, data: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    pub fn del_item<'a>(&self, key: &'a ToMdbValue<'a>, data: &'a ToMdbValue<'a>) -> MdbResult<()> {
         self.txn.del_item(self.handle, key, data)
     }
 
@@ -724,7 +724,7 @@ struct NativeTransaction<'a> {
 
 #[experimental]
 impl<'a> NativeTransaction<'a> {
-    fn new_with_handle(h: *mut ffi::MDB_txn, flags: uint, env: &'a Environment) -> NativeTransaction<'a> {
+    fn new_with_handle(h: *mut ffi::MDB_txn, flags: uint, env: &Environment) -> NativeTransaction {
         NativeTransaction {
             handle: h,
             flags: flags,
@@ -808,11 +808,11 @@ impl<'a> NativeTransaction<'a> {
         self.get_value(db, key)
     }
 
-    fn set_value<'a>(&'a self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    fn set_value<'a>(&self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
         self.set_value_with_flags(db, key, value, 0)
     }
 
-    fn set_value_with_flags<'a>(&'a self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>, flags: c_uint) -> MdbResult<()> {
+    fn set_value_with_flags<'a>(&self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>, flags: c_uint) -> MdbResult<()> {
         unsafe {
             let mut key_val = key.to_mdb_value();
             let mut data_val = value.to_mdb_value();
@@ -826,13 +826,13 @@ impl<'a> NativeTransaction<'a> {
     // FIXME: add explicit append function
     // FIXME: think about creating explicit separation of
     // all traits for databases with dup keys
-    fn set<'a>(&'a self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    fn set<'a>(&self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         self.set_value(db, key, value)
     }
 
     /// Deletes all values by key
-    fn del_value<'a>(&'a self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    fn del_value<'a>(&self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>) -> MdbResult<()> {
         unsafe {
             let mut key_val = key.to_mdb_value();
             lift_mdb!(ffi::mdb_del(self.handle, db, &mut key_val.value, ptr::null_mut()))
@@ -840,7 +840,7 @@ impl<'a> NativeTransaction<'a> {
     }
 
     /// If duplicate keys are allowed deletes value for key which is equal to data
-    fn del_item<'a>(&'a self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>, data: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    fn del_item<'a>(&self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>, data: &'a ToMdbValue<'a>) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         unsafe {
             let mut key_val = key.to_mdb_value();
@@ -851,7 +851,7 @@ impl<'a> NativeTransaction<'a> {
     }
 
     /// Deletes all values for key
-    fn del<'a>(&'a self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>) -> MdbResult<()> {
+    fn del<'a>(&self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         self.del_value(db, key)
     }
@@ -870,7 +870,7 @@ impl<'a> NativeTransaction<'a> {
     }
 
     /// Deletes provided database completely
-    fn del_db<'a>(&self, db: Database<'a>) -> MdbResult<()> {
+    fn del_db(&self, db: Database) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TxnStateNormal);
         unsafe {
             self.env.drop_db_from_cache(db.handle);
