@@ -126,7 +126,7 @@ pub mod errors {
         Panic,
         InvalidPath,
         StateError(String),
-        Custom(c_int, String)
+        Other(c_int, String)
     }
 
     #[unstable]
@@ -140,7 +140,7 @@ pub mod errors {
                 ffi::MDB_PAGE_FULL   => PageFull,
                 ffi::MDB_CORRUPTED   => Corrupted,
                 ffi::MDB_PANIC       => Panic,
-                _                    => Custom(code, error_msg(code))
+                _                    => Other(code, error_msg(code))
             }
         }
     }
@@ -154,7 +154,7 @@ pub mod errors {
                 &Panic | &InvalidPath => write!(fmt, "{}", self.description()),
 
                 &StateError(ref msg) => write!(fmt, "{}", msg),
-                &Custom(code, ref msg) => write!(fmt, "{}: {}", code, msg)
+                &Other(code, ref msg) => write!(fmt, "{}: {}", code, msg)
             }
         }
     }
@@ -171,7 +171,7 @@ pub mod errors {
                 &Panic => "panic",
                 &InvalidPath => "invalid path for database",
                 &StateError(_) => "state error",
-                &Custom(_, _) => "other error",
+                &Other(_, _) => "other error",
             }
         }
 
@@ -181,7 +181,7 @@ pub mod errors {
                 &CursorFull | &PageFull | &Corrupted |
                 &Panic | &InvalidPath => None,
                 &StateError(ref msg) => Some(msg.clone()),
-                &Custom(code, ref msg) => Some(format!("code {}, msg {}", code, msg))
+                &Other(code, ref msg) => Some(format!("code {}, msg {}", code, msg))
             }
         }
     }
