@@ -109,6 +109,8 @@ macro_rules! assert_state_not {
 pub mod errors {
     use libc::{c_int};
     use std;
+    use std::error::Error;
+
 
     use ffi;
     use utils::{error_msg};
@@ -147,16 +149,39 @@ pub mod errors {
     impl std::fmt::Show for MdbError {
         fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
             match self {
-                &NotFound => write!(fmt, "not found"),
-                &KeyExists => write!(fmt, "key exists"),
-                &TxnFull => write!(fmt, "txn full"),
-                &CursorFull => write!(fmt, "cursor full"),
-                &PageFull => write!(fmt, "page full"),
-                &Corrupted => write!(fmt, "corrupted"),
-                &Panic => write!(fmt, "panic"),
-                &InvalidPath => write!(fmt, "invalid path for database"),
+                &NotFound | &KeyExists | &TxnFull |
+                &CursorFull | &PageFull | &Corrupted |
+                &Panic | &InvalidPath => write!(fmt, "{}", self.description()),
+
                 &StateError(ref msg) => write!(fmt, "{}", msg),
                 &Custom(code, ref msg) => write!(fmt, "{}: {}", code, msg)
+            }
+        }
+    }
+
+    impl Error for MdbError {
+        fn description(&self) -> &str {
+            match self {
+                &NotFound => "not found",
+                &KeyExists => "key exists",
+                &TxnFull => "txn full",
+                &CursorFull => "cursor full",
+                &PageFull => "page full",
+                &Corrupted => "corrupted",
+                &Panic => "panic",
+                &InvalidPath => "invalid path for database",
+                &StateError(_) => "state error",
+                &Custom(_, _) => "other error",
+            }
+        }
+
+        fn detail(&self) -> Option<String> {
+            match self {
+                &NotFound | &KeyExists |  &TxnFull |
+                &CursorFull | &PageFull | &Corrupted |
+                &Panic | &InvalidPath => None,
+                &StateError(ref msg) => Some(msg.clone()),
+                &Custom(code, ref msg) => Some(format!("code {}, msg {}", code, msg))
             }
         }
     }
