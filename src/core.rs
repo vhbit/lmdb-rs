@@ -44,17 +44,20 @@ use std;
 use std::cell::{UnsafeCell};
 use std::collections::HashMap;
 use libc::{mod, c_int, c_uint, size_t, c_void};
+use std::error::Error;
 use std::io::fs::PathExtensions;
 use std::io::FilePermission;
 use std::mem;
 use std::ptr;
 use std::result::Result;
-use std::string::as_string;
 use sync::{Mutex};
 
-pub use self::errors::{MdbError, NotFound, InvalidPath, StateError};
+
 use ffi::{mod, MDB_val};
+use MdbError::{NotFound, KeyExists, Other, StateError, Corrupted, Panic, InvalidPath, TxnFull, CursorFull, PageFull};
 use traits::{ToMdbValue, FromMdbValue};
+use utils::{error_msg};
+
 
 macro_rules! lift_mdb {
     ($e:expr) => (lift_mdb!($e, ()));
@@ -106,83 +109,74 @@ macro_rules! assert_state_not {
 }
 
 /// MdbError wraps information about LMDB error
-pub mod errors {
-    use libc::{c_int};
-    use std;
-    use std::error::Error;
 
+#[unstable]
+pub enum MdbError {
+    NotFound,
+    KeyExists,
+    TxnFull,
+    CursorFull,
+    PageFull,
+    Corrupted,
+    Panic,
+    InvalidPath,
+    StateError(String),
+    Other(c_int, String)
+}
 
-    use ffi;
-    use utils::{error_msg};
-
-    #[unstable]
-    pub enum MdbError {
-        NotFound,
-        KeyExists,
-        TxnFull,
-        CursorFull,
-        PageFull,
-        Corrupted,
-        Panic,
-        InvalidPath,
-        StateError(String),
-        Other(c_int, String)
+#[unstable]
+impl MdbError {
+    pub fn new_with_code(code: c_int) -> MdbError {
+        match code {
+            ffi::MDB_NOTFOUND    => NotFound,
+            ffi::MDB_KEYEXIST    => KeyExists,
+            ffi::MDB_TXN_FULL    => TxnFull,
+            ffi::MDB_CURSOR_FULL => CursorFull,
+            ffi::MDB_PAGE_FULL   => PageFull,
+            ffi::MDB_CORRUPTED   => Corrupted,
+            ffi::MDB_PANIC       => Panic,
+            _                    => Other(code, error_msg(code))
+        }
     }
+}
 
-    #[unstable]
-    impl MdbError {
-        pub fn new_with_code(code: c_int) -> MdbError {
-            match code {
-                ffi::MDB_NOTFOUND    => NotFound,
-                ffi::MDB_KEYEXIST    => KeyExists,
-                ffi::MDB_TXN_FULL    => TxnFull,
-                ffi::MDB_CURSOR_FULL => CursorFull,
-                ffi::MDB_PAGE_FULL   => PageFull,
-                ffi::MDB_CORRUPTED   => Corrupted,
-                ffi::MDB_PANIC       => Panic,
-                _                    => Other(code, error_msg(code))
-            }
+
+impl std::fmt::Show for MdbError {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            &NotFound | &KeyExists | &TxnFull |
+            &CursorFull | &PageFull | &Corrupted |
+            &Panic | &InvalidPath => write!(fmt, "{}", self.description()),
+
+            &StateError(ref msg) => write!(fmt, "{}", msg),
+            &Other(code, ref msg) => write!(fmt, "{}: {}", code, msg)
+        }
+    }
+}
+
+impl Error for MdbError {
+    fn description(&self) -> &str {
+        match self {
+            &NotFound => "not found",
+            &KeyExists => "key exists",
+            &TxnFull => "txn full",
+            &CursorFull => "cursor full",
+            &PageFull => "page full",
+            &Corrupted => "corrupted",
+            &Panic => "panic",
+            &InvalidPath => "invalid path for database",
+            &StateError(_) => "state error",
+            &Other(_, _) => "other error",
         }
     }
 
-
-    impl std::fmt::Show for MdbError {
-        fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-            match self {
-                &NotFound | &KeyExists | &TxnFull |
-                &CursorFull | &PageFull | &Corrupted |
-                &Panic | &InvalidPath => write!(fmt, "{}", self.description()),
-
-                &StateError(ref msg) => write!(fmt, "{}", msg),
-                &Other(code, ref msg) => write!(fmt, "{}: {}", code, msg)
-            }
-        }
-    }
-
-    impl Error for MdbError {
-        fn description(&self) -> &str {
-            match self {
-                &NotFound => "not found",
-                &KeyExists => "key exists",
-                &TxnFull => "txn full",
-                &CursorFull => "cursor full",
-                &PageFull => "page full",
-                &Corrupted => "corrupted",
-                &Panic => "panic",
-                &InvalidPath => "invalid path for database",
-                &StateError(_) => "state error",
-                &Other(_, _) => "other error",
-            }
-        }
-
-        fn detail(&self) -> Option<String> {
-            match self {
-                &NotFound | &KeyExists |  &TxnFull |
-                &CursorFull | &PageFull | &Corrupted |
-                &Panic | &InvalidPath => None,
-                &StateError(ref msg) => Some(msg.clone()),
-                &Other(code, ref msg) => Some(format!("code {}, msg {}", code, msg))
-            }
+    fn detail(&self) -> Option<String> {
+        match self {
+            &NotFound | &KeyExists |  &TxnFull |
+            &CursorFull | &PageFull | &Corrupted |
+            &Panic | &InvalidPath => None,
+            &StateError(ref msg) => Some(msg.clone()),
+            &Other(code, ref msg) => Some(format!("code {}, msg {}", code, msg))
         }
     }
 }
@@ -685,10 +679,8 @@ impl Environment {
         let ref cell = *guard;
         let cache = unsafe { cell.get() };
 
-        let db_name_eq = as_string(db_name);
-
         unsafe {
-            if let Some(handle) = (*cache).find_equiv(db_name_eq.deref()) {
+            if let Some(handle) = (*cache).get(db_name) {
                 return Ok(*handle);
             }
         }
@@ -732,9 +724,9 @@ impl Drop for Environment {
 
 #[deriving(PartialEq, Show, Eq, Clone)]
 enum TransactionState {
-    TxnStateNormal,   // Normal, any operation possible
-    TxnStateReleased, // Released (reset on readonly), has to be renewed
-    TxnStateInvalid,  // Invalid, no further operation possible
+    Normal,   // Normal, any operation possible
+    Released, // Released (reset on readonly), has to be renewed
+    Invalid,  // Invalid, no further operation possible
 }
 
 #[experimental]
@@ -753,7 +745,7 @@ impl<'a> NativeTransaction<'a> {
         NativeTransaction {
             handle: h,
             flags: flags,
-            state: TxnStateNormal,
+            state: TransactionState::Normal,
             env: env,
             no_send: std::kinds::marker::NoSend,
             no_sync: std::kinds::marker::NoSync,
@@ -765,25 +757,25 @@ impl<'a> NativeTransaction<'a> {
     }
 
     fn commit(&mut self) -> MdbResult<()> {
-        assert_state_eq!(txn, self.state, TxnStateNormal);
+        assert_state_eq!(txn, self.state, TransactionState::Normal);
         try_mdb!(unsafe { ffi::mdb_txn_commit(self.handle) } );
         self.state = if self.is_readonly() {
-            TxnStateReleased
+            TransactionState::Released
         } else {
-            TxnStateInvalid
+            TransactionState::Invalid
         };
         Ok(())
     }
 
     fn abort(&mut self) {
-        if self.state != TxnStateNormal {
+        if self.state != TransactionState::Normal {
             debug!("Can't abort transaction: current state {}", self.state)
         } else {
             unsafe { ffi::mdb_txn_abort(self.handle); }
             self.state = if self.is_readonly() {
-                TxnStateReleased
+                TransactionState::Released
             } else {
-                TxnStateInvalid
+                TransactionState::Invalid
             };
         }
     }
@@ -791,19 +783,19 @@ impl<'a> NativeTransaction<'a> {
     /// Resets read only transaction, handle is kept. Must be followed
     /// by a call to `renew`
     fn reset(&mut self) {
-        if self.state != TxnStateNormal {
+        if self.state != TransactionState::Normal {
             debug!("Can't reset transaction: current state {}", self.state);
         } else {
             unsafe { ffi::mdb_txn_reset(self.handle); }
-            self.state = TxnStateReleased;
+            self.state = TransactionState::Released;
         }
     }
 
     /// Acquires a new reader lock after it was released by reset
     fn renew(&mut self) -> MdbResult<()> {
-        assert_state_eq!(txn, self.state, TxnStateReleased);
+        assert_state_eq!(txn, self.state, TransactionState::Released);
         try_mdb!(unsafe {ffi::mdb_txn_renew(self.handle)});
-        self.state = TxnStateNormal;
+        self.state = TransactionState::Normal;
         Ok(())
     }
 
@@ -816,7 +808,7 @@ impl<'a> NativeTransaction<'a> {
     /// Used in Drop to switch state
     fn silent_abort(&mut self) {
         unsafe {ffi::mdb_txn_abort(self.handle);}
-        self.state = TxnStateInvalid;
+        self.state = TransactionState::Invalid;
     }
 
     fn get_value<T: FromMdbValue<'a>>(&'a self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>) -> MdbResult<T> {
@@ -829,7 +821,7 @@ impl<'a> NativeTransaction<'a> {
     }
 
     fn get<'a, T: FromMdbValue<'a>>(&'a self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>) -> MdbResult<T> {
-        assert_state_eq!(txn, self.state, TxnStateNormal);
+        assert_state_eq!(txn, self.state, TransactionState::Normal);
         self.get_value(db, key)
     }
 
@@ -852,7 +844,7 @@ impl<'a> NativeTransaction<'a> {
     // FIXME: think about creating explicit separation of
     // all traits for databases with dup keys
     fn set<'a>(&self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>, value: &'a ToMdbValue<'a>) -> MdbResult<()> {
-        assert_state_eq!(txn, self.state, TxnStateNormal);
+        assert_state_eq!(txn, self.state, TransactionState::Normal);
         self.set_value(db, key, value)
     }
 
@@ -866,7 +858,7 @@ impl<'a> NativeTransaction<'a> {
 
     /// If duplicate keys are allowed deletes value for key which is equal to data
     fn del_item<'a>(&self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>, data: &'a ToMdbValue<'a>) -> MdbResult<()> {
-        assert_state_eq!(txn, self.state, TxnStateNormal);
+        assert_state_eq!(txn, self.state, TransactionState::Normal);
         unsafe {
             let mut key_val = key.to_mdb_value();
             let mut data_val = data.to_mdb_value();
@@ -877,7 +869,7 @@ impl<'a> NativeTransaction<'a> {
 
     /// Deletes all values for key
     fn del<'a>(&self, db: ffi::MDB_dbi, key: &'a ToMdbValue<'a>) -> MdbResult<()> {
-        assert_state_eq!(txn, self.state, TxnStateNormal);
+        assert_state_eq!(txn, self.state, TransactionState::Normal);
         self.del_value(db, key)
     }
 
@@ -896,7 +888,7 @@ impl<'a> NativeTransaction<'a> {
 
     /// Deletes provided database completely
     fn del_db(&self, db: Database) -> MdbResult<()> {
-        assert_state_eq!(txn, self.state, TxnStateNormal);
+        assert_state_eq!(txn, self.state, TransactionState::Normal);
         unsafe {
             self.env.drop_db_from_cache(db.handle);
             lift_mdb!(ffi::mdb_drop(self.handle, db.handle, 1))
@@ -905,7 +897,7 @@ impl<'a> NativeTransaction<'a> {
 
     /// Empties provided database
     fn clear_db(&self, db: ffi::MDB_dbi) -> MdbResult<()> {
-        assert_state_eq!(txn, self.state, TxnStateNormal);
+        assert_state_eq!(txn, self.state, TransactionState::Normal);
         unsafe {
             lift_mdb!(ffi::mdb_drop(self.handle, db, 0))
         }
