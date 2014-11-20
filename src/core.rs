@@ -712,6 +712,17 @@ impl Environment {
             }
         }
     }
+
+    pub fn get_or_create_db(&self, name: &str, flags: DbFlags) -> MdbResult<DbHandle> {
+        let mut txn = try!(self.create_transaction(None, 0));
+        let db = try!(self.get_db_by_name(&txn, name, flags));
+        try!(txn.commit());
+
+        Ok(DbHandle {
+            handle: db,
+            flags: flags
+        })
+    }
 }
 
 impl Drop for Environment {
@@ -721,6 +732,13 @@ impl Drop for Environment {
         }
     }
 }
+
+#[allow(dead_code)]
+pub struct DbHandle {
+    handle: ffi::MDB_dbi,
+    flags: DbFlags
+}
+
 
 #[deriving(PartialEq, Show, Eq, Clone)]
 enum TransactionState {
@@ -962,6 +980,10 @@ impl<'a> Transaction<'a> {
     pub fn get_default_db(&self, flags: DbFlags) -> MdbResult<Database> {
         self.inner.get_or_create_db("", flags)
     }
+
+    pub fn bind(&self, db_handle: &DbHandle) -> Database {
+        Database::new_with_handle(db_handle.handle, &self.inner)
+    }
 }
 
 #[unsafe_destructor]
@@ -1011,6 +1033,9 @@ impl<'a> ReadonlyTransaction<'a> {
         self.inner.get_db("", flags - DbCreate)
     }
 
+    pub fn bind(&self, db_handle: &DbHandle) -> Database {
+        Database::new_with_handle(db_handle.handle, &self.inner)
+    }
 }
 
 #[unsafe_destructor]
