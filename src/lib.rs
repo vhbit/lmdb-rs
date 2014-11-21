@@ -11,6 +11,9 @@
 extern crate libc;
 extern crate sync;
 
+#[cfg(test)]
+extern crate rustrt;
+
 extern crate "liblmdb-sys" as ffi;
 
 #[stable]
