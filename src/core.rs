@@ -645,51 +645,65 @@ impl Environment {
             .and_then(|txn| Ok(ReadonlyTransaction::new_with_native(txn)))
     }
 
-    fn open_db<'a>(&'a self, txn: &NativeTransaction, db_name: Option<&'a str>, flags: DbFlags) -> MdbResult<ffi::MDB_dbi> {
-        let mut dbi: ffi::MDB_dbi = 0;
+    fn _open_db(&self, db_name: & str, flags: DbFlags, force_creation: bool) -> MdbResult<ffi::MDB_dbi> {
+        debug!("Opening {} (create={})", db_name, force_creation);
         // From LMDB docs for mdb_dbi_open:
         //
         // This function must not be called from multiple concurrent
         // transactions. A transaction that uses this function must finish
         // (either commit or abort) before any other transaction may use
         // this function
-        //
-        // So what we do here is creating a child transaction and
-        // creating db in it as we don't know how much time
-        // parent transaction is going to spent before committing
-        // and we do not want readers to be blocked because of it.
-        let mut open_txn = try!(txn.new_child(0));
-
-        let db_res = match db_name {
-            None => unsafe { ffi::mdb_dbi_open(open_txn.handle, ptr::null(), flags.bits(), &mut dbi) },
-            Some(db_name) => {
-                db_name.with_c_str(|c_name| unsafe {
-                    ffi::mdb_dbi_open(open_txn.handle, c_name, flags.bits(), &mut dbi)
-                })
-            }
-        };
-
-        try_mdb!(db_res);
-        try!(open_txn.commit());
-        Ok(dbi)
-    }
-
-    fn get_db_by_name<'a>(&'a self, txn: &NativeTransaction, db_name: &'a str, flags: DbFlags) -> MdbResult<ffi::MDB_dbi> {
         let guard = self.db_cache.lock();
         let ref cell = *guard;
         let cache = unsafe { cell.get() };
 
         unsafe {
-            if let Some(handle) = (*cache).get(db_name) {
-                return Ok(*handle);
+            if let Some(db) = (*cache).get(db_name) {
+                debug!("Cached value for {}: {}", db_name, *db);
+                return Ok(*db);
             }
         }
 
-        let opt_name = if db_name.len() > 0 { Some(db_name)} else {None};
-        let dbi = try!(self.open_db(txn, opt_name, flags));
-        unsafe { (*cache).insert(db_name.to_string(), dbi) };
+        let mut txn = try!(self.create_transaction(None, 0));
+        let opt_name = if db_name.len() > 0 {Some(db_name)} else {None};
+        let flags = if force_creation {flags | DbCreate} else {flags - DbCreate};
 
-        Ok(dbi)
+        let mut db: ffi::MDB_dbi = 0;
+        let db_res = match opt_name {
+            None => unsafe { ffi::mdb_dbi_open(txn.handle, ptr::null(), flags.bits(), &mut db) },
+            Some(db_name) => {
+                db_name.with_c_str(|c_name| unsafe {
+                    ffi::mdb_dbi_open(txn.handle, c_name, flags.bits(), &mut db)
+                })
+            }
+        };
+
+        try_mdb!(db_res);
+        try!(txn.commit());
+
+        debug!("Caching: {} -> {}", db_name, db);
+        unsafe {
+            (*cache).insert(db_name.into_string(), db);
+        };
+
+        Ok(db)
+    }
+
+    /// Opens existing DB
+    pub fn get_db(& self, db_name: &str, flags: DbFlags) -> MdbResult<DbHandle> {
+        let db = try!(self._open_db(db_name, flags, false));
+        Ok(DbHandle {handle: db, flags: flags})
+    }
+
+    /// Opens or creates a DB
+    pub fn create_db(&mut self, db_name: &str, flags: DbFlags) -> MdbResult<DbHandle> {
+        let db = try!(self._open_db(db_name, flags, true));
+        Ok(DbHandle {handle: db, flags: flags})
+    }
+
+    /// Opens default DB with specified flags
+    pub fn get_default_db(&mut self, flags: DbFlags) -> MdbResult<DbHandle> {
+        self.get_db("", flags)
     }
 
     fn drop_db_from_cache(&self, handle: ffi::MDB_dbi) {
@@ -711,17 +725,6 @@ impl Environment {
                 (*cache).remove(key);
             }
         }
-    }
-
-    pub fn get_or_create_db(&self, name: &str, flags: DbFlags) -> MdbResult<DbHandle> {
-        let mut txn = try!(self.create_transaction(None, 0));
-        let db = try!(self.get_db_by_name(&txn, name, flags));
-        try!(txn.commit());
-
-        Ok(DbHandle {
-            handle: db,
-            flags: flags
-        })
     }
 }
 
@@ -761,6 +764,7 @@ struct NativeTransaction<'a> {
 #[experimental]
 impl<'a> NativeTransaction<'a> {
     fn new_with_handle(h: *mut ffi::MDB_txn, flags: uint, env: &Environment) -> NativeTransaction {
+        // debug!("new native txn");
         NativeTransaction {
             handle: h,
             flags: flags,
@@ -777,6 +781,7 @@ impl<'a> NativeTransaction<'a> {
 
     fn commit(&mut self) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TransactionState::Normal);
+        debug!("commit txn");
         try_mdb!(unsafe { ffi::mdb_txn_commit(self.handle) } );
         self.state = if self.is_readonly() {
             TransactionState::Released
@@ -790,6 +795,7 @@ impl<'a> NativeTransaction<'a> {
         if self.state != TransactionState::Normal {
             debug!("Can't abort transaction: current state {}", self.state)
         } else {
+            debug!("abort txn");
             unsafe { ffi::mdb_txn_abort(self.handle); }
             self.state = if self.is_readonly() {
                 TransactionState::Released
@@ -826,8 +832,11 @@ impl<'a> NativeTransaction<'a> {
 
     /// Used in Drop to switch state
     fn silent_abort(&mut self) {
-        unsafe {ffi::mdb_txn_abort(self.handle);}
-        self.state = TransactionState::Invalid;
+        if self.state == TransactionState::Normal {
+            debug!("silent abort");
+            unsafe {ffi::mdb_txn_abort(self.handle);}
+            self.state = TransactionState::Invalid;
+        }
     }
 
     fn get_value<V: FromMdbValue<'a, V> + 'a>(&'a self, db: ffi::MDB_dbi, key: &ToMdbValue) -> MdbResult<MdbWrapper<'a, V>> {
@@ -922,13 +931,25 @@ impl<'a> NativeTransaction<'a> {
         }
     }
 
+    /*
     fn get_db(&self, name: &str, flags: DbFlags) -> MdbResult<Database> {
-        self.env.get_db_by_name(self, name, flags)
-            .and_then(|dbi| Ok(Database::new_with_handle(dbi, self)))
+        self.env.get_db(name, flags)
+            .and_then(|db| Ok(Database::new_with_handle(db.handle, self)))
     }
+    */
 
+    /*
     fn get_or_create_db(&self, name: &str, flags: DbFlags) -> MdbResult<Database> {
         self.get_db(name, flags | DbCreate)
+    }
+    */
+}
+
+#[unsafe_destructor]
+impl<'a> Drop for NativeTransaction<'a> {
+    fn drop(&mut self) {
+        //debug!("Dropping native transaction!");
+        self.silent_abort();
     }
 }
 
@@ -968,26 +989,32 @@ impl<'a> Transaction<'a> {
         t.inner.abort();
     }
 
-    ///
-    pub fn get_or_create_db(&self, name: &str, flags: DbFlags) -> MdbResult<Database> {
-        self.inner.get_or_create_db(name, flags)
+    /*
+    pub fn get_db(&self, name: &str, flags: DbFlags) -> MdbResult<Database> {
+        self.inner.get_db(name, flags)
     }
+    */
 
+    /*
     pub fn get_default_db(&self, flags: DbFlags) -> MdbResult<Database> {
-        self.inner.get_or_create_db("", flags)
+        self.inner.get_default_db(flags)
     }
+    */
 
     pub fn bind(&self, db_handle: &DbHandle) -> Database {
         Database::new_with_handle(db_handle.handle, &self.inner)
     }
 }
 
+/*
 #[unsafe_destructor]
 impl<'a> Drop for Transaction<'a> {
     fn drop(&mut self) {
+        debug!("drop txn");
         self.inner.silent_abort();
     }
 }
+*/
 
 #[unstable]
 pub struct ReadonlyTransaction<'a> {
@@ -1026,25 +1053,32 @@ impl<'a> ReadonlyTransaction<'a> {
         self.inner.renew()
     }
 
+    /*
     pub fn get_db(&self, name: &str, flags: DbFlags) -> MdbResult<Database> {
-        self.inner.get_db(name, flags - DbCreate)
+        self.inner.get_db(name, flags)
     }
+    */
 
-    pub fn get_default_db(&self, flags: DbFlags) -> MdbResult<Database> {
-        self.inner.get_db("", flags - DbCreate)
+    /*
+    pub fn get_default_db(&self, flags: DbFlags) -> MdbResult<self> {
+        Database.inner.get_default_db(flags - DbCreate)
     }
+    */
 
     pub fn bind(&self, db_handle: &DbHandle) -> Database {
         Database::new_with_handle(db_handle.handle, &self.inner)
     }
 }
 
+/*
 #[unsafe_destructor]
 impl<'a> Drop for ReadonlyTransaction<'a> {
     fn drop(&mut self) {
+        debug!("drop ro txn");
         self.inner.silent_abort();
     }
 }
+*/
 
 #[unstable]
 pub struct Cursor<'txn> {
@@ -1059,6 +1093,7 @@ pub struct Cursor<'txn> {
 #[unstable]
 impl<'txn> Cursor<'txn> {
     fn new(txn: &'txn NativeTransaction, db: ffi::MDB_dbi) -> MdbResult<Cursor<'txn>> {
+        debug!("Opening cursor in {}", db);
         let mut tmp: *mut ffi::MDB_cursor = std::ptr::null_mut();
         try_mdb!(unsafe { ffi::mdb_cursor_open(txn.handle, db, &mut tmp) });
         Ok(Cursor {
