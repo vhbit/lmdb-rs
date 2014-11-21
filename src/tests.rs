@@ -1,6 +1,6 @@
 use std::io::fs::{mod, PathExtensions};
 use std::io::USER_DIR;
-use std::rt::unwind;
+use rustrt::unwind;
 use std::path::Path;
 
 use core::{mod, EnvBuilder, DbFlags, EnvNoMemInit, EnvNoMetaSync};
