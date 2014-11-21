@@ -32,8 +32,10 @@ fn test_environment() {
         let new_flags = env.get_flags().unwrap();
         assert!((new_flags & test_flags) == test_flags, "Get flags != set flags");
 
+        let db = env.get_default_db(DbFlags::empty()).unwrap();
         let txn = env.new_transaction().unwrap();
-        let db = txn.get_default_db(DbFlags::empty()).unwrap();
+        let db = txn.bind(&db);
+
         let key = "hello";
         let value = "world";
 
@@ -48,13 +50,14 @@ fn test_environment() {
 fn test_single_values() {
     let path = Path::new("single-values");
     test_db_in_path(&path, || {
-        let env = EnvBuilder::new()
+        let mut env = EnvBuilder::new()
             .max_dbs(5)
             .open(&path, USER_DIR)
             .unwrap();
 
+        let db = env.get_default_db(DbFlags::empty()).unwrap();
         let txn = env.new_transaction().unwrap();
-        let db = txn.get_default_db(DbFlags::empty()).unwrap();
+        let db = txn.bind(&db);
 
         let test_key1 = "key1";
         let test_data1 = "value1";
@@ -79,13 +82,14 @@ fn test_single_values() {
 fn test_multiple_values() {
     let path = Path::new("multiple-values");
     test_db_in_path(&path, || {
-        let env = EnvBuilder::new()
+        let mut env = EnvBuilder::new()
             .max_dbs(5)
             .open(&path, USER_DIR)
             .unwrap();
 
+        let db = env.get_default_db(core::DbAllowDups).unwrap();
         let txn = env.new_transaction().unwrap();
-        let db = txn.get_default_db(core::DbAllowDups).unwrap();
+        let db = txn.bind(&db);
 
         let test_key1 = "key1";
         let test_data1 = "value1";
@@ -115,13 +119,14 @@ fn test_multiple_values() {
 fn test_cursors() {
     let path = Path::new("cursors");
     test_db_in_path(&path, || {
-        let env = EnvBuilder::new()
+        let mut env = EnvBuilder::new()
             .max_dbs(5)
             .open(&path, USER_DIR)
             .unwrap();
 
+        let db = env.get_default_db(core::DbAllowDups).unwrap();
         let txn = env.new_transaction().unwrap();
-        let db = txn.get_default_db(core::DbAllowDups).unwrap();
+        let db = txn.bind(&db);
 
         let test_key1 = "key1";
         let test_key2 = "key2";
@@ -166,13 +171,14 @@ fn test_cursors() {
 fn test_cursor_item_manip() {
     let path = Path::new("cursors-items");
     test_db_in_path(&path, || {
-        let env = EnvBuilder::new()
+        let mut env = EnvBuilder::new()
             .max_dbs(5)
             .open(&path, USER_DIR)
             .unwrap();
 
+        let db = env.get_default_db(core::DbAllowDups | core::DbAllowIntDups).unwrap();
         let txn = env.new_transaction().unwrap();
-        let db = txn.get_default_db(core::DbAllowDups | core::DbAllowIntDups).unwrap();
+        let db = txn.bind(&db);
 
         let test_key1 = "key1";
 
@@ -210,13 +216,14 @@ fn as_slices(v: &Vec<String>) -> Vec<&str> {
 fn test_item_iter() {
     let path = Path::new("item_iter");
     test_db_in_path(&path, || {
-        let env = EnvBuilder::new()
+        let mut env = EnvBuilder::new()
             .max_dbs(5)
             .open(&path, USER_DIR)
             .unwrap();
 
+        let db = env.get_default_db(core::DbAllowDups).unwrap();
         let txn = env.new_transaction().unwrap();
-        let db = txn.get_default_db(core::DbAllowDups).unwrap();
+        let db = txn.bind(&db);
 
         let test_key1 = "key1";
         let test_data1 = "value1";
@@ -246,12 +253,11 @@ fn test_item_iter() {
 fn test_db_creation() {
     let path = Path::new("dbs");
     test_db_in_path(&path, || {
-        let env = EnvBuilder::new()
+        let mut env = EnvBuilder::new()
             .max_dbs(5)
             .open(&path, USER_DIR)
             .unwrap();
-        let txn = env.new_transaction().unwrap();
-        assert!(txn.get_or_create_db("test-db", DbFlags::empty()).is_ok());
+        assert!(env.create_db("test-db", DbFlags::empty()).is_ok());
     });
 }
 
@@ -263,11 +269,45 @@ fn test_read_only_txn() {
             .max_dbs(5)
             .open(&path, USER_DIR)
             .unwrap();
-        let txn = env.get_reader().unwrap();
-        assert!(txn.get_db("test-db", DbFlags::empty()).is_err());
-        assert!(txn.get_default_db(DbFlags::empty()).is_ok());
+        env.get_reader().unwrap();
     });
 }
+
+#[test]
+fn test_cursor_in_txns() {
+    let path = Path::new("cursors-txns");
+    test_db_in_path(&path, || {
+        let mut env = EnvBuilder::new()
+            .max_dbs(5)
+            .open(&path, USER_DIR)
+            .unwrap();
+
+        {
+            let db = env.create_db("test1", core::DbAllowDups | core::DbAllowIntDups).unwrap();
+            let txn = env.new_transaction().unwrap();
+            {
+                let db = txn.bind(&db);
+
+                let cursor = db.new_cursor();
+                assert!(cursor.is_ok());
+            }
+            assert!(txn.commit().is_ok());
+        }
+
+        {
+            let db = env.create_db("test1", core::DbAllowDups | core::DbAllowIntDups).unwrap();
+            let txn = env.new_transaction().unwrap();
+            {
+                let db = txn.bind(&db);
+
+                let cursor = db.new_cursor();
+                assert!(cursor.is_ok());
+            }
+            assert!(txn.commit().is_ok());
+        }
+    });
+}
+
 
 /*
 #[test]
