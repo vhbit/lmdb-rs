@@ -45,15 +45,6 @@ impl ToMdbValue for Vec<u8> {
     }
 }
 
-impl<'a> FromMdbValue<'a, Vec<u8>> for Vec<u8> {
-    fn from_mdb_value<'a>(value: &'a MdbValue<'a>) -> Vec<u8> {
-        unsafe {
-            Vec::from_raw_buf(std::mem::transmute(value.get_ref()),
-                                    value.get_size() as uint)
-        }
-    }
-}
-
 impl ToMdbValue for String {
     fn to_mdb_value<'a>(&'a self) -> MdbValue<'a> {
         unsafe {
@@ -63,8 +54,6 @@ impl ToMdbValue for String {
     }
 }
 
-// Conversion from `&'a str` and `&'a [u8]` is broken due:
-// https://github.com/rust-lang/rust/issues/17322
 impl<'a> ToMdbValue for &'a str {
     fn to_mdb_value<'a>(&'a self) -> MdbValue<'a> {
         unsafe {
@@ -74,16 +63,14 @@ impl<'a> ToMdbValue for &'a str {
     }
 }
 
-/*
-impl<'a> ToMdbValue<'a> for &'a [u8] {
-    fn to_mdb_value(&'a self) -> MdbValue<'a> {
+impl<'a> ToMdbValue for &'a [u8] {
+    fn to_mdb_value<'a>(&'a self) -> MdbValue<'a> {
         unsafe {
             MdbValue::new(std::mem::transmute(self.as_ptr()),
                           self.len())
         }
     }
 }
-*/
 
 impl ToMdbValue for MDB_val {
     fn to_mdb_value<'a>(&'a self) -> MdbValue<'a> {
@@ -105,6 +92,15 @@ impl<'a> FromMdbValue<'a, String> for String {
         unsafe {
             String::from_raw_buf_len(std::mem::transmute(value.get_ref()),
                                      value.get_size()).to_string()
+        }
+    }
+}
+
+impl<'a> FromMdbValue<'a, Vec<u8>> for Vec<u8> {
+    fn from_mdb_value<'a>(value: &'a MdbValue<'a>) -> Vec<u8> {
+        unsafe {
+            Vec::from_raw_buf(std::mem::transmute(value.get_ref()),
+                              value.get_size() as uint)
         }
     }
 }
