@@ -16,7 +16,7 @@
 //! impossible to convert `&'a str` and `&'a [u8]` for now
 
 
-use std::{mod, mem, string};
+use std::{mod, mem};
 
 use core::MdbValue;
 use ffi::MDB_val;
@@ -48,7 +48,7 @@ impl<'a> ToMdbValue<'a> for Vec<u8> {
 impl<'a> FromMdbValue<'a> for Vec<u8> {
     fn from_mdb_value(value: &'a MdbValue<'a>) -> Vec<u8> {
         unsafe {
-            std::vec::raw::from_buf(std::mem::transmute(value.get_ref()),
+            Vec::from_raw_buf(std::mem::transmute(value.get_ref()),
                                     value.get_size() as uint)
         }
     }
@@ -105,8 +105,8 @@ impl<'a> ToMdbValue<'a> for MdbValue<'a> {
 impl<'a> FromMdbValue<'a> for String {
     fn from_mdb_value(value: &'a MdbValue<'a>) -> String {
         unsafe {
-            string::raw::from_buf_len(std::mem::transmute(value.get_ref()),
-                                      value.get_size()).to_string()
+            String::from_raw_buf_len(std::mem::transmute(value.get_ref()),
+                                     value.get_size()).to_string()
         }
     }
 }
