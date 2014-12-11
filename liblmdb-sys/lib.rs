@@ -32,7 +32,7 @@ pub type MDB_rel_func = fn(*const MDB_val, *const c_void, *const c_void, *const 
 pub type MDB_msg_func = fn(*const c_char, *const c_void) -> c_int;
 pub type MDB_cmp_func = fn(*const MDB_val, *const MDB_val) -> c_int;
 
-#[deriving(Clone)]
+#[deriving(Copy, Clone)]
 #[allow(raw_pointer_deriving)]
 #[repr(C)]
 #[stable]
@@ -42,16 +42,20 @@ pub struct MDB_val {
 }
 
 #[repr(C)]
+#[allow(missing_copy_implementations)]
 pub struct MDB_env;
 
 #[repr(C)]
+#[allow(missing_copy_implementations)]
 pub struct MDB_txn;
 
 #[repr(C)]
+#[allow(missing_copy_implementations)]
 pub struct MDB_cursor;
 
 #[repr(C)]
 #[stable]
+#[deriving(Copy)]
 pub struct MDB_stat {
     pub ms_psize: c_uint,
     pub ms_depth: c_uint,
@@ -63,6 +67,7 @@ pub struct MDB_stat {
 
 #[repr(C)]
 #[stable]
+#[allow(missing_copy_implementations)]
 pub struct MDB_envinfo {
     pub me_mapaddr: *const c_void,
     pub me_mapsize: size_t,
@@ -73,7 +78,7 @@ pub struct MDB_envinfo {
 }
 
 #[repr(C)]
-#[deriving(Eq, PartialEq)]
+#[deriving(Copy, Eq, PartialEq)]
 pub enum MDB_cursor_op {
     MDB_FIRST,
     MDB_FIRST_DUP,

@@ -1,5 +1,3 @@
-#![feature(if_let)]
-
 use std::os;
 use std::io::{Command};
 use std::io::process::InheritFd;

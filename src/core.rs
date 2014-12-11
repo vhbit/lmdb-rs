@@ -50,7 +50,7 @@ use std::io::FilePermission;
 use std::mem;
 use std::ptr;
 use std::result::Result;
-use sync::{Mutex};
+use std::sync::{Mutex};
 
 
 use ffi::{mod, MDB_val};
@@ -187,6 +187,7 @@ pub type MdbResult<T> = Result<T, MdbError>;
 bitflags! {
     #[doc = "A set of environment flags which could be changed after opening"]
     #[unstable]
+    #[deriving(Copy)]
     flags EnvFlags: c_uint {
         #[doc="Don't flush system buffers to disk when committing a transaction. This optimization means a system crash can corrupt the database or lose the last transactions if buffers are not yet flushed to disk. The risk is governed by how often the system flushes dirty buffers to disk and how often mdb_env_sync() is called. However, if the filesystem preserves write order and the MDB_WRITEMAP flag is not used, transactions exhibit ACI (atomicity, consistency, isolation) properties and only lose D (durability). I.e. database integrity is maintained, but a system crash may undo the final transactions. Note that (MDB_NOSYNC | MDB_WRITEMAP) leaves the system with no hint for when to write transactions to disk, unless mdb_env_sync() is called. (MDB_MAPASYNC | MDB_WRITEMAP) may be preferable. This flag may be changed at any time using mdb_env_set_flags()."]
         const EnvNoSync      = ffi::MDB_NOSYNC,
@@ -202,6 +203,7 @@ bitflags! {
 bitflags! {
     #[doc = "A set of all environment flags"]
     #[unstable]
+    #[deriving(Copy)]
     flags EnvCreateFlags: c_uint {
         #[doc="Use a fixed address for the mmap region. This flag must be"]
         #[doc=" specified when creating the environment, and is stored persistently"]
@@ -308,6 +310,7 @@ bitflags! {
 bitflags! {
     #[doc = "A set of database flags"]
     #[stable]
+    #[deriving(Copy)]
     flags DbFlags: c_uint {
         #[doc="Keys are strings to be compared in reverse order, from the"]
         #[doc=" end of the strings to the beginning. By default, Keys are"]
@@ -422,6 +425,7 @@ impl<'a> Database<'a> {
 }
 
 #[stable]
+#[deriving(Copy)]
 pub struct EnvBuilder {
     flags: EnvCreateFlags,
     max_readers: Option<uint>,
@@ -734,13 +738,14 @@ impl Drop for Environment {
 }
 
 #[allow(dead_code)]
+#[deriving(Copy)]
 pub struct DbHandle {
     handle: ffi::MDB_dbi,
     flags: DbFlags
 }
 
 
-#[deriving(PartialEq, Show, Eq, Clone)]
+#[deriving(Copy, PartialEq, Show, Eq, Clone)]
 enum TransactionState {
     Normal,   // Normal, any operation possible
     Released, // Released (reset on readonly), has to be renewed
@@ -1084,7 +1089,7 @@ impl<'a> Cursor<'a> {
                 // to get back pointer to database owned memory instead
                 // of value used to set the cursor as it might be
                 // already destroyed and there is no need to borrow it
-                self.valid_key = op != ffi::MDB_SET;
+                self.valid_key = op != ffi::MDB_cursor_op::MDB_SET;
                 Ok(())
             },
             e => Err(MdbError::new_with_code(e))
@@ -1104,62 +1109,62 @@ impl<'a> Cursor<'a> {
 
     /// Moves cursor to first entry
     pub fn to_first(&mut self) -> MdbResult<()> {
-        self.navigate(ffi::MDB_FIRST)
+        self.navigate(ffi::MDB_cursor_op::MDB_FIRST)
     }
 
     /// Moves cursor to last entry
     pub fn to_last(&mut self) -> MdbResult<()> {
-        self.navigate(ffi::MDB_LAST)
+        self.navigate(ffi::MDB_cursor_op::MDB_LAST)
     }
 
     /// Moves cursor to first entry for key if it exists
     pub fn to_key<'k, K: ToMdbValue<'k>>(&mut self, key: &'k K) -> MdbResult<()> {
-        self.move_to(key, None::<&MdbValue<'k>>, ffi::MDB_SET)
+        self.move_to(key, None::<&MdbValue<'k>>, ffi::MDB_cursor_op::MDB_SET)
     }
 
     /// Moves cursor to first entry for key greater than
     /// or equal to ke
     pub fn to_gte_key<'k, K: ToMdbValue<'k>>(&mut self, key: &'k K) -> MdbResult<()> {
-        self.move_to(key, None::<&MdbValue<'k>>, ffi::MDB_SET_RANGE)
+        self.move_to(key, None::<&MdbValue<'k>>, ffi::MDB_cursor_op::MDB_SET_RANGE)
     }
 
     /// Moves cursor to specific item (for example, if cursor
     /// already points to a correct key and you need to delete
     /// a specific item through cursor)
     pub fn to_item<'k, 'v, K, V>(&mut self, key: &'k K, value: &'v V) -> MdbResult<()> where K: ToMdbValue<'k>, V: ToMdbValue<'v> {
-        self.move_to(key, Some(value), ffi::MDB_SET)
+        self.move_to(key, Some(value), ffi::MDB_cursor_op::MDB_SET)
     }
 
     /// Moves cursor to next key, i.e. skip items
     /// with duplicate keys
     pub fn to_next_key(&mut self) -> MdbResult<()> {
-        self.navigate(ffi::MDB_NEXT_NODUP)
+        self.navigate(ffi::MDB_cursor_op::MDB_NEXT_NODUP)
     }
 
     /// Moves cursor to next item with the same key as current
     pub fn to_next_item(&mut self) -> MdbResult<()> {
-        self.navigate(ffi::MDB_NEXT_DUP)
+        self.navigate(ffi::MDB_cursor_op::MDB_NEXT_DUP)
     }
 
     /// Moves cursor to prev entry, i.e. skips items
     /// with duplicate keys
     pub fn to_prev_key(&mut self) -> MdbResult<()> {
-        self.navigate(ffi::MDB_PREV_NODUP)
+        self.navigate(ffi::MDB_cursor_op::MDB_PREV_NODUP)
     }
 
     /// Moves cursor to prev item with the same key as current
     pub fn to_prev_item(&mut self) -> MdbResult<()> {
-        self.navigate(ffi::MDB_PREV_DUP)
+        self.navigate(ffi::MDB_cursor_op::MDB_PREV_DUP)
     }
 
     /// Moves cursor to first item with the same key as current
     pub fn to_first_item(&mut self) -> MdbResult<()> {
-        self.navigate(ffi::MDB_FIRST_DUP)
+        self.navigate(ffi::MDB_cursor_op::MDB_FIRST_DUP)
     }
 
     /// Moves cursor to last item with the same key as current
     pub fn to_last_item(&mut self) -> MdbResult<()> {
-        self.navigate(ffi::MDB_LAST_DUP)
+        self.navigate(ffi::MDB_cursor_op::MDB_LAST_DUP)
     }
 
     /// Retrieves current key/value as tuple
@@ -1180,7 +1185,7 @@ impl<'a> Cursor<'a> {
             unsafe {
                 try_mdb!(ffi::mdb_cursor_get(self.handle, &mut self.key_val,
                                              &mut self.data_val,
-                                             ffi::MDB_GET_CURRENT));
+                                             ffi::MDB_cursor_op::MDB_GET_CURRENT));
             }
             self.valid_key = true;
         }
@@ -1391,6 +1396,7 @@ impl<'a> CursorIteratorInner for CursorKeyRangeIter<'a> {
 
 
 #[experimental]
+#[allow(missing_copy_implementations)]
 pub struct CursorIter;
 
 #[experimental]
@@ -1439,6 +1445,7 @@ impl<'a> CursorIteratorInner for CursorItemIter<'a> {
 
 
 #[stable]
+#[deriving(Copy)]
 pub struct MdbValue<'a> {
     value: MDB_val
 }

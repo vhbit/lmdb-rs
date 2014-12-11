@@ -5,11 +5,9 @@
 #![feature(globs)]
 #![feature(macro_rules)]
 #![feature(unsafe_destructor)]
-#![feature(if_let)]
 
 #[phase(plugin, link)] extern crate log;
 extern crate libc;
-extern crate sync;
 
 #[cfg(test)]
 extern crate rustrt;
