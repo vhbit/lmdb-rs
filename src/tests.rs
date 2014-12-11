@@ -187,7 +187,7 @@ fn test_cursor_item_manip() {
         assert!(cursor.to_key(&test_key1).is_ok());
 
         let values: Vec<u64> = db.item_iter(&test_key1).unwrap()
-            .map(|cv| *cv.get_value::<u64>())
+            .map(|cv| cv.get_value::<u64>())
             .collect();
         assert_eq!(values, vec![3u64]);
 
@@ -195,13 +195,13 @@ fn test_cursor_item_manip() {
         assert!(cursor.add_item(&5u64).is_ok());
 
         let values: Vec<u64> = db.item_iter(&test_key1).unwrap()
-            .map(|cv| *cv.get_value::<u64>())
+            .map(|cv| cv.get_value::<u64>())
             .collect();
         assert_eq!(values, vec![3u64, 4, 5]);
 
         assert!(cursor.replace(&6u64).is_ok());
         let values: Vec<u64> = db.item_iter(&test_key1).unwrap()
-            .map(|cv| *cv.get_value::<u64>())
+            .map(|cv| cv.get_value::<u64>())
             .collect();
 
         assert_eq!(values, vec![3u64, 4, 6]);
@@ -236,15 +236,15 @@ fn test_item_iter() {
         assert!(db.set(&test_key2, &test_data1).is_ok());
 
         let iter = db.item_iter(&test_key1).unwrap();
-        let values: Vec<String> = iter.map(|cv| cv.get_value::<String>().to_owned()).collect();
+        let values: Vec<String> = iter.map(|cv| cv.get_value::<String>()).collect();
         assert_eq!(as_slices(&values).as_slice(), vec![test_data1, test_data2].as_slice());
 
         let iter = db.item_iter(&test_key2).unwrap();
-        let values: Vec<String> = iter.map(|cv| cv.get_value::<String>().to_owned()).collect();
+        let values: Vec<String> = iter.map(|cv| cv.get_value::<String>()).collect();
         assert_eq!(as_slices(&values).as_slice(), vec![test_data1].as_slice());
 
         let iter = db.item_iter(&test_key3).unwrap();
-        let values: Vec<String> = iter.map(|cv| cv.get_value::<String>().to_owned()).collect();
+        let values: Vec<String> = iter.map(|cv| cv.get_value::<String>()).collect();
         assert_eq!(values.len(), 0);
     });
 }

@@ -54,7 +54,7 @@ use std::sync::{Mutex};
 
 
 use ffi::{mod, MDB_val};
-use MdbError::{NotFound, KeyExists, Other, StateError, Corrupted, Panic, InvalidPath, TxnFull, CursorFull, PageFull};
+pub use MdbError::{NotFound, KeyExists, Other, StateError, Corrupted, Panic, InvalidPath, TxnFull, CursorFull, PageFull};
 use traits::{ToMdbValue, FromMdbValue};
 use utils::{error_msg};
 
@@ -359,7 +359,7 @@ impl<'a> Database<'a> {
     }
 
     /// Retrieves a value by key. In case of DbAllowDups it will be the first value
-    pub fn get<V: FromMdbValue<'a, V>+'a>(&'a self, key: &ToMdbValue) -> MdbResult<MdbWrapper<'a, V>> {
+    pub fn get<V: FromMdbValue<'a, V>+'a>(&'a self, key: &ToMdbValue) -> MdbResult<V> {
         self.txn.get(self.handle, key)
     }
 
@@ -839,16 +839,16 @@ impl<'a> NativeTransaction<'a> {
         }
     }
 
-    fn get_value<V: FromMdbValue<'a, V> + 'a>(&'a self, db: ffi::MDB_dbi, key: &ToMdbValue) -> MdbResult<MdbWrapper<'a, V>> {
+    fn get_value<V: FromMdbValue<'a, V> + 'a>(&'a self, db: ffi::MDB_dbi, key: &ToMdbValue) -> MdbResult<V> {
         let mut key_val = key.to_mdb_value();
         unsafe {
             let mut data_val: MdbValue = std::mem::zeroed();
             try_mdb!(ffi::mdb_get(self.handle, db, &mut key_val.value, &mut data_val.value));
-            Ok(MdbWrapper::new(FromMdbValue::from_mdb_value(mem::transmute(&data_val))))
+            Ok(FromMdbValue::from_mdb_value(mem::transmute(&data_val)))
         }
     }
 
-    fn get<'a, V: FromMdbValue<'a, V>+'a>(&'a self, db: ffi::MDB_dbi, key: &ToMdbValue) -> MdbResult<MdbWrapper<'a, V>> {
+    fn get<'a, V: FromMdbValue<'a, V>+'a>(&'a self, db: ffi::MDB_dbi, key: &ToMdbValue) -> MdbResult<V> {
         assert_state_eq!(txn, self.state, TransactionState::Normal);
         self.get_value(db, key)
     }
@@ -1199,30 +1199,30 @@ impl<'txn> Cursor<'txn> {
     }
 
     /// Retrieves current key/value as tuple
-    pub fn get<'a, T: FromMdbValue<'a, T>+'a, U: FromMdbValue<'a, U>+'a>(&'a mut self) -> MdbResult<(MdbWrapper<'a, T>, MdbWrapper<'a, U>)> {
+    pub fn get<'a, T: FromMdbValue<'a, T>+'a, U: FromMdbValue<'a, U>+'a>(&'a mut self) -> MdbResult<(T, U)> {
         let (k, v) = try!(self.get_plain());
 
         unsafe {
-            Ok((MdbWrapper::new(FromMdbValue::from_mdb_value(mem::transmute(&k))),
-                MdbWrapper::new(FromMdbValue::from_mdb_value(mem::transmute(&v)))))
+            Ok((FromMdbValue::from_mdb_value(mem::transmute(&k)),
+                FromMdbValue::from_mdb_value(mem::transmute(&v))))
         }
     }
 
     /// Retrieves current value
-    pub fn get_value<'a, V: FromMdbValue<'a, V>+'a>(&'a mut self) -> MdbResult<MdbWrapper<'a, V>> {
+    pub fn get_value<'a, V: FromMdbValue<'a, V>+'a>(&'a mut self) -> MdbResult<V> {
         let (_, v) = try!(self.get_plain());
 
         unsafe {
-            Ok(MdbWrapper::new(FromMdbValue::from_mdb_value(mem::transmute(&v))))
+            Ok(FromMdbValue::from_mdb_value(mem::transmute(&v)))
         }
     }
 
     /// Retrieves current key
-    pub fn get_key<'a, K: FromMdbValue<'a, K>+'a>(&'a mut self) -> MdbResult<MdbWrapper<'a, K>> {
+    pub fn get_key<'a, K: FromMdbValue<'a, K>+'a>(&'a mut self) -> MdbResult<K> {
         let (k, _) = try!(self.get_plain());
 
         unsafe {
-            Ok(MdbWrapper::new(FromMdbValue::from_mdb_value(mem::transmute(&k))))
+            Ok(FromMdbValue::from_mdb_value(mem::transmute(&k)))
         }
     }
 
@@ -1323,7 +1323,7 @@ pub struct CursorItemAccessor<'c, 'k, K: 'k> {
 }
 
 impl<'k, 'c: 'k, K: ToMdbValue> CursorItemAccessor<'c, 'k, K> {
-    pub fn get<'a, V: FromMdbValue<'a,V> + 'a>(&'a mut self) -> MdbResult<MdbWrapper<'a, V>> {
+    pub fn get<'a, V: FromMdbValue<'a,V> + 'a>(&'a mut self) -> MdbResult<V> {
         let c: &'c mut Cursor<'c> = unsafe { mem::transmute(self.cursor) };
         try!(c.to_key(self.key));
         c.get_value()
@@ -1358,17 +1358,17 @@ pub struct CursorValue<'cursor> {
 /// is limited to iterator lifetime
 #[experimental]
 impl<'cursor> CursorValue<'cursor> {
-    pub fn get_key<T: FromMdbValue<'cursor, T>+'cursor>(&'cursor self) -> MdbWrapper<'cursor, T> {
-        MdbWrapper::new(FromMdbValue::from_mdb_value(&self.key))
+    pub fn get_key<T: FromMdbValue<'cursor, T>+'cursor>(&'cursor self) -> T {
+        FromMdbValue::from_mdb_value(&self.key)
     }
 
-    pub fn get_value<T: FromMdbValue<'cursor, T>+'cursor>(&'cursor self) -> MdbWrapper<'cursor, T> {
-        MdbWrapper::new(FromMdbValue::from_mdb_value(&self.value))
+    pub fn get_value<T: FromMdbValue<'cursor, T>+'cursor>(&'cursor self) -> T {
+        FromMdbValue::from_mdb_value(&self.value)
     }
 
-    pub fn get<T: FromMdbValue<'cursor, T>+'cursor, U: FromMdbValue<'cursor, U>+'cursor>(&'cursor self) -> (MdbWrapper<'cursor, T>, MdbWrapper<'cursor, U>) {
-        (MdbWrapper::new(FromMdbValue::from_mdb_value(&self.key)),
-         MdbWrapper::new(FromMdbValue::from_mdb_value(&self.value)))
+    pub fn get<T: FromMdbValue<'cursor, T>+'cursor, U: FromMdbValue<'cursor, U>+'cursor>(&'cursor self) -> (T, U) {
+        (FromMdbValue::from_mdb_value(&self.key),
+         FromMdbValue::from_mdb_value(&self.value))
     }
 }
 
@@ -1568,44 +1568,5 @@ impl<'a> MdbValue<'a> {
 
     pub fn get_size(&self) -> uint {
         self.value.mv_size as uint
-    }
-}
-
-
-/// Smart wrapper which allows to access
-/// value without copying it
-pub struct MdbWrapper<'a, T> {
-    value: Option<T>
-}
-
-impl<'a, T> MdbWrapper<'a, T> {
-    fn new(value: T) -> MdbWrapper<'a, T> {
-        MdbWrapper {
-            value: Some(value)
-        }
-    }
-}
-
-#[allow(dead_code)]
-impl<'a, T: Clone> MdbWrapper<'a, T> {
-    /// Converts into owned if required
-    pub fn to_owned(&self) -> T {
-        self.value.as_ref().unwrap().clone()
-    }
-}
-
-#[unsafe_destructor]
-impl<'a, T> Drop for MdbWrapper<'a, T> {
-    fn drop(&mut self) {
-        if self.value.is_some() {
-            let tmp = self.value.take();
-            unsafe {mem::forget(tmp)}
-        }
-    }
-}
-
-impl<'a, T> Deref<T> for MdbWrapper<'a, T> {
-    fn deref<'a>(&'a self) -> &'a T {
-        self.value.as_ref().unwrap()
     }
 }
