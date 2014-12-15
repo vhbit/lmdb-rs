@@ -187,7 +187,6 @@ pub type MdbResult<T> = Result<T, MdbError>;
 bitflags! {
     #[doc = "A set of environment flags which could be changed after opening"]
     #[unstable]
-    #[deriving(Copy)]
     flags EnvFlags: c_uint {
         #[doc="Don't flush system buffers to disk when committing a transaction. This optimization means a system crash can corrupt the database or lose the last transactions if buffers are not yet flushed to disk. The risk is governed by how often the system flushes dirty buffers to disk and how often mdb_env_sync() is called. However, if the filesystem preserves write order and the MDB_WRITEMAP flag is not used, transactions exhibit ACI (atomicity, consistency, isolation) properties and only lose D (durability). I.e. database integrity is maintained, but a system crash may undo the final transactions. Note that (MDB_NOSYNC | MDB_WRITEMAP) leaves the system with no hint for when to write transactions to disk, unless mdb_env_sync() is called. (MDB_MAPASYNC | MDB_WRITEMAP) may be preferable. This flag may be changed at any time using mdb_env_set_flags()."]
         const EnvNoSync      = ffi::MDB_NOSYNC,
@@ -203,7 +202,6 @@ bitflags! {
 bitflags! {
     #[doc = "A set of all environment flags"]
     #[unstable]
-    #[deriving(Copy)]
     flags EnvCreateFlags: c_uint {
         #[doc="Use a fixed address for the mmap region. This flag must be"]
         #[doc=" specified when creating the environment, and is stored persistently"]
@@ -310,7 +308,6 @@ bitflags! {
 bitflags! {
     #[doc = "A set of database flags"]
     #[stable]
-    #[deriving(Copy)]
     flags DbFlags: c_uint {
         #[doc="Keys are strings to be compared in reverse order, from the"]
         #[doc=" end of the strings to the beginning. By default, Keys are"]
@@ -898,7 +895,7 @@ impl<'a> NativeTransaction<'a> {
 
     /// creates a new cursor in current transaction tied to db
     fn new_cursor(&'a self, db: ffi::MDB_dbi) -> MdbResult<Cursor<'a>> {
-        Cursor::<'a>::new(self, db)
+        Cursor::new(self, db)
     }
 
     /// Creates a new item cursor, i.e. cursor which navigates all
