@@ -399,6 +399,26 @@ impl<'a> Database<'a> {
             .and_then(|c| Ok(CursorIterator::wrap(c, CursorIter)))
     }
 
+    /// Returns an iterator through keys starting with start_key (>=)
+    pub fn keyrange_from<'c, 'db: 'c, K: ToMdbValue + 'c>(&'db self, start_key: &'c K) -> MdbResult<CursorIterator<'c, CursorFromKeyIter>> {
+        self.txn.new_cursor(self.handle)
+            .and_then(|c| {
+                let key_range = CursorFromKeyIter::new(start_key);
+                let wrap = CursorIterator::wrap(c, key_range);
+                Ok(wrap)
+            })
+    }
+
+    /// Returns an iterator through keys less than end_key (<)
+    pub fn keyrange_to<'c, 'db: 'c, K: ToMdbValue + 'c>(&'db self, end_key: &'c K) -> MdbResult<CursorIterator<'c, CursorToKeyIter>> {
+        self.txn.new_cursor(self.handle)
+            .and_then(|c| {
+                let key_range = CursorToKeyIter::new(end_key);
+                let wrap = CursorIterator::wrap(c, key_range);
+                Ok(wrap)
+            })
+    }
+
     /// Returns an iterator for values between start_key and end_key.
     /// Currently it works only for unique keys (i.e. it will skip
     /// multiple items when DB created with ffi::MDB_DUPSORT).
@@ -1490,6 +1510,81 @@ impl<'a> CursorIteratorInner for CursorKeyRangeIter<'a> {
     }
 }
 
+#[experimental]
+pub struct CursorFromKeyIter<'a> {
+    start_key: MdbValue<'a>,
+}
+
+#[experimental]
+impl<'a> CursorFromKeyIter<'a> {
+    pub fn new<K: ToMdbValue+'a>(start_key: &'a K) -> CursorFromKeyIter<'a> {
+        CursorFromKeyIter {
+            start_key: start_key.to_mdb_value(),
+        }
+    }
+}
+
+impl<'a> CursorIteratorInner for CursorFromKeyIter<'a> {
+    fn init_cursor<'a, 'b: 'a>(&'a self, cursor: & mut Cursor<'b>) -> bool {
+        unsafe {
+            cursor.to_gte_key(mem::transmute::<&'a MdbValue<'a>, &'b MdbValue<'b>>(&self.start_key)).is_ok()
+        }
+    }
+
+    fn move_to_next<'i, 'c: 'i>(&'i self, cursor: &'c mut Cursor<'c>) -> bool {
+        cursor.to_next_key().is_ok()
+    }
+}
+
+#[experimental]
+pub struct CursorToKeyIter<'a> {
+    end_key: MdbValue<'a>,
+}
+
+#[experimental]
+impl<'a> CursorToKeyIter<'a> {
+    pub fn new<K: ToMdbValue+'a>(end_key: &'a K) -> CursorToKeyIter<'a> {
+        CursorToKeyIter {
+            end_key: end_key.to_mdb_value(),
+        }
+    }
+}
+
+impl<'a> CursorIteratorInner for CursorToKeyIter<'a> {
+    fn init_cursor<'a, 'b: 'a>(&'a self, cursor: & mut Cursor<'b>) -> bool {
+        cursor.to_first().is_ok()
+    }
+
+    fn move_to_next<'i, 'c: 'i>(&'i self, cursor: &'c mut Cursor<'c>) -> bool {
+        let moved = cursor.to_next_key().is_ok();
+        if !moved {
+            false
+        } else {
+            // As `get_plain` borrows mutably there is no
+            // way to get comparison straight after
+            // so here goes the workaround
+            let k = match cursor.get_plain() {
+                Err(_) => None,
+                Ok((k, _)) => {
+                    Some(MdbValue {
+                        value: k.value
+                    })
+                }
+            };
+
+            match k {
+                None => false,
+                Some(mut k) => {
+                    let cmp_res = unsafe {
+                        ffi::mdb_cmp(cursor.txn.handle, cursor.db,
+                                     &mut k.value, mem::transmute(&self.end_key.value))
+                    };
+                    cmp_res > 0
+                }
+            }
+        }
+    }
+}
 
 #[experimental]
 #[allow(missing_copy_implementations)]
