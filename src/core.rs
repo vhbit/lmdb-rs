@@ -400,23 +400,19 @@ impl<'a> Database<'a> {
     }
 
     /// Returns an iterator through keys starting with start_key (>=)
-    pub fn keyrange_from<'c, 'db: 'c, K: ToMdbValue + 'c>(&'db self, start_key: &'c K) -> MdbResult<CursorIterator<'c, CursorFromKeyIter>> {
-        self.txn.new_cursor(self.handle)
-            .and_then(|c| {
-                let key_range = CursorFromKeyIter::new(start_key);
-                let wrap = CursorIterator::wrap(c, key_range);
-                Ok(wrap)
-            })
+    pub fn keyrange_from<'c, 'db: 'c, K: ToMdbValue + 'c>(&'db self, start_key: & K) -> MdbResult<CursorIterator<'c, CursorFromKeyIter>> {
+        let cursor = try!(self.txn.new_cursor::<'a>(self.handle));
+        let key_range = CursorFromKeyIter::new(start_key);
+        let wrap = CursorIterator::wrap(cursor, key_range);
+        Ok(wrap)
     }
 
     /// Returns an iterator through keys less than end_key (<)
     pub fn keyrange_to<'c, 'db: 'c, K: ToMdbValue + 'c>(&'db self, end_key: &'c K) -> MdbResult<CursorIterator<'c, CursorToKeyIter>> {
-        self.txn.new_cursor(self.handle)
-            .and_then(|c| {
-                let key_range = CursorToKeyIter::new(end_key);
-                let wrap = CursorIterator::wrap(c, key_range);
-                Ok(wrap)
-            })
+        let cursor = try!(self.txn.new_cursor(self.handle));
+        let key_range = CursorToKeyIter::new(end_key);
+        let wrap = CursorIterator::wrap(cursor, key_range);
+        Ok(wrap)
     }
 
     /// Returns an iterator for values between start_key and end_key.
@@ -426,17 +422,17 @@ impl<'a> Database<'a> {
     pub fn keyrange<'c, 'db: 'c, K: ToMdbValue + 'c>(&'db self, start_key: &'c K, end_key: &'c K)
                                -> MdbResult<CursorIterator<'c, CursorKeyRangeIter>>
     {
-        self.txn.new_cursor(self.handle)
-            .and_then(|c| {
-                let key_range = CursorKeyRangeIter::new(start_key, end_key);
-                let wrap = CursorIterator::wrap(c, key_range);
-                Ok(wrap)
-            })
+        let cursor = try!(self.txn.new_cursor(self.handle));
+        let key_range = CursorKeyRangeIter::new(start_key, end_key);
+        let wrap = CursorIterator::wrap(cursor, key_range);
+        Ok(wrap)
     }
 
     /// Returns an iterator for all items (i.e. values with same key)
     pub fn item_iter<'c, 'db: 'c, K: ToMdbValue>(&'db self, key: &K) -> MdbResult<CursorIterator<'c, CursorItemIter<'c>>> {
-        self.txn.new_item_iter(self.handle, key)
+        let cursor = try!(self.txn.new_cursor(self.handle));
+        let inner_iter = CursorItemIter::new(key);
+        Ok(CursorIterator::wrap(cursor, inner_iter))
     }
 }
 
@@ -924,14 +920,6 @@ impl<'a> NativeTransaction<'a> {
     /// creates a new cursor in current transaction tied to db
     fn new_cursor(&'a self, db: ffi::MDB_dbi) -> MdbResult<Cursor<'a>> {
         Cursor::new(self, db)
-    }
-
-    /// Creates a new item cursor, i.e. cursor which navigates all
-    /// values with the same key (if AllowsDup was specified)
-    fn new_item_iter<K: ToMdbValue>(&'a self, db: ffi::MDB_dbi, key: &K) -> MdbResult<CursorIterator<'a, CursorItemIter>> {
-        let cursor = try!(self.new_cursor(db));
-        let inner_iter = CursorItemIter::new(key);
-        Ok(CursorIterator::wrap(cursor, inner_iter))
     }
 
     /// Deletes provided database completely
