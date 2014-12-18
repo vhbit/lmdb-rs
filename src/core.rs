@@ -997,32 +997,11 @@ impl<'a> Transaction<'a> {
         t.inner.abort();
     }
 
-    /*
-    pub fn get_db(&self, name: &str, flags: DbFlags) -> MdbResult<Database> {
-        self.inner.get_db(name, flags)
-    }
-    */
-
-    /*
-    pub fn get_default_db(&self, flags: DbFlags) -> MdbResult<Database> {
-        self.inner.get_default_db(flags)
-    }
-    */
-
     pub fn bind(&self, db_handle: &DbHandle) -> Database {
         Database::new_with_handle(db_handle.handle, &self.inner)
     }
 }
 
-/*
-#[unsafe_destructor]
-impl<'a> Drop for Transaction<'a> {
-    fn drop(&mut self) {
-        debug!("drop txn");
-        self.inner.silent_abort();
-    }
-}
-*/
 
 #[unstable]
 pub struct ReadonlyTransaction<'a> {
@@ -1061,32 +1040,10 @@ impl<'a> ReadonlyTransaction<'a> {
         self.inner.renew()
     }
 
-    /*
-    pub fn get_db(&self, name: &str, flags: DbFlags) -> MdbResult<Database> {
-        self.inner.get_db(name, flags)
-    }
-    */
-
-    /*
-    pub fn get_default_db(&self, flags: DbFlags) -> MdbResult<self> {
-        Database.inner.get_default_db(flags - DbCreate)
-    }
-    */
-
     pub fn bind(&self, db_handle: &DbHandle) -> Database {
         Database::new_with_handle(db_handle.handle, &self.inner)
     }
 }
-
-/*
-#[unsafe_destructor]
-impl<'a> Drop for ReadonlyTransaction<'a> {
-    fn drop(&mut self) {
-        debug!("drop ro txn");
-        self.inner.silent_abort();
-    }
-}
-*/
 
 #[unstable]
 pub struct Cursor<'txn> {
