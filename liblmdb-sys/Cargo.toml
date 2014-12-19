@@ -1,8 +1,11 @@
 [package]
 name = "liblmdb-sys"
 version = "0.0.1"
-authors = ["Valerii Hiora"]
+authors = ["Valerii Hiora <valerii.hiora@gmail.com>"]
 links = "lmdb"
+license = "MIT"
+description = "LMDB native lib"
+repository = "https://github.com/vhbit/lmdb-rs"
 build = "build.rs"
 
 [lib]

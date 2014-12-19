@@ -1,4 +1,3 @@
-#![crate_name = "lmdb"]
 #![crate_type = "rlib"]
 
 #![feature(phase)]

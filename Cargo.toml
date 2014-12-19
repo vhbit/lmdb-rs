@@ -1,5 +1,5 @@
 [package]
-name = "lmdb"
+name = "lmdb-rs"
 version = "0.0.7"
 authors = ["Valerii Hiora <valerii.hiora@gmail.com>"]
 license = "MIT"
