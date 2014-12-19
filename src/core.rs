@@ -1115,7 +1115,7 @@ impl<'txn> Cursor<'txn> {
 
     /// Moves cursor to first entry for key if it exists
     pub fn to_key<'k, K: ToMdbValue>(&mut self, key: &'k K) -> MdbResult<()> {
-        self.move_to(key, None::<&MdbValue<'k>>, ffi::MDB_cursor_op::MDB_SET)
+        self.move_to(key, None::<&MdbValue<'k>>, ffi::MDB_cursor_op::MDB_SET_KEY)
     }
 
     /// Moves cursor to first entry for key greater than
