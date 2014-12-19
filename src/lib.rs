@@ -4,12 +4,10 @@
 #![feature(globs)]
 #![feature(macro_rules)]
 #![feature(unsafe_destructor)]
+#![feature(unboxed_closures)]
 
 #[phase(plugin, link)] extern crate log;
 extern crate libc;
-
-#[cfg(test)]
-extern crate rustrt;
 
 extern crate "liblmdb-sys" as ffi;
 

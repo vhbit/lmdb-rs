@@ -1,11 +1,11 @@
 use std::io::fs::{mod, PathExtensions};
 use std::io::USER_DIR;
-use rustrt::unwind;
+use std::rt::unwind;
 use std::path::Path;
 
 use core::{mod, EnvBuilder, DbFlags, EnvNoMemInit, EnvNoMetaSync};
 
-fn test_db_in_path(path: &Path, f: ||) {
+fn test_db_in_path<F: Fn()>(path: &Path, f: F) {
     // Delete dir to be sure nothing existed before test
     if path.exists() {
         let _ = fs::rmdir_recursive(path);
