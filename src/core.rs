@@ -1198,7 +1198,7 @@ impl<'txn> Cursor<'txn> {
         if !self.valid_key {
             unsafe {
                 try_mdb!(ffi::mdb_cursor_get(self.handle, &mut self.key_val,
-                                             &mut self.data_val,
+                                             ptr::null_mut(),
                                              ffi::MDB_cursor_op::MDB_GET_CURRENT));
             }
             self.valid_key = true;
