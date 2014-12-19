@@ -1,7 +1,13 @@
 [package]
 name = "lmdb"
-version = "0.0.6"
-authors = ["valerii.hiora@gmail.com"]
+version = "0.0.7"
+authors = ["Valerii Hiora <valerii.hiora@gmail.com>"]
+license = "MIT"
+description = "LMDB bindings"
+repository = "https://github.com/vhbit/lmdb-rs"
+documentation = "https://vhbit.github.io/doc/lmdb"
+readme = "README.md"
+keywords = ["lmdb", "db", "bindings"]
 
 [dependencies.liblmdb-sys]
 path = "liblmdb-sys"
