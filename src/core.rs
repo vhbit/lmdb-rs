@@ -1128,7 +1128,7 @@ impl<'txn> Cursor<'txn> {
     /// already points to a correct key and you need to delete
     /// a specific item through cursor)
     pub fn to_item<K, V>(&mut self, key: &K, value: & V) -> MdbResult<()> where K: ToMdbValue, V: ToMdbValue {
-        self.move_to(key, Some(value), ffi::MDB_cursor_op::MDB_SET)
+        self.move_to(key, Some(value), ffi::MDB_cursor_op::MDB_GET_BOTH)
     }
 
     /// Moves cursor to next key, i.e. skip items
