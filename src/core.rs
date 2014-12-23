@@ -671,7 +671,7 @@ impl Environment {
         // this function
         let guard = self.db_cache.lock();
         let ref cell = *guard;
-        let cache = unsafe { cell.get() };
+        let cache = cell.get();
 
         unsafe {
             if let Some(db) = (*cache).get(db_name) {
