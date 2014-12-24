@@ -40,18 +40,18 @@
 
 #![allow(non_upper_case_globals)]
 
+use libc::{mod, c_int, c_uint, size_t, c_void};
 use std;
+use std::borrow::ToOwned;
 use std::cell::{UnsafeCell};
 use std::collections::HashMap;
-use libc::{mod, c_int, c_uint, size_t, c_void};
 use std::error::Error;
-use std::io::fs::PathExtensions;
 use std::io::FilePermission;
+use std::io::fs::PathExtensions;
 use std::mem;
 use std::ptr;
 use std::result::Result;
 use std::sync::{Mutex};
-
 
 use ffi::{mod, MDB_val};
 pub use MdbError::{NotFound, KeyExists, Other, StateError, Corrupted, Panic, InvalidPath, TxnFull, CursorFull, PageFull};
@@ -699,7 +699,7 @@ impl Environment {
 
         debug!("Caching: {} -> {}", db_name, db);
         unsafe {
-            (*cache).insert(db_name.into_string(), db);
+            (*cache).insert(db_name.to_owned(), db);
         };
 
         Ok(db)
