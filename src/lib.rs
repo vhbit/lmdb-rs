@@ -1,13 +1,11 @@
-#![crate_type = "rlib"]
-
 #![feature(phase)]
 #![feature(globs)]
 #![feature(macro_rules)]
 #![feature(unsafe_destructor)]
 #![feature(unboxed_closures)]
 
-#[phase(plugin, link)] extern crate log;
 extern crate libc;
+#[phase(plugin, link)] extern crate log;
 
 extern crate "liblmdb-sys" as ffi;
 
@@ -19,9 +17,9 @@ pub use core::{Transaction, ReadonlyTransaction, MdbError, MdbValue};
 pub use core::{Cursor, CursorValue, CursorIter, CursorKeyRangeIter};
 pub use traits::{FromMdbValue, ToMdbValue};
 
+pub mod core;
 pub mod traits;
 mod utils;
-pub mod core;
 
 #[cfg(test)]
 mod tests;

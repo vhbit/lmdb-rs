@@ -54,7 +54,7 @@ use std::result::Result;
 use std::sync::{Mutex};
 
 use ffi::{mod, MDB_val};
-pub use MdbError::{NotFound, KeyExists, Other, StateError, Corrupted, Panic, InvalidPath, TxnFull, CursorFull, PageFull};
+pub use MdbError::{NotFound, KeyExists, Other, StateError, Corrupted, Panic, InvalidPath, TxnFull, CursorFull, PageFull, CacheError};
 use traits::{ToMdbValue, FromMdbValue};
 use utils::{error_msg};
 
@@ -121,6 +121,7 @@ pub enum MdbError {
     Panic,
     InvalidPath,
     StateError(String),
+    CacheError,
     Other(c_int, String)
 }
 
@@ -146,8 +147,7 @@ impl std::fmt::Show for MdbError {
         match self {
             &NotFound | &KeyExists | &TxnFull |
             &CursorFull | &PageFull | &Corrupted |
-            &Panic | &InvalidPath => write!(fmt, "{}", self.description()),
-
+            &Panic | &InvalidPath | &CacheError => write!(fmt, "{}", self.description()),
             &StateError(ref msg) => write!(fmt, "{}", msg),
             &Other(code, ref msg) => write!(fmt, "{}: {}", code, msg)
         }
@@ -166,6 +166,7 @@ impl Error for MdbError {
             &Panic => "panic",
             &InvalidPath => "invalid path for database",
             &StateError(_) => "state error",
+            &CacheError => "db cache error",
             &Other(_, _) => "other error",
         }
     }
@@ -174,7 +175,7 @@ impl Error for MdbError {
         match self {
             &NotFound | &KeyExists |  &TxnFull |
             &CursorFull | &PageFull | &Corrupted |
-            &Panic | &InvalidPath => None,
+            &Panic | &InvalidPath | &CacheError => None,
             &StateError(ref msg) => Some(msg.clone()),
             &Other(code, ref msg) => Some(format!("code {}, msg {}", code, msg))
         }
@@ -669,40 +670,44 @@ impl Environment {
         // transactions. A transaction that uses this function must finish
         // (either commit or abort) before any other transaction may use
         // this function
-        let guard = self.db_cache.lock();
-        let ref cell = *guard;
-        let cache = cell.get();
+        match self.db_cache.lock() {
+            Err(_) => Err(MdbError::CacheError),
+            Ok(guard) => {
+                let ref cell = *guard;
+                let cache = cell.get();
 
-        unsafe {
-            if let Some(db) = (*cache).get(db_name) {
-                debug!("Cached value for {}: {}", db_name, *db);
-                return Ok(*db);
+                unsafe {
+                    if let Some(db) = (*cache).get(db_name) {
+                        debug!("Cached value for {}: {}", db_name, *db);
+                        return Ok(*db);
+                    }
+                }
+
+                let mut txn = try!(self.create_transaction(None, 0));
+                let opt_name = if db_name.len() > 0 {Some(db_name)} else {None};
+                let flags = if force_creation {flags | DbCreate} else {flags - DbCreate};
+
+                let mut db: ffi::MDB_dbi = 0;
+                let db_res = match opt_name {
+                    None => unsafe { ffi::mdb_dbi_open(txn.handle, ptr::null(), flags.bits(), &mut db) },
+                    Some(db_name) => {
+                        db_name.with_c_str(|c_name| unsafe {
+                            ffi::mdb_dbi_open(txn.handle, c_name, flags.bits(), &mut db)
+                        })
+                    }
+                };
+
+                try_mdb!(db_res);
+                try!(txn.commit());
+
+                debug!("Caching: {} -> {}", db_name, db);
+                unsafe {
+                    (*cache).insert(db_name.to_owned(), db);
+                };
+
+                Ok(db)
             }
         }
-
-        let mut txn = try!(self.create_transaction(None, 0));
-        let opt_name = if db_name.len() > 0 {Some(db_name)} else {None};
-        let flags = if force_creation {flags | DbCreate} else {flags - DbCreate};
-
-        let mut db: ffi::MDB_dbi = 0;
-        let db_res = match opt_name {
-            None => unsafe { ffi::mdb_dbi_open(txn.handle, ptr::null(), flags.bits(), &mut db) },
-            Some(db_name) => {
-                db_name.with_c_str(|c_name| unsafe {
-                    ffi::mdb_dbi_open(txn.handle, c_name, flags.bits(), &mut db)
-                })
-            }
-        };
-
-        try_mdb!(db_res);
-        try!(txn.commit());
-
-        debug!("Caching: {} -> {}", db_name, db);
-        unsafe {
-            (*cache).insert(db_name.to_owned(), db);
-        };
-
-        Ok(db)
     }
 
     /// Opens existing DB
@@ -723,22 +728,26 @@ impl Environment {
     }
 
     fn drop_db_from_cache(&self, handle: ffi::MDB_dbi) {
-        let guard = self.db_cache.lock();
-        let ref cell = *guard;
+        match self.db_cache.lock() {
+            Err(_) => (),
+            Ok(guard) => {
+                let ref cell = *guard;
 
-        unsafe {
-            let cache = cell.get();
+                unsafe {
+                    let cache = cell.get();
 
-            let mut key = None;
-            for (k, v) in (*cache).iter() {
-                if *v == handle {
-                    key = Some(k);
-                    break;
+                    let mut key = None;
+                    for (k, v) in (*cache).iter() {
+                        if *v == handle {
+                            key = Some(k);
+                            break;
+                        }
+                    }
+
+                    if let Some(key) = key {
+                        (*cache).remove(key);
+                    }
                 }
-            }
-
-            if let Some(key) = key {
-                (*cache).remove(key);
             }
         }
     }
