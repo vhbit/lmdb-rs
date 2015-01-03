@@ -33,8 +33,8 @@ pub trait ToMdbValue for Sized? {
 /// memory slice. It allows to use zero copy where it is
 /// required.
 #[experimental]
-pub trait FromMdbValue<'a, T:'a> {
-    fn from_mdb_value(value: &'a MdbValue<'a>) -> T;
+pub trait FromMdbValue for Sized? {
+    fn from_mdb_value(value: &MdbValue) -> Self;
 }
 
 impl ToMdbValue for Vec<u8> {
@@ -87,8 +87,8 @@ impl<'a> ToMdbValue for MdbValue<'a> {
 }
 
 
-impl<'a> FromMdbValue<'a, String> for String {
-    fn from_mdb_value(value: &'a MdbValue<'a>) -> String {
+impl FromMdbValue for String {
+    fn from_mdb_value(value: &MdbValue) -> String {
         unsafe {
             String::from_raw_buf_len(std::mem::transmute(value.get_ref()),
                                      value.get_size()).to_string()
@@ -96,8 +96,8 @@ impl<'a> FromMdbValue<'a, String> for String {
     }
 }
 
-impl<'a> FromMdbValue<'a, Vec<u8>> for Vec<u8> {
-    fn from_mdb_value(value: &'a MdbValue<'a>) -> Vec<u8> {
+impl FromMdbValue for Vec<u8> {
+    fn from_mdb_value(value: &MdbValue) -> Vec<u8> {
         unsafe {
             Vec::from_raw_buf(std::mem::transmute(value.get_ref()),
                               value.get_size() as uint)
@@ -105,13 +105,13 @@ impl<'a> FromMdbValue<'a, Vec<u8>> for Vec<u8> {
     }
 }
 
-impl<'a> FromMdbValue<'a, ()> for () {
-    fn from_mdb_value(_: &'a MdbValue<'a>) {
+impl FromMdbValue for () {
+    fn from_mdb_value(_: &MdbValue) {
     }
 }
 
-impl<'a> FromMdbValue<'a, &'a str> for &'a str {
-    fn from_mdb_value(value: &'a MdbValue<'a>) -> &'a str {
+impl<'b> FromMdbValue for &'b str {
+    fn from_mdb_value(value: &MdbValue) -> &'b str {
         unsafe {
             std::mem::transmute(std::raw::Slice {
                 data: value.get_ref(),
@@ -121,8 +121,8 @@ impl<'a> FromMdbValue<'a, &'a str> for &'a str {
     }
 }
 
-impl<'a> FromMdbValue<'a, &'a [u8]> for &'a [u8] {
-    fn from_mdb_value(value: &'a MdbValue<'a>) -> &'a [u8] {
+impl<'b> FromMdbValue for &'b [u8] {
+    fn from_mdb_value(value: &MdbValue) -> &'b [u8] {
         unsafe {
             std::mem::transmute(std::raw::Slice {
                 data: value.get_ref(),
@@ -140,8 +140,8 @@ macro_rules! mdb_for_primitive {
             }
         }
 
-        impl<'a> FromMdbValue<'a, $t> for $t {
-            fn from_mdb_value(value: &'a MdbValue<'a>) -> $t {
+        impl FromMdbValue for $t {
+            fn from_mdb_value(value: &MdbValue) -> $t {
                 unsafe {
                     let t: *const $t = mem::transmute(value.get_ref());
                     *t
