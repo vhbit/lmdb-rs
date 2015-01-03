@@ -40,7 +40,7 @@
 
 #![allow(non_upper_case_globals)]
 
-use libc::{mod, c_int, c_uint, size_t, c_void};
+use libc::{self, c_int, c_uint, size_t, c_void};
 use std;
 use std::borrow::ToOwned;
 use std::cell::{UnsafeCell};
@@ -54,7 +54,7 @@ use std::ptr;
 use std::result::Result;
 use std::sync::{Mutex};
 
-use ffi::{mod, MDB_val};
+use ffi::{self, MDB_val};
 pub use MdbError::{NotFound, KeyExists, Other, StateError, Corrupted, Panic, InvalidPath, TxnFull, CursorFull, PageFull, CacheError};
 use traits::{ToMdbValue, FromMdbValue};
 use utils::{error_msg};
@@ -439,7 +439,7 @@ impl<'a> Database<'a> {
 }
 
 #[stable]
-#[deriving(Copy)]
+#[derive(Copy)]
 pub struct EnvBuilder {
     flags: EnvCreateFlags,
     max_readers: Option<uint>,
@@ -763,14 +763,14 @@ impl Drop for Environment {
 }
 
 #[allow(dead_code)]
-#[deriving(Copy)]
+#[derive(Copy)]
 pub struct DbHandle {
     handle: ffi::MDB_dbi,
     flags: DbFlags
 }
 
 
-#[deriving(Copy, PartialEq, Show, Eq, Clone)]
+#[derive(Copy, PartialEq, Show, Eq, Clone)]
 enum TransactionState {
     Normal,   // Normal, any operation possible
     Released, // Released (reset on readonly), has to be renewed
@@ -1590,7 +1590,7 @@ impl<'iter> CursorIteratorInner for CursorItemIter<'iter> {
 }
 
 #[stable]
-#[deriving(Copy)]
+#[derive(Copy)]
 pub struct MdbValue<'a> {
     value: MDB_val
 }

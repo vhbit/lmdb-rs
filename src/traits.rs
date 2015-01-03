@@ -16,7 +16,7 @@
 //! impossible to convert `&'a str` and `&'a [u8]` for now
 
 
-use std::{mod, mem};
+use std::{self, mem};
 
 use core::MdbValue;
 use ffi::MDB_val;

@@ -1,9 +1,9 @@
-use std::io::fs::{mod, PathExtensions};
+use std::io::fs::{self, PathExtensions};
 use std::io::USER_DIR;
 use std::rt::unwind;
 use std::path::Path;
 
-use core::{mod, EnvBuilder, DbFlags, EnvNoMemInit, EnvNoMetaSync};
+use core::{self, EnvBuilder, DbFlags, EnvNoMemInit, EnvNoMetaSync};
 
 fn test_db_in_path<F: Fn()>(path: &Path, f: F) {
     // Delete dir to be sure nothing existed before test
