@@ -3,6 +3,7 @@
 #![feature(macro_rules)]
 #![feature(unsafe_destructor)]
 #![feature(unboxed_closures)]
+#![feature(associated_types)]
 
 extern crate libc;
 #[phase(plugin, link)] extern crate log;

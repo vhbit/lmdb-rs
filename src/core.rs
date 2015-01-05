@@ -1388,7 +1388,9 @@ impl<'c, I: CursorIteratorInner + 'c> CursorIterator<'c, I> {
     }
 }
 
-impl<'c, I: CursorIteratorInner + 'c> Iterator<CursorValue<'c>> for CursorIterator<'c, I> {
+impl<'c, I: CursorIteratorInner + 'c> Iterator for CursorIterator<'c, I> {
+    type Item = CursorValue<'c>;
+
     fn next(&mut self) -> Option<CursorValue> {
         if !self.has_data {
             None
