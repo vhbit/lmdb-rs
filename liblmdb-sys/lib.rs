@@ -32,8 +32,8 @@ pub type MDB_rel_func = fn(*const MDB_val, *const c_void, *const c_void, *const 
 pub type MDB_msg_func = fn(*const c_char, *const c_void) -> c_int;
 pub type MDB_cmp_func = fn(*const MDB_val, *const MDB_val) -> c_int;
 
-#[deriving(Copy, Clone)]
-#[allow(raw_pointer_deriving)]
+#[derive(Copy, Clone)]
+#[allow(raw_pointer_derive)]
 #[repr(C)]
 #[stable]
 pub struct MDB_val {
@@ -55,7 +55,7 @@ pub struct MDB_cursor;
 
 #[repr(C)]
 #[stable]
-#[deriving(Copy)]
+#[derive(Copy)]
 pub struct MDB_stat {
     pub ms_psize: c_uint,
     pub ms_depth: c_uint,
@@ -78,7 +78,7 @@ pub struct MDB_envinfo {
 }
 
 #[repr(C)]
-#[deriving(Copy, Eq, PartialEq)]
+#[derive(Copy, Eq, PartialEq)]
 pub enum MDB_cursor_op {
     MDB_FIRST,
     MDB_FIRST_DUP,
