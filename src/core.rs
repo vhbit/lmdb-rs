@@ -45,8 +45,8 @@ use std;
 use std::borrow::ToOwned;
 use std::cell::{UnsafeCell};
 use std::collections::HashMap;
-use std::c_str::ToCStr;
 use std::error::Error;
+use std::ffi::CString;
 use std::io::FilePermission;
 use std::io::fs::PathExtensions;
 use std::mem;
@@ -91,7 +91,7 @@ macro_rules! assert_state_eq {
             if c == e {
                 ()
             } else {
-                let msg = format!("{} requires {}, is in {}", stringify!($log), c, e);
+                let msg = format!("{} requires {:?}, is in {:?}", stringify!($log), c, e);
                 return Err(StateError(msg))
             }})
 }
@@ -104,7 +104,7 @@ macro_rules! assert_state_not {
             if c != e {
                 ()
             } else {
-                let msg = format!("{} shouldn't be in {}", stringify!($log), e);
+                let msg = format!("{} shouldn't be in {:?}", stringify!($log), e);
                 return Err(StateError(msg))
             }})
 }
@@ -509,11 +509,11 @@ impl EnvBuilder {
 
         let _ = try!(EnvBuilder::check_path(path, self.flags, perms));
 
-        let res = path.with_c_str(|c_path| {
-            unsafe {
-                ffi::mdb_env_open(mem::transmute(env), c_path, self.flags.bits,
-                             perms.bits() as libc::mode_t)}
-        });
+        let res = unsafe {
+            let c_path = CString::from_slice(path.as_vec());
+            ffi::mdb_env_open(mem::transmute(env), c_path.as_ptr(), self.flags.bits,
+                              perms.bits() as libc::mode_t)
+        };
 
         drop(self);
 
@@ -539,9 +539,10 @@ impl EnvBuilder {
             // There should be a directory before open
             match (path.exists(), path.is_dir()) {
                 (false, _) => {
-                    lift_mdb!(path.with_c_str(|c_path| unsafe {
-                        libc::mkdir(c_path, perms.bits() as libc::mode_t)
-                    }))
+                    let c_path = CString::from_slice(path.as_vec());
+                    lift_mdb!(unsafe {
+                        libc::mkdir(c_path.as_ptr(), perms.bits() as libc::mode_t)
+                    })
                 },
                 (true, true) => Ok(()),
                 (true, false) => Err(InvalidPath),
@@ -633,9 +634,10 @@ impl Environment {
     /// Creates a backup copy in specified path
     // FIXME: check who is responsible for creating path: callee or caller
     pub fn copy_to_path(&self, path: &Path) -> MdbResult<()> {
-        path.with_c_str(|c_path| unsafe {
-            lift_mdb!(ffi::mdb_env_copy(self.env, c_path))
-        })
+        let c_path = CString::from_slice(path.as_vec());
+        unsafe {
+            lift_mdb!(ffi::mdb_env_copy(self.env, c_path.as_ptr()))
+        }
     }
 
     fn create_transaction(&self, parent: Option<NativeTransaction>, flags: c_uint) -> MdbResult<NativeTransaction> {
@@ -692,9 +694,10 @@ impl Environment {
                 let db_res = match opt_name {
                     None => unsafe { ffi::mdb_dbi_open(txn.handle, ptr::null(), flags.bits(), &mut db) },
                     Some(db_name) => {
-                        db_name.with_c_str(|c_name| unsafe {
-                            ffi::mdb_dbi_open(txn.handle, c_name, flags.bits(), &mut db)
-                        })
+                        let db_name = CString::from_slice(db_name.as_bytes());
+                        unsafe {
+                            ffi::mdb_dbi_open(txn.handle, db_name.as_ptr(), flags.bits(), &mut db)
+                        }
                     }
                 };
 
@@ -783,8 +786,8 @@ struct NativeTransaction<'a> {
     env: &'a Environment,
     flags: uint,
     state: TransactionState,
-    no_send: std::kinds::marker::NoSend,
-    no_sync: std::kinds::marker::NoSync
+    no_send: std::marker::NoSend,
+    no_sync: std::marker::NoSync
 }
 
 #[experimental]
@@ -796,8 +799,8 @@ impl<'a> NativeTransaction<'a> {
             flags: flags,
             state: TransactionState::Normal,
             env: env,
-            no_send: std::kinds::marker::NoSend,
-            no_sync: std::kinds::marker::NoSync,
+            no_send: std::marker::NoSend,
+            no_sync: std::marker::NoSync,
         }
     }
 
@@ -819,7 +822,7 @@ impl<'a> NativeTransaction<'a> {
 
     fn abort(&mut self) {
         if self.state != TransactionState::Normal {
-            debug!("Can't abort transaction: current state {}", self.state)
+            debug!("Can't abort transaction: current state {:?}", self.state)
         } else {
             debug!("abort txn");
             unsafe { ffi::mdb_txn_abort(self.handle); }
@@ -835,7 +838,7 @@ impl<'a> NativeTransaction<'a> {
     /// by a call to `renew`
     fn reset(&mut self) {
         if self.state != TransactionState::Normal {
-            debug!("Can't reset transaction: current state {}", self.state);
+            debug!("Can't reset transaction: current state {:?}", self.state);
         } else {
             unsafe { ffi::mdb_txn_reset(self.handle); }
             self.state = TransactionState::Released;

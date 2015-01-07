@@ -16,7 +16,7 @@
 //! impossible to convert `&'a str` and `&'a [u8]` for now
 
 
-use std::{self, mem};
+use std::{self, mem, slice};
 
 use core::MdbValue;
 use ffi::MDB_val;
@@ -25,7 +25,7 @@ use ffi::MDB_val;
 /// slice which `lmdb` uses to prevent multiple copying data
 /// multiple times. May be unsafe.
 #[experimental]
-pub trait ToMdbValue for Sized? {
+pub trait ToMdbValue {
     fn to_mdb_value<'a>(&'a self) -> MdbValue<'a>;
 }
 
@@ -33,7 +33,7 @@ pub trait ToMdbValue for Sized? {
 /// memory slice. It allows to use zero copy where it is
 /// required.
 #[experimental]
-pub trait FromMdbValue for Sized? {
+pub trait FromMdbValue {
     fn from_mdb_value(value: &MdbValue) -> Self;
 }
 
@@ -90,8 +90,9 @@ impl<'a> ToMdbValue for MdbValue<'a> {
 impl FromMdbValue for String {
     fn from_mdb_value(value: &MdbValue) -> String {
         unsafe {
-            String::from_raw_buf_len(std::mem::transmute(value.get_ref()),
-                                     value.get_size()).to_string()
+            let ptr = mem::transmute(value.get_ref());
+            let data: Vec<u8> = slice::from_raw_buf(&ptr, value.get_size()).to_vec();
+            String::from_utf8(data).unwrap()
         }
     }
 }
@@ -143,7 +144,7 @@ macro_rules! mdb_for_primitive {
         impl FromMdbValue for $t {
             fn from_mdb_value(value: &MdbValue) -> $t {
                 unsafe {
-                    let t: *const $t = mem::transmute(value.get_ref());
+                    let t: *mut $t = mem::transmute(value.get_ref());
                     *t
                 }
             }
