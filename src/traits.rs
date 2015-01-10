@@ -75,7 +75,7 @@ impl<'a> ToMdbValue for &'a [u8] {
 impl ToMdbValue for MDB_val {
     fn to_mdb_value<'a>(&'a self) -> MdbValue<'a> {
         unsafe {
-            MdbValue::new((*self).mv_data, (*self).mv_size as uint)
+            MdbValue::new((*self).mv_data, (*self).mv_size as usize)
         }
     }
 }
@@ -101,7 +101,7 @@ impl FromMdbValue for Vec<u8> {
     fn from_mdb_value(value: &MdbValue) -> Vec<u8> {
         unsafe {
             Vec::from_raw_buf(std::mem::transmute(value.get_ref()),
-                              value.get_size() as uint)
+                              value.get_size() as usize)
         }
     }
 }

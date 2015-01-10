@@ -1,3 +1,5 @@
+#![allow(unstable)]
+
 extern crate "lmdb-rs" as lmdb;
 
 use std::io::USER_DIR;

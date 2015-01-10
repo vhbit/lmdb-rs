@@ -442,8 +442,8 @@ impl<'a> Database<'a> {
 #[derive(Copy)]
 pub struct EnvBuilder {
     flags: EnvCreateFlags,
-    max_readers: Option<uint>,
-    max_dbs: Option<uint>,
+    max_readers: Option<usize>,
+    max_dbs: Option<usize>,
     map_size: Option<u64>,
 }
 
@@ -467,13 +467,13 @@ impl EnvBuilder {
     }
 
     /// Sets max concurrent readers operating on environment
-    pub fn max_readers(mut self, max_readers: uint) -> EnvBuilder {
+    pub fn max_readers(mut self, max_readers: usize) -> EnvBuilder {
         self.max_readers = Some(max_readers);
         self
     }
 
     /// Set max number of databases
-    pub fn max_dbs(mut self, max_dbs: uint) -> EnvBuilder {
+    pub fn max_dbs(mut self, max_dbs: usize) -> EnvBuilder {
         self.max_dbs = Some(max_dbs);
         self
     }
@@ -648,7 +648,7 @@ impl Environment {
         };
 
         lift_mdb!(unsafe { ffi::mdb_txn_begin(self.env, parent_handle, flags, &mut handle) },
-                 NativeTransaction::new_with_handle(handle, flags as uint, self))
+                 NativeTransaction::new_with_handle(handle, flags as usize, self))
     }
 
     /// Creates a new read-write transaction
@@ -784,7 +784,7 @@ enum TransactionState {
 struct NativeTransaction<'a> {
     handle: *mut ffi::MDB_txn,
     env: &'a Environment,
-    flags: uint,
+    flags: usize,
     state: TransactionState,
     no_send: std::marker::NoSend,
     no_sync: std::marker::NoSync
@@ -792,7 +792,7 @@ struct NativeTransaction<'a> {
 
 #[experimental]
 impl<'a> NativeTransaction<'a> {
-    fn new_with_handle(h: *mut ffi::MDB_txn, flags: uint, env: &Environment) -> NativeTransaction {
+    fn new_with_handle(h: *mut ffi::MDB_txn, flags: usize, env: &Environment) -> NativeTransaction {
         // debug!("new native txn");
         NativeTransaction {
             handle: h,
@@ -856,7 +856,7 @@ impl<'a> NativeTransaction<'a> {
     fn new_child(&self, flags: c_uint) -> MdbResult<NativeTransaction> {
         let mut out: *mut ffi::MDB_txn = ptr::null_mut();
         try_mdb!(unsafe { ffi::mdb_txn_begin(ffi::mdb_txn_env(self.handle), self.handle, flags, &mut out) });
-        Ok(NativeTransaction::new_with_handle(out, flags as uint, self.env))
+        Ok(NativeTransaction::new_with_handle(out, flags as usize, self.env))
     }
 
     /// Used in Drop to switch state
@@ -1362,7 +1362,7 @@ trait CursorIteratorInner {
     fn move_to_next<'iter, 'cursor: 'iter>(&'iter self, cursor: &'cursor mut Cursor<'cursor>) -> bool;
 
     /// Returns size hint considering current state of cursor
-    fn get_size_hint(&self, _cursor: &Cursor) -> (uint, Option<uint>) {
+    fn get_size_hint(&self, _cursor: &Cursor) -> (usize, Option<usize>) {
         (0, None)
     }
 }
@@ -1411,7 +1411,7 @@ impl<'c, I: CursorIteratorInner + 'c> Iterator for CursorIterator<'c, I> {
         }
     }
 
-    fn size_hint(&self) -> (uint, Option<uint>) {
+    fn size_hint(&self) -> (usize, Option<usize>) {
         self.inner.get_size_hint(&self.cursor)
     }
 }
@@ -1586,10 +1586,10 @@ impl<'iter> CursorIteratorInner for CursorItemIter<'iter> {
         cursor.to_next_item().is_ok()
     }
 
-    fn get_size_hint(&self, c: &Cursor) -> (uint, Option<uint>) {
+    fn get_size_hint(&self, c: &Cursor) -> (usize, Option<usize>) {
         match c.item_count() {
             Err(_) => (0, None),
-            Ok(cnt) => (0, Some(cnt as uint))
+            Ok(cnt) => (0, Some(cnt as usize))
         }
     }
 }
@@ -1602,7 +1602,7 @@ pub struct MdbValue<'a> {
 
 impl<'a> MdbValue<'a> {
     #[unstable]
-    pub unsafe fn new(data: *const c_void, len: uint) -> MdbValue<'a> {
+    pub unsafe fn new(data: *const c_void, len: usize) -> MdbValue<'a> {
         MdbValue {
             value: MDB_val {
                 mv_data: data,
@@ -1621,7 +1621,7 @@ impl<'a> MdbValue<'a> {
         self.value.mv_data
     }
 
-    pub fn get_size(&self) -> uint {
-        self.value.mv_size as uint
+    pub fn get_size(&self) -> usize {
+        self.value.mv_size as usize
     }
 }
