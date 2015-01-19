@@ -41,6 +41,7 @@ fn ios_cflags(target: &str) -> String {
     if !target.starts_with("arm-")
         && !target.starts_with("armv7-")
         && !target.starts_with("arm64-")
+        && !target.starts_with("aarch64-")
         && !target.starts_with("armv7s-")
         && !target.starts_with("x86_64-")
         && !target.starts_with("i386-") {
