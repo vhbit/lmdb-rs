@@ -786,8 +786,6 @@ struct NativeTransaction<'a> {
     env: &'a Environment,
     flags: usize,
     state: TransactionState,
-    no_send: std::marker::NoSend,
-    no_sync: std::marker::NoSync
 }
 
 #[experimental]
@@ -799,8 +797,6 @@ impl<'a> NativeTransaction<'a> {
             flags: flags,
             state: TransactionState::Normal,
             env: env,
-            no_send: std::marker::NoSend,
-            no_sync: std::marker::NoSync,
         }
     }
 
