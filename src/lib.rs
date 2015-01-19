@@ -3,6 +3,8 @@
 #![allow(unstable)]
 
 extern crate libc;
+
+#[macro_use] extern crate bitflags;
 #[macro_use] extern crate log;
 
 extern crate "liblmdb-sys" as ffi;
