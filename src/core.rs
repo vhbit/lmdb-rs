@@ -112,6 +112,7 @@ macro_rules! assert_state_not {
 /// MdbError wraps information about LMDB error
 
 #[unstable]
+#[derive(Debug)]
 pub enum MdbError {
     NotFound,
     KeyExists,
