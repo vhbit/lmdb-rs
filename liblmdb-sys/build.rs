@@ -18,7 +18,7 @@ fn run(cmd: &mut Command) {
 fn ios_cflags(target: &str) -> String {
     let mut cflags = String::new();
 
-    let (sdk_name, sdk_min_ver) = if target.contains("arm") {
+    let (sdk_name, sdk_min_ver) = if target.contains("arm") | target.contains("aarch64") {
         ("iphoneos", "ios-version-min")
     } else {
         ("iphonesimulator", "ios-simulator-version-min")
@@ -32,6 +32,8 @@ fn ios_cflags(target: &str) -> String {
         .output()
         .unwrap();
     let sdk_path = String::from_utf8_lossy(sdk_output.output.as_slice());
+
+    let target = target.replace("aarch64-", "arm64-");
 
     let flags = format!(" -target {} -isysroot {} -m{}=7.0", target, sdk_path.as_slice().trim(), sdk_min_ver);
     cflags.push_str(flags.as_slice());
