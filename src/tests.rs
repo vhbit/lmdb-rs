@@ -296,6 +296,35 @@ fn test_cursor_in_txns() {
     }
 }
 
+#[test]
+fn test_multithread_env() {
+    let mut env = EnvBuilder::new()
+        .max_dbs(5)
+        .open(&next_path(), USER_DIR)
+        .unwrap();
+
+    let mut shared_env = env.clone();
+    let key = "key";
+    let value = "value";
+
+    let join_res = Thread::scoped(move || {
+        let db = shared_env.create_db("test1", DbFlags::empty()).unwrap();
+        let txn = shared_env.new_transaction().unwrap();
+        {
+            let db = txn.bind(&db);
+            assert!(db.set(&key, &value).is_ok());
+        }
+        assert!(txn.commit().is_ok());
+    }).join();
+
+    assert!(join_res.is_ok());
+
+    let db = env.create_db("test1", DbFlags::empty()).unwrap();
+    let txn = env.get_reader().unwrap();
+    let db = txn.bind(&db);
+    let value2: String = db.get(&key).unwrap();
+    assert_eq!(value, value2.as_slice());
+}
 
 /*
 #[test]

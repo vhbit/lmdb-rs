@@ -52,7 +52,7 @@ use std::io::fs::PathExtensions;
 use std::mem;
 use std::ptr;
 use std::result::Result;
-use std::sync::{Mutex};
+use std::sync::{Arc, Mutex};
 
 use ffi::{self, MDB_val};
 pub use MdbError::{NotFound, KeyExists, Other, StateError, Corrupted, Panic, InvalidPath, TxnFull, CursorFull, PageFull, CacheError};
@@ -552,11 +552,23 @@ impl EnvBuilder {
 
 }
 
+struct EnvHandle(*mut ffi::MDB_env);
+
+impl Drop for EnvHandle {
+    fn drop(&mut self) {
+        unsafe {
+            if self.0 != ptr::null_mut() {
+                ffi::mdb_env_close(self.0);
+            }
+        }
+    }
+}
+
 /// Represents LMDB Environment. Should be opened using `EnvBuilder`
 #[unstable]
 pub struct Environment {
-    env: *mut ffi::MDB_env,
-    db_cache: Mutex<UnsafeCell<HashMap<String, ffi::MDB_dbi>>>,
+    env: Arc<EnvHandle>,
+    db_cache: Arc<Mutex<UnsafeCell<HashMap<String, ffi::MDB_dbi>>>>,
 }
 
 #[unstable]
@@ -567,31 +579,31 @@ impl Environment {
 
     fn from_raw(env: *mut ffi::MDB_env) -> Environment {
         Environment {
-            env: env,
-            db_cache: Mutex::new(UnsafeCell::new(HashMap::new())),
+            env: Arc::new(EnvHandle(env)),
+            db_cache: Arc::new(Mutex::new(UnsafeCell::new(HashMap::new()))),
         }
     }
 
     pub fn stat(&self) -> MdbResult<ffi::MDB_stat> {
         let mut tmp: ffi::MDB_stat = unsafe { std::mem::zeroed() };
-        lift_mdb!(unsafe { ffi::mdb_env_stat(self.env, &mut tmp)}, tmp)
+        lift_mdb!(unsafe { ffi::mdb_env_stat(self.env.0, &mut tmp)}, tmp)
     }
 
     pub fn info(&self) -> MdbResult<ffi::MDB_envinfo> {
         let mut tmp: ffi::MDB_envinfo = unsafe { std::mem::zeroed() };
-        lift_mdb!(unsafe { ffi::mdb_env_info(self.env, &mut tmp)}, tmp)
+        lift_mdb!(unsafe { ffi::mdb_env_info(self.env.0, &mut tmp)}, tmp)
     }
 
     /// Sync environment to disk
     pub fn sync(&self, force: bool) -> MdbResult<()> {
-        lift_mdb!(unsafe { ffi::mdb_env_sync(self.env, if force {1} else {0})})
+        lift_mdb!(unsafe { ffi::mdb_env_sync(self.env.0, if force {1} else {0})})
     }
 
     /// This one sets only flags which are available for change even
     /// after opening, see also [get_flags](#method.get_flags) and [get_all_flags](#method.get_all_flags)
     pub fn set_flags(&mut self, flags: EnvFlags, turn_on: bool) -> MdbResult<()> {
         lift_mdb!(unsafe {
-            ffi::mdb_env_set_flags(self.env, flags.bits(), if turn_on {1} else {0})
+            ffi::mdb_env_set_flags(self.env.0, flags.bits(), if turn_on {1} else {0})
         })
     }
 
@@ -606,29 +618,29 @@ impl Environment {
     /// See also [get_flags](#method.get_flags) if you're interested only in modifiable flags
     pub fn get_all_flags(&self) -> MdbResult<EnvCreateFlags> {
         let mut flags: c_uint = 0;
-        lift_mdb!(unsafe {ffi::mdb_env_get_flags(self.env, &mut flags)}, EnvCreateFlags::from_bits_truncate(flags))
+        lift_mdb!(unsafe {ffi::mdb_env_get_flags(self.env.0, &mut flags)}, EnvCreateFlags::from_bits_truncate(flags))
     }
 
     pub fn get_maxreaders(&self) -> MdbResult<c_uint> {
         let mut max_readers: c_uint = 0;
         lift_mdb!(unsafe {
-            ffi::mdb_env_get_maxreaders(self.env, &mut max_readers)
+            ffi::mdb_env_get_maxreaders(self.env.0, &mut max_readers)
         }, max_readers)
     }
 
     pub fn get_maxkeysize(&self) -> c_int {
-        unsafe {ffi::mdb_env_get_maxkeysize(self.env)}
+        unsafe {ffi::mdb_env_get_maxkeysize(self.env.0)}
     }
 
     /// Creates a backup copy in specified file descriptor
     pub fn copy_to_fd(&self, fd: ffi::mdb_filehandle_t) -> MdbResult<()> {
-        lift_mdb!(unsafe { ffi::mdb_env_copyfd(self.env, fd) })
+        lift_mdb!(unsafe { ffi::mdb_env_copyfd(self.env.0, fd) })
     }
 
     /// Gets file descriptor of this environment
     pub fn get_fd(&self) -> MdbResult<ffi::mdb_filehandle_t> {
         let mut fd = 0;
-        lift_mdb!({ unsafe { ffi::mdb_env_get_fd(self.env, &mut fd) }}, fd)
+        lift_mdb!({ unsafe { ffi::mdb_env_get_fd(self.env.0, &mut fd) }}, fd)
     }
 
     /// Creates a backup copy in specified path
@@ -636,7 +648,7 @@ impl Environment {
     pub fn copy_to_path(&self, path: &Path) -> MdbResult<()> {
         let c_path = CString::from_slice(path.as_vec());
         unsafe {
-            lift_mdb!(ffi::mdb_env_copy(self.env, c_path.as_ptr()))
+            lift_mdb!(ffi::mdb_env_copy(self.env.0, c_path.as_ptr()))
         }
     }
 
@@ -647,7 +659,7 @@ impl Environment {
             _ => ptr::null_mut()
         };
 
-        lift_mdb!(unsafe { ffi::mdb_txn_begin(self.env, parent_handle, flags, &mut handle) },
+        lift_mdb!(unsafe { ffi::mdb_txn_begin(self.env.0, parent_handle, flags, &mut handle) },
                  NativeTransaction::new_with_handle(handle, flags as usize, self))
     }
 
@@ -757,21 +769,32 @@ impl Environment {
     }
 }
 
-impl Drop for Environment {
-    fn drop(&mut self) {
-        unsafe {
-            ffi::mdb_env_close(self.env);
+unsafe impl Sync for Environment {}
+unsafe impl Send for Environment {}
+
+impl Clone for Environment {
+    fn clone(&self) -> Environment {
+        Environment {
+            env: self.env.clone(),
+            db_cache: self.db_cache.clone()
         }
     }
 }
 
 #[allow(dead_code)]
 #[derive(Copy)]
+/// A handle to a database
+///
+/// It can be cached to avoid opening db on every access
+/// In the current state it is unsafe as other thread
+/// can ask to drop it.
 pub struct DbHandle {
     handle: ffi::MDB_dbi,
     flags: DbFlags
 }
 
+unsafe impl Sync for DbHandle {}
+unsafe impl Send for DbHandle {}
 
 #[derive(Copy, PartialEq, Show, Eq, Clone)]
 enum TransactionState {
