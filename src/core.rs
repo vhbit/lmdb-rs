@@ -571,6 +571,9 @@ pub struct Environment {
     db_cache: Arc<Mutex<UnsafeCell<HashMap<String, ffi::MDB_dbi>>>>,
 }
 
+// It can be used from multiple threads.
+unsafe impl Sync for Environment {}
+
 #[unstable]
 impl Environment {
     pub fn new() -> EnvBuilder {
