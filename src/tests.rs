@@ -193,7 +193,6 @@ fn test_cursor_item_manip() {
 
     assert!(cursor.add_item(&4u64).is_ok());
     assert!(cursor.add_item(&5u64).is_ok());
-    assert!(cursor.add_item(&6u64).is_ok());
 
     let values: Vec<u64> = db.item_iter(&test_key1).unwrap()
         .map(|cv| cv.get_value::<u64>())

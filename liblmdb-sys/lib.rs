@@ -206,3 +206,13 @@ extern "C" {
     pub fn mdb_reader_list(env: *mut MDB_env, func: MDB_msg_func, ctx: *const c_void) -> c_int;
     pub fn mdb_reader_check(env: *mut MDB_env, dead: *mut c_int) -> c_int;
 }
+
+impl std::fmt::Show for MDB_val {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        unsafe {
+            let buf: &[u8] = std::slice::from_raw_buf(std::mem::transmute(self.mv_data),
+                                                      self.mv_size as usize);
+            write!(fmt, "{:?}@{:?}", buf, self.mv_data)
+        }
+    }
+}

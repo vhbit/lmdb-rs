@@ -1247,6 +1247,16 @@ impl<'txn> Cursor<'txn> {
         Ok((k, v))
     }
 
+    #[allow(dead_code)]
+    // This one is used for debugging, so it's to OK to leave it for a while
+    fn dump_value(&self, prefix: &str) {
+        if self.valid_key {
+            println!("{}: key {:?}, data {:?}", prefix,
+                     self.key_val,
+                     self.data_val);
+        }
+    }
+
     fn set_value<V: ToMdbValue>(&mut self, value: &V, flags: c_uint) -> MdbResult<()> {
         try!(self.ensure_key_valid());
         self.data_val = value.to_mdb_value().value;
@@ -1264,12 +1274,16 @@ impl<'txn> Cursor<'txn> {
     /// Overwrites value for current item
     /// Note: overwrites max cur_value.len() bytes
     pub fn replace<V: ToMdbValue>(&mut self, value: &V) -> MdbResult<()> {
-        self.set_value(value, ffi::MDB_CURRENT)
+        let res = self.set_value(value, ffi::MDB_CURRENT);
+        self.valid_key = false;
+        res
     }
 
     /// Adds a new item when created with allowed duplicates
     pub fn add_item<V: ToMdbValue>(&mut self, value: &V) -> MdbResult<()> {
-        self.set_value(value, 0)
+        let res = self.set_value(value, 0);
+        self.valid_key = false;
+        res
     }
 
     fn del_value(&mut self, flags: c_uint) -> MdbResult<()> {
@@ -1283,7 +1297,9 @@ impl<'txn> Cursor<'txn> {
 
     /// Deletes only current item
     pub fn del_item(&mut self) -> MdbResult<()> {
-        self.del_value(0)
+        let res = self.del_value(0);
+        self.valid_key = false;
+        res
     }
 
     /// Deletes all items with same key as current
