@@ -1296,6 +1296,10 @@ impl<'txn> Cursor<'txn> {
     }
 
     /// Deletes only current item
+    ///
+    /// Note that it doesn't check anything so it is caller responsibility
+    /// to make sure that correct item is deleted if, for example, caller
+    /// wants to delete only items of current key
     pub fn del_item(&mut self) -> MdbResult<()> {
         let res = self.del_value(0);
         self.valid_key = false;
