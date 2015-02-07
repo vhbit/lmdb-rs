@@ -584,6 +584,14 @@ impl Environment {
         }
     }
 
+    /// Check for stale entries in the reader lock table.
+    ///
+    /// Returns the number of stale slots that were cleared.
+    pub fn reader_check(&self) -> MdbResult<c_int> {
+        let mut dead: c_int = 0;
+        lift_mdb!(unsafe { ffi::mdb_reader_check(self.env.0, &mut dead as *mut c_int)}, dead)
+    }
+
     pub fn stat(&self) -> MdbResult<ffi::MDB_stat> {
         let mut tmp: ffi::MDB_stat = unsafe { std::mem::zeroed() };
         lift_mdb!(unsafe { ffi::mdb_env_stat(self.env.0, &mut tmp)}, tmp)
