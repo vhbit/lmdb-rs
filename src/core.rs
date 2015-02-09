@@ -401,7 +401,7 @@ impl<'a> Database<'a> {
             .and_then(|c| Ok(CursorIterator::wrap(c, CursorIter)))
     }
 
-    /// Returns an iterator through keys starting with start_key (>=)
+    /// Returns an iterator through keys starting with start_key (>=), start_key is included
     pub fn keyrange_from<'c, 'db: 'c, K: ToMdbValue + 'c>(&'db self, start_key: & K) -> MdbResult<CursorIterator<'c, CursorFromKeyIter>> {
         let cursor = try!(self.txn.new_cursor::<'a>(self.handle));
         let key_range = CursorFromKeyIter::new(start_key);
@@ -409,7 +409,7 @@ impl<'a> Database<'a> {
         Ok(wrap)
     }
 
-    /// Returns an iterator through keys less than end_key (<)
+    /// Returns an iterator through keys less than end_key, end_key is not included
     pub fn keyrange_to<'c, 'db: 'c, K: ToMdbValue + 'c>(&'db self, end_key: &'c K) -> MdbResult<CursorIterator<'c, CursorToKeyIter>> {
         let cursor = try!(self.txn.new_cursor(self.handle));
         let key_range = CursorToKeyIter::new(end_key);
@@ -417,10 +417,11 @@ impl<'a> Database<'a> {
         Ok(wrap)
     }
 
-    /// Returns an iterator for values between start_key and end_key.
+    /// Returns an iterator for values between start_key and end_key (included).
     /// Currently it works only for unique keys (i.e. it will skip
     /// multiple items when DB created with ffi::MDB_DUPSORT).
     /// Iterator is valid while cursor is valid
+
     pub fn keyrange<'c, 'db: 'c, K: ToMdbValue + 'c>(&'db self, start_key: &'c K, end_key: &'c K)
                                -> MdbResult<CursorIterator<'c, CursorKeyRangeIter>>
     {
@@ -1510,7 +1511,7 @@ impl<'iter> CursorIteratorInner for CursorKeyRangeIter<'iter> {
                         ffi::mdb_cmp(cursor.txn.handle, cursor.db,
                                      &mut k.value, mem::transmute(&self.end_key.value))
                     };
-                    cmp_res > 0
+                    cmp_res <= 0 // include end key
                 }
             }
         }
@@ -1586,7 +1587,7 @@ impl<'iter> CursorIteratorInner for CursorToKeyIter<'iter> {
                         ffi::mdb_cmp(cursor.txn.handle, cursor.db,
                                      &mut k.value, mem::transmute(&self.end_key.value))
                     };
-                    cmp_res > 0
+                    cmp_res < 0
                 }
             }
         }

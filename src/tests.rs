@@ -325,6 +325,107 @@ fn test_multithread_env() {
     assert_eq!(value, value2.as_slice());
 }
 
+#[test]
+fn test_keyrange_to() {
+    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
+    let db = env.get_default_db(core::DbIntKey).unwrap();
+    let keys:   Vec<u64> = vec![1, 2, 3];
+    let values: Vec<u64> = vec![5, 6, 7];
+
+    // to avoid problems caused by updates
+    assert_eq!(keys.len(), values.len());
+
+    let txn = env.new_transaction().unwrap();
+    {
+        let db = txn.bind(&db);
+        for (k, v) in keys.iter().zip(values.iter()) {
+            assert!(db.set(k, v).is_ok());
+        }
+    }
+    assert!(txn.commit().is_ok());
+
+    let txn = env.get_reader().unwrap();
+    {
+        let db = txn.bind(&db);
+
+        let last_idx = keys.len() - 1;
+        let last_key: u64 = keys[last_idx];
+        // last key is excluded
+        let iter = db.keyrange_to(&last_key).unwrap();
+
+        let res: Vec<_> = iter.map(|cv| cv.get_value::<u64>()).collect();
+        assert_eq!(res.as_slice(), values.as_slice().slice_to(last_idx));
+    }
+}
+
+
+#[test]
+fn test_keyrange_from() {
+    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
+    let db = env.get_default_db(core::DbIntKey).unwrap();
+    let keys:   Vec<u64> = vec![1, 2, 3];
+    let values: Vec<u64> = vec![5, 6, 7];
+
+    // to avoid problems caused by updates
+    assert_eq!(keys.len(), values.len());
+
+    let txn = env.new_transaction().unwrap();
+    {
+        let db = txn.bind(&db);
+        for (k, v) in keys.iter().zip(values.iter()) {
+            assert!(db.set(k, v).is_ok());
+        }
+    }
+    assert!(txn.commit().is_ok());
+
+    let txn = env.get_reader().unwrap();
+    {
+        let db = txn.bind(&db);
+
+        let start_idx = 1; // second key
+        let last_key: u64 = keys[start_idx];
+        let iter = db.keyrange_from(&last_key).unwrap();
+
+        let res: Vec<_> = iter.map(|cv| cv.get_value::<u64>()).collect();
+        assert_eq!(res.as_slice(), values.as_slice().slice_from(start_idx));
+    }
+}
+
+#[test]
+fn test_keyrange() {
+    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
+    let db = env.get_default_db(core::DbAllowDups | core::DbIntKey).unwrap();
+    let keys:   Vec<u64> = vec![ 1,  2,  3,  4,  5,  6];
+    let values: Vec<u64> = vec![10, 11, 12, 13, 14, 15];
+
+    // to avoid problems caused by updates
+    assert_eq!(keys.len(), values.len());
+
+    let txn = env.new_transaction().unwrap();
+    {
+        let db = txn.bind(&db);
+        for (k, v) in keys.iter().zip(values.iter()) {
+            assert!(db.set(k, v).is_ok());
+        }
+    }
+    assert!(txn.commit().is_ok());
+
+    let txn = env.get_reader().unwrap();
+    {
+        let db = txn.bind(&db);
+
+        let start_idx = 1;
+        let end_idx = 3;
+        let iter = db.keyrange(&keys[start_idx], &keys[end_idx]).unwrap();
+
+        let res: Vec<_> = iter.map(|cv| cv.get_value::<u64>()).collect();
+        assert_eq!(res.as_slice(), values.as_slice().slice(start_idx, // this one goes as usual
+                                                           end_idx + 1 // this one is +1 as Rust slices do not include end
+                                                           ));
+    }
+}
+
+
 /*
 #[test]
 fn test_compilation_of_moved_items() {
