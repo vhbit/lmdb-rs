@@ -325,6 +325,16 @@ fn test_multithread_env() {
     assert_eq!(value, value2.as_slice());
 }
 
+#[test]
+fn test_keyrange_to_u64() {
+    let mut env = EnvBuilder::new().max_dbs(3).open(&next_path(), USER_DIR).unwrap();
+    let expiration_idx = env.create_db("expiration_idx", core::DbAllowDups | core::DbIntKey).unwrap();
+
+    let till = time::get_time().sec as u64 + 1;
+    let iter = expiration_idx.keyrange_to(&till).unwrap();
+
+
+}
 /*
 #[test]
 fn test_compilation_of_moved_items() {
