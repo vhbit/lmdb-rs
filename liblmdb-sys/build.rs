@@ -1,13 +1,16 @@
-#![allow(unstable)]
+#![feature(os)]
+#![feature(io)]
+#![feature(core)]
+#![feature(path)]
 
 use std::os;
-use std::io::{Command};
-use std::io::process::InheritFd;
+use std::old_io::{Command};
+use std::old_io::process::InheritFd;
 
 static STATIC_LIB_NAME: &'static str = "liblmdb.a";
 
 fn run(cmd: &mut Command) {
-    println!("running: {}", cmd);
+    println!("running: {:?}", cmd);
     assert!(cmd.stdout(InheritFd(1))
             .stderr(InheritFd(2))
             .status()

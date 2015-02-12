@@ -1,6 +1,6 @@
 language: rust
 sudo: false
-rust: 1.0.0-alpha
+rust: nightly
 
 env:
   global:

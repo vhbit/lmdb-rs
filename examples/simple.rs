@@ -1,8 +1,9 @@
-#![allow(unstable)]
+#![feature(path)]
+#![feature(io)]
 
 extern crate "lmdb-rs" as lmdb;
 
-use std::io::USER_DIR;
+use std::old_io::USER_DIR;
 use lmdb::{EnvBuilder, DbFlags};
 
 fn main() {

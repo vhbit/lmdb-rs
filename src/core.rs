@@ -47,8 +47,8 @@ use std::cell::{UnsafeCell};
 use std::collections::HashMap;
 use std::error::Error;
 use std::ffi::CString;
-use std::io::FilePermission;
-use std::io::fs::PathExtensions;
+use std::old_io::FilePermission;
+use std::old_io::fs::PathExtensions;
 use std::mem;
 use std::ptr;
 use std::result::Result;
@@ -112,6 +112,7 @@ macro_rules! assert_state_not {
 /// MdbError wraps information about LMDB error
 
 #[unstable]
+#[derive(Debug)]
 pub enum MdbError {
     NotFound,
     KeyExists,
@@ -143,7 +144,7 @@ impl MdbError {
 }
 
 
-impl std::fmt::Show for MdbError {
+impl std::fmt::Display for MdbError {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             &NotFound | &KeyExists | &TxnFull |
@@ -169,16 +170,6 @@ impl Error for MdbError {
             &StateError(_) => "state error",
             &CacheError => "db cache error",
             &Other(_, _) => "other error",
-        }
-    }
-
-    fn detail(&self) -> Option<String> {
-        match self {
-            &NotFound | &KeyExists |  &TxnFull |
-            &CursorFull | &PageFull | &Corrupted |
-            &Panic | &InvalidPath | &CacheError => None,
-            &StateError(ref msg) => Some(msg.clone()),
-            &Other(code, ref msg) => Some(format!("code {}, msg {}", code, msg))
         }
     }
 }
@@ -805,7 +796,7 @@ pub struct DbHandle {
 unsafe impl Sync for DbHandle {}
 unsafe impl Send for DbHandle {}
 
-#[derive(Copy, PartialEq, Show, Eq, Clone)]
+#[derive(Copy, PartialEq, Debug, Eq, Clone)]
 enum TransactionState {
     Normal,   // Normal, any operation possible
     Released, // Released (reset on readonly), has to be renewed

@@ -1,4 +1,6 @@
-#![allow(dead_code, non_camel_case_types, unstable)]
+#![allow(dead_code, non_camel_case_types)]
+#![feature(libc)]
+#![feature(core)]
 
 extern crate libc;
 
@@ -207,7 +209,7 @@ extern "C" {
     pub fn mdb_reader_check(env: *mut MDB_env, dead: *mut c_int) -> c_int;
 }
 
-impl std::fmt::Show for MDB_val {
+impl std::fmt::Debug for MDB_val {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         unsafe {
             let buf: &[u8] = std::slice::from_raw_buf(std::mem::transmute(self.mv_data),

@@ -1,7 +1,7 @@
-use std::io::fs::{self, PathExtensions};
-use std::io::USER_DIR;
+use std::old_io::fs::{self, PathExtensions};
+use std::old_io::USER_DIR;
 use std::os;
-use std::path::Path;
+use std::old_path::Path;
 use std::sync::atomic::{AtomicUint, ATOMIC_UINT_INIT, Ordering};
 use std::sync::{Once, ONCE_INIT};
 use std::thread::Thread;

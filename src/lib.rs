@@ -1,6 +1,13 @@
 #![feature(unsafe_destructor)]
 #![feature(unboxed_closures)]
-#![allow(unstable)]
+#![feature(libc)]
+#![feature(core)]
+#![feature(std_misc)]
+#![feature(path)]
+#![feature(io)]
+#![feature(collections)]
+#![feature(hash)]
+#![allow(unused_attributes)]
 
 extern crate libc;
 
