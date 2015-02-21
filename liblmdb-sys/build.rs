@@ -1,21 +1,22 @@
-#![feature(old_io)]
 #![feature(core)]
 #![feature(env)]
-#![feature(old_path)]
+#![feature(process)]
+#![feature(path)]
 
 use std::env;
-use std::old_io::process::{Command};
-use std::old_io::process::InheritFd;
+use std::path::{PathBuf};
+use std::process::{Command, Stdio};
 
 static STATIC_LIB_NAME: &'static str = "liblmdb.a";
 
 fn run(cmd: &mut Command) {
     println!("running: {:?}", cmd);
-    assert!(cmd.stdout(InheritFd(1))
-            .stderr(InheritFd(2))
-            .status()
-            .unwrap()
-            .success());
+    let res = cmd.stdout(Stdio::inherit())
+                 .stderr(Stdio::inherit())
+                 .status()
+                 .unwrap()
+                 .success();
+    assert!(res);
 }
 
 fn ios_cflags(target: &str) -> String {
@@ -27,14 +28,14 @@ fn ios_cflags(target: &str) -> String {
         ("iphonesimulator", "ios-simulator-version-min")
     };
 
-    let sdk_output = Command::new("xcrun")
-        .arg("--show-sdk-path")
-        .arg("--sdk")
-        .arg(sdk_name)
-        .stderr(InheritFd(2))
-        .output()
-        .unwrap();
-    let sdk_path = String::from_utf8_lossy(sdk_output.output.as_slice());
+    let sdk_output = Command::new("xcrun").arg("--show-sdk-path")
+                                          .arg("--sdk")
+                                          .arg(sdk_name)
+                                          .stderr(Stdio::inherit())
+                                          .output()
+                                          .unwrap()
+                                          .stdout;
+    let sdk_path = String::from_utf8_lossy(sdk_output.as_slice());
 
     let target = target.replace("aarch64-", "arm64-");
 
@@ -86,28 +87,31 @@ fn cflags() -> String {
 }
 
 fn main() {
-    let mut cmd = Command::new("make");
+    let root = PathBuf::new(&env::var("CARGO_MANIFEST_DIR").unwrap());
+    let dst = PathBuf::new(&env::var("OUT_DIR").unwrap());
 
-    let root = Path::new(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let dst = Path::new(env::var("OUT_DIR").unwrap());
+    let mut mdb_root = root.clone();
 
-    let mdb_root = root.join_many(vec!["mdb", "libraries", "liblmdb"].as_slice());
+    for sub_dir in vec!["mdb", "libraries", "liblmdb"].iter() {
+        mdb_root.push(sub_dir)
+    }
+
     let lib_dir = dst.clone();
 
-    cmd.arg("-C").arg(mdb_root.clone());
-
-    let mut clean_cmd = cmd.clone();
+    let mut clean_cmd = Command::new("make");
+    clean_cmd.arg("-C").arg(&mdb_root);
     clean_cmd.arg("clean");
     run(&mut clean_cmd);
 
-    let mut build_cmd = cmd.clone();
+    let mut build_cmd = Command::new("make");
+    build_cmd.arg("-C").arg(&mdb_root);
     build_cmd.arg("liblmdb.a");
-    build_cmd.arg(format!("XCFLAGS={}", cflags()));
+    build_cmd.arg(&format!("XCFLAGS={}", cflags()));
     run(&mut build_cmd);
 
     run(Command::new("cp")
-        .arg(mdb_root.join(STATIC_LIB_NAME))
-        .arg(lib_dir.join(STATIC_LIB_NAME)));
+        .arg(&mdb_root.join(STATIC_LIB_NAME))
+        .arg(&lib_dir.join(STATIC_LIB_NAME)));
 
     println!("cargo:rustc-flags=-L {} -l lmdb:static", lib_dir.display());
 }
