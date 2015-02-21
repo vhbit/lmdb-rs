@@ -1,14 +1,15 @@
 #![feature(path)]
-#![feature(io)]
+#![feature(old_io)]
 
 extern crate "lmdb-rs" as lmdb;
 
+use std::path::Path;
 use std::old_io::USER_DIR;
 use lmdb::{EnvBuilder, DbFlags};
 
 fn main() {
     let path = Path::new("test-lmdb");
-    let mut env = EnvBuilder::new().open(&path, USER_DIR).unwrap();
+    let mut env = EnvBuilder::new().open(&path, USER_DIR.bits()).unwrap();
 
     let db_handle = env.get_default_db(DbFlags::empty()).unwrap();
     let txn = env.new_transaction().unwrap();

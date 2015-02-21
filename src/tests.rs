@@ -1,30 +1,30 @@
-use std::old_io::fs::{self, PathExtensions};
+use std::env;
+use std::fs::{self, PathExt};
 use std::old_io::USER_DIR;
-use std::os;
-use std::old_path::Path;
-use std::sync::atomic::{AtomicUint, ATOMIC_UINT_INIT, Ordering};
+use std::path::{PathBuf};
+use std::sync::atomic::{AtomicUsize, ATOMIC_USIZE_INIT, Ordering};
 use std::sync::{Once, ONCE_INIT};
-use std::thread::Thread;
+use std::thread;
 
 use core::{self, EnvBuilder, DbFlags, EnvNoMemInit, EnvNoMetaSync};
 
 static TEST_ROOT_DIR: &'static str = "test-dbs";
-static NEXT_ID: AtomicUint = ATOMIC_UINT_INIT;
+static NEXT_ID: AtomicUsize = ATOMIC_USIZE_INIT;
 static INIT_DIR_ONCE: Once = ONCE_INIT;
 
-fn next_path() -> Path {
-    let out_dir = Path::new(os::getenv("OUT_DIR").unwrap());
+fn next_path() -> PathBuf {
+    let out_dir = PathBuf::new(&env::var("OUT_DIR").unwrap());
     let root_dir = out_dir.join(TEST_ROOT_DIR);
 
     INIT_DIR_ONCE.call_once(|| {
         if root_dir.exists() {
-            let _ = fs::rmdir_recursive(&root_dir);
+            let _ = fs::remove_dir_all(&root_dir);
         };
-        assert!(fs::mkdir_recursive(&root_dir, USER_DIR).is_ok());
+        assert!(fs::create_dir_all(&root_dir).is_ok());
     });
 
     let cur_id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
-    let res = root_dir.join(format!("db-{}", cur_id));
+    let res = root_dir.join(&format!("db-{}", cur_id));
     println!("Testing db in {}", res.display());
     res
 }
@@ -33,7 +33,7 @@ fn next_path() -> Path {
 fn test_environment() {
     let mut env = EnvBuilder::new()
         .max_readers(33)
-        .open(&next_path(), USER_DIR).unwrap();
+        .open(&next_path(), USER_DIR.bits()).unwrap();
 
     env.sync(true).unwrap();
 
@@ -60,7 +60,7 @@ fn test_environment() {
 fn test_single_values() {
     let mut env = EnvBuilder::new()
         .max_dbs(5)
-        .open(&next_path(), USER_DIR)
+        .open(&next_path(), USER_DIR.bits())
         .unwrap();
 
     let db = env.get_default_db(DbFlags::empty()).unwrap();
@@ -89,7 +89,7 @@ fn test_single_values() {
 fn test_multiple_values() {
     let mut env = EnvBuilder::new()
         .max_dbs(5)
-        .open(&next_path(), USER_DIR)
+        .open(&next_path(), USER_DIR.bits())
         .unwrap();
 
     let db = env.get_default_db(core::DbAllowDups).unwrap();
@@ -123,7 +123,7 @@ fn test_multiple_values() {
 fn test_cursors() {
     let mut env = EnvBuilder::new()
         .max_dbs(5)
-        .open(&next_path(), USER_DIR)
+        .open(&next_path(), USER_DIR.bits())
         .unwrap();
 
     let db = env.get_default_db(core::DbAllowDups).unwrap();
@@ -172,7 +172,7 @@ fn test_cursors() {
 fn test_cursor_item_manip() {
     let mut env = EnvBuilder::new()
         .max_dbs(5)
-        .open(&next_path(), USER_DIR)
+        .open(&next_path(), USER_DIR.bits())
         .unwrap();
 
     let db = env.get_default_db(core::DbAllowDups | core::DbAllowIntDups).unwrap();
@@ -215,7 +215,7 @@ fn as_slices(v: &Vec<String>) -> Vec<&str> {
 fn test_item_iter() {
     let mut env = EnvBuilder::new()
         .max_dbs(5)
-        .open(&next_path(), USER_DIR)
+        .open(&next_path(), USER_DIR.bits())
         .unwrap();
 
     let db = env.get_default_db(core::DbAllowDups).unwrap();
@@ -249,7 +249,7 @@ fn test_item_iter() {
 fn test_db_creation() {
     let mut env = EnvBuilder::new()
         .max_dbs(5)
-        .open(&next_path(), USER_DIR)
+        .open(&next_path(), USER_DIR.bits())
         .unwrap();
     assert!(env.create_db("test-db", DbFlags::empty()).is_ok());
 }
@@ -258,7 +258,7 @@ fn test_db_creation() {
 fn test_read_only_txn() {
     let env = EnvBuilder::new()
         .max_dbs(5)
-        .open(&next_path(), USER_DIR)
+        .open(&next_path(), USER_DIR.bits())
         .unwrap();
     env.get_reader().unwrap();
 }
@@ -267,7 +267,7 @@ fn test_read_only_txn() {
 fn test_cursor_in_txns() {
     let mut env = EnvBuilder::new()
         .max_dbs(5)
-        .open(&next_path(), USER_DIR)
+        .open(&next_path(), USER_DIR.bits())
         .unwrap();
 
     {
@@ -299,14 +299,14 @@ fn test_cursor_in_txns() {
 fn test_multithread_env() {
     let mut env = EnvBuilder::new()
         .max_dbs(5)
-        .open(&next_path(), USER_DIR)
+        .open(&next_path(), USER_DIR.bits())
         .unwrap();
 
     let mut shared_env = env.clone();
     let key = "key";
     let value = "value";
 
-    let join_res = Thread::scoped(move || {
+    thread::scoped(move || {
         let db = shared_env.create_db("test1", DbFlags::empty()).unwrap();
         let txn = shared_env.new_transaction().unwrap();
         {
@@ -315,8 +315,6 @@ fn test_multithread_env() {
         }
         assert!(txn.commit().is_ok());
     }).join();
-
-    assert!(join_res.is_ok());
 
     let db = env.create_db("test1", DbFlags::empty()).unwrap();
     let txn = env.get_reader().unwrap();
@@ -327,7 +325,7 @@ fn test_multithread_env() {
 
 #[test]
 fn test_keyrange_to() {
-    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
+    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR.bits()).unwrap();
     let db = env.get_default_db(core::DbIntKey).unwrap();
     let keys:   Vec<u64> = vec![1, 2, 3];
     let values: Vec<u64> = vec![5, 6, 7];
@@ -354,14 +352,14 @@ fn test_keyrange_to() {
         let iter = db.keyrange_to(&last_key).unwrap();
 
         let res: Vec<_> = iter.map(|cv| cv.get_value::<u64>()).collect();
-        assert_eq!(res.as_slice(), values.as_slice().slice_to(last_idx));
+        assert_eq!(res.as_slice(), &values.as_slice()[..last_idx]);
     }
 }
 
 
 #[test]
 fn test_keyrange_from() {
-    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
+    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR.bits()).unwrap();
     let db = env.get_default_db(core::DbIntKey).unwrap();
     let keys:   Vec<u64> = vec![1, 2, 3];
     let values: Vec<u64> = vec![5, 6, 7];
@@ -387,13 +385,13 @@ fn test_keyrange_from() {
         let iter = db.keyrange_from(&last_key).unwrap();
 
         let res: Vec<_> = iter.map(|cv| cv.get_value::<u64>()).collect();
-        assert_eq!(res.as_slice(), values.as_slice().slice_from(start_idx));
+        assert_eq!(res.as_slice(), &values.as_slice()[start_idx..]);
     }
 }
 
 #[test]
 fn test_keyrange() {
-    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
+    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR.bits()).unwrap();
     let db = env.get_default_db(core::DbAllowDups | core::DbIntKey).unwrap();
     let keys:   Vec<u64> = vec![ 1,  2,  3,  4,  5,  6];
     let values: Vec<u64> = vec![10, 11, 12, 13, 14, 15];
@@ -419,9 +417,9 @@ fn test_keyrange() {
         let iter = db.keyrange(&keys[start_idx], &keys[end_idx]).unwrap();
 
         let res: Vec<_> = iter.map(|cv| cv.get_value::<u64>()).collect();
-        assert_eq!(res.as_slice(), values.as_slice().slice(start_idx, // this one goes as usual
-                                                           end_idx + 1 // this one is +1 as Rust slices do not include end
-                                                           ));
+
+         //  +1 as Rust slices do not include end
+        assert_eq!(res.as_slice(), &values.as_slice()[start_idx.. end_idx + 1]);
     }
 }
 

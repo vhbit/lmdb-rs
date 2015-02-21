@@ -1,10 +1,10 @@
-#![feature(os)]
-#![feature(io)]
+#![feature(old_io)]
 #![feature(core)]
-#![feature(path)]
+#![feature(env)]
+#![feature(old_path)]
 
-use std::os;
-use std::old_io::{Command};
+use std::env;
+use std::old_io::process::{Command};
 use std::old_io::process::InheritFd;
 
 static STATIC_LIB_NAME: &'static str = "liblmdb.a";
@@ -62,9 +62,9 @@ fn ios_cflags(target: &str) -> String {
 
 
 fn cflags() -> String {
-    let mut cflags = os::getenv("CFLAGS").unwrap_or(String::new());
+    let mut cflags = env::var("CFLAGS").unwrap_or(String::new());
 
-    let target = os::getenv("TARGET").unwrap();
+    let target = env::var("TARGET").unwrap();
     // let profile = os::getenv("PROFILE").unwrap();
 
     if target.contains("-ios") {
@@ -88,8 +88,8 @@ fn cflags() -> String {
 fn main() {
     let mut cmd = Command::new("make");
 
-    let root = Path::new(os::getenv("CARGO_MANIFEST_DIR").unwrap());
-    let dst = Path::new(os::getenv("OUT_DIR").unwrap());
+    let root = Path::new(env::var("CARGO_MANIFEST_DIR").unwrap());
+    let dst = Path::new(env::var("OUT_DIR").unwrap());
 
     let mdb_root = root.join_many(vec!["mdb", "libraries", "liblmdb"].as_slice());
     let lib_dir = dst.clone();

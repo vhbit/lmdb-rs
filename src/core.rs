@@ -46,10 +46,11 @@ use std::borrow::ToOwned;
 use std::cell::{UnsafeCell};
 use std::collections::HashMap;
 use std::error::Error;
-use std::ffi::CString;
-use std::old_io::FilePermission;
-use std::old_io::fs::PathExtensions;
+use std::ffi::{AsOsStr, CString};
+use std::path::Path;
+use std::fs::PathExt;
 use std::mem;
+use std::os::unix::{OsStrExt};
 use std::ptr;
 use std::result::Result;
 use std::sync::{Arc, Mutex};
@@ -157,7 +158,7 @@ impl std::fmt::Display for MdbError {
 }
 
 impl Error for MdbError {
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         match self {
             &NotFound => "not found",
             &KeyExists => "key exists",
@@ -393,15 +394,15 @@ impl<'a> Database<'a> {
     }
 
     /// Returns an iterator through keys starting with start_key (>=), start_key is included
-    pub fn keyrange_from<'c, 'db: 'c, K: ToMdbValue + 'c>(&'db self, start_key: & K) -> MdbResult<CursorIterator<'c, CursorFromKeyIter>> {
-        let cursor = try!(self.txn.new_cursor::<'a>(self.handle));
+    pub fn keyrange_from<'c, K: ToMdbValue + 'c>(&'c self, start_key: &'c K) -> MdbResult<CursorIterator<'c, CursorFromKeyIter>> {
+        let cursor = try!(self.txn.new_cursor(self.handle));
         let key_range = CursorFromKeyIter::new(start_key);
         let wrap = CursorIterator::wrap(cursor, key_range);
         Ok(wrap)
     }
 
     /// Returns an iterator through keys less than end_key, end_key is not included
-    pub fn keyrange_to<'c, 'db: 'c, K: ToMdbValue + 'c>(&'db self, end_key: &'c K) -> MdbResult<CursorIterator<'c, CursorToKeyIter>> {
+    pub fn keyrange_to<'c, K: ToMdbValue + 'c>(&'c self, end_key: &'c K) -> MdbResult<CursorIterator<'c, CursorToKeyIter>> {
         let cursor = try!(self.txn.new_cursor(self.handle));
         let key_range = CursorToKeyIter::new(end_key);
         let wrap = CursorIterator::wrap(cursor, key_range);
@@ -413,7 +414,7 @@ impl<'a> Database<'a> {
     /// multiple items when DB created with ffi::MDB_DUPSORT).
     /// Iterator is valid while cursor is valid
 
-    pub fn keyrange<'c, 'db: 'c, K: ToMdbValue + 'c>(&'db self, start_key: &'c K, end_key: &'c K)
+    pub fn keyrange<'c, K: ToMdbValue + 'c>(&'c self, start_key: &'c K, end_key: &'c K)
                                -> MdbResult<CursorIterator<'c, CursorKeyRangeIter>>
     {
         let cursor = try!(self.txn.new_cursor(self.handle));
@@ -423,10 +424,10 @@ impl<'a> Database<'a> {
     }
 
     /// Returns an iterator for all items (i.e. values with same key)
-    pub fn item_iter<'c, 'db: 'c, K: ToMdbValue>(&'db self, key: &K) -> MdbResult<CursorIterator<'c, CursorItemIter<'c>>> {
+    pub fn item_iter<'c, 'db: 'c, K: ToMdbValue>(&'db self, key: &'c K) -> MdbResult<CursorIterator<'c, CursorItemIter<'c>>> {
         let cursor = try!(self.txn.new_cursor(self.handle));
-        let inner_iter = CursorItemIter::new(key);
-        Ok(CursorIterator::wrap(cursor, inner_iter))
+        let inner_iter = CursorItemIter::<'c>::new(key);
+        Ok(CursorIterator::<'c>::wrap(cursor, inner_iter))
     }
 }
 
@@ -478,7 +479,7 @@ impl EnvBuilder {
     }
 
     /// Opens environment in specified path
-    pub fn open(self, path: &Path, perms: FilePermission) -> MdbResult<Environment> {
+    pub fn open(self, path: &Path, perms: u32) -> MdbResult<Environment> {
         let env: *mut ffi::MDB_env = ptr::null_mut();
         unsafe {
             let p_env: *mut *mut ffi::MDB_env = std::mem::transmute(&env);
@@ -502,9 +503,9 @@ impl EnvBuilder {
         let _ = try!(EnvBuilder::check_path(path, self.flags, perms));
 
         let res = unsafe {
-            let c_path = CString::from_slice(path.as_vec());
+            let c_path = path.as_os_str().to_cstring().unwrap();
             ffi::mdb_env_open(mem::transmute(env), c_path.as_ptr(), self.flags.bits,
-                              perms.bits() as libc::mode_t)
+                              perms as libc::mode_t)
         };
 
         drop(self);
@@ -521,7 +522,7 @@ impl EnvBuilder {
 
     }
 
-    fn check_path(path: &Path, flags: EnvCreateFlags, perms: FilePermission) -> MdbResult<()> {
+    fn check_path(path: &Path, flags: EnvCreateFlags, perms: u32) -> MdbResult<()> {
         let as_file = flags.contains(EnvCreateNoSubDir);
 
         if as_file {
@@ -531,9 +532,9 @@ impl EnvBuilder {
             // There should be a directory before open
             match (path.exists(), path.is_dir()) {
                 (false, _) => {
-                    let c_path = CString::from_slice(path.as_vec());
+                    let c_path = path.as_os_str().to_cstring().unwrap();
                     lift_mdb!(unsafe {
-                        libc::mkdir(c_path.as_ptr(), perms.bits() as libc::mode_t)
+                        libc::mkdir(c_path.as_ptr(), perms as libc::mode_t)
                     })
                 },
                 (true, true) => Ok(()),
@@ -646,7 +647,7 @@ impl Environment {
     /// Creates a backup copy in specified path
     // FIXME: check who is responsible for creating path: callee or caller
     pub fn copy_to_path(&self, path: &Path) -> MdbResult<()> {
-        let c_path = CString::from_slice(path.as_vec());
+        let c_path = path.as_os_str().to_cstring().unwrap();
         unsafe {
             lift_mdb!(ffi::mdb_env_copy(self.env.0, c_path.as_ptr()))
         }
@@ -706,7 +707,7 @@ impl Environment {
                 let db_res = match opt_name {
                     None => unsafe { ffi::mdb_dbi_open(txn.handle, ptr::null(), flags.bits(), &mut db) },
                     Some(db_name) => {
-                        let db_name = CString::from_slice(db_name.as_bytes());
+                        let db_name = CString::new(db_name.as_bytes()).unwrap();
                         unsafe {
                             ffi::mdb_dbi_open(txn.handle, db_name.as_ptr(), flags.bits(), &mut db)
                         }
@@ -803,7 +804,7 @@ enum TransactionState {
     Invalid,  // Invalid, no further operation possible
 }
 
-#[experimental]
+
 struct NativeTransaction<'a> {
     handle: *mut ffi::MDB_txn,
     env: &'a Environment,
@@ -811,7 +812,7 @@ struct NativeTransaction<'a> {
     state: TransactionState,
 }
 
-#[experimental]
+
 impl<'a> NativeTransaction<'a> {
     fn new_with_handle(h: *mut ffi::MDB_txn, flags: usize, env: &Environment) -> NativeTransaction {
         // debug!("new native txn");
@@ -1241,8 +1242,8 @@ impl<'txn> Cursor<'txn> {
     #[inline]
     fn get_plain(&mut self) -> MdbResult<(MdbValue<'txn>, MdbValue<'txn>)> {
         try!(self.ensure_key_valid());
-        let k = MdbValue {value: self.key_val};
-        let v = MdbValue {value: self.data_val};
+        let k = MdbValue {value: self.key_val, marker: ::std::marker::PhantomData};
+        let v = MdbValue {value: self.data_val, marker: ::std::marker::PhantomData};
 
         Ok((k, v))
     }
@@ -1333,7 +1334,7 @@ impl<'txn> Drop for Cursor<'txn> {
 }
 
 
-#[experimental]
+
 pub struct CursorItemAccessor<'c, 'k, K: 'k> {
     cursor: &'c Cursor<'c>,
     key: &'k K,
@@ -1364,16 +1365,17 @@ impl<'k, 'c: 'k, K: ToMdbValue> CursorItemAccessor<'c, 'k, K> {
     }
 }
 
-#[experimental]
+
 pub struct CursorValue<'cursor> {
     key: MdbValue<'cursor>,
     value: MdbValue<'cursor>,
+    marker: ::std::marker::PhantomData<&'cursor ()>,
 }
 
 /// CursorValue performs lazy data extraction from iterator
 /// avoiding any data conversions and memory copy. Lifetime
 /// is limited to iterator lifetime
-#[experimental]
+
 impl<'cursor> CursorValue<'cursor> {
     pub fn get_key<T: FromMdbValue + 'cursor>(&'cursor self) -> T {
         FromMdbValue::from_mdb_value(&self.key)
@@ -1391,7 +1393,7 @@ impl<'cursor> CursorValue<'cursor> {
 
 /// This one should once become public and allow to create custom
 /// iterators
-#[experimental]
+
 trait CursorIteratorInner {
     /// Returns true if initialization successful, for example that
     /// the key exists.
@@ -1406,11 +1408,12 @@ trait CursorIteratorInner {
     }
 }
 
-#[experimental]
+
 pub struct CursorIterator<'c, I> {
     inner: I,
     has_data: bool,
     cursor: Cursor<'c>,
+    marker: ::std::marker::PhantomData<&'c ()>,
 }
 
 impl<'c, I: CursorIteratorInner + 'c> CursorIterator<'c, I> {
@@ -1420,7 +1423,8 @@ impl<'c, I: CursorIteratorInner + 'c> CursorIterator<'c, I> {
         CursorIterator {
             inner: inner,
             has_data: has_data,
-            cursor: cursor
+            cursor: cursor,
+            marker: ::std::marker::PhantomData,
         }
     }
 
@@ -1433,7 +1437,7 @@ impl<'c, I: CursorIteratorInner + 'c> CursorIterator<'c, I> {
 impl<'c, I: CursorIteratorInner + 'c> Iterator for CursorIterator<'c, I> {
     type Item = CursorValue<'c>;
 
-    fn next(&mut self) -> Option<CursorValue> {
+    fn next(&mut self) -> Option<CursorValue<'c>> {
         if !self.has_data {
             None
         } else {
@@ -1443,7 +1447,8 @@ impl<'c, I: CursorIteratorInner + 'c> Iterator for CursorIterator<'c, I> {
                     self.has_data = unsafe { self.inner.move_to_next(mem::transmute(&mut self.cursor)) };
                     Some(CursorValue {
                         key: k,
-                        value: v
+                        value: v,
+                        marker: ::std::marker::PhantomData
                     })
                 }
             }
@@ -1455,18 +1460,20 @@ impl<'c, I: CursorIteratorInner + 'c> Iterator for CursorIterator<'c, I> {
     }
 }
 
-#[experimental]
+
 pub struct CursorKeyRangeIter<'a> {
     start_key: MdbValue<'a>,
     end_key: MdbValue<'a>,
+    marker: ::std::marker::PhantomData<&'a ()>,
 }
 
-#[experimental]
+
 impl<'a> CursorKeyRangeIter<'a> {
     pub fn new<K: ToMdbValue+'a>(start_key: &'a K, end_key: &'a K) -> CursorKeyRangeIter<'a> {
         CursorKeyRangeIter {
             start_key: start_key.to_mdb_value(),
             end_key: end_key.to_mdb_value(),
+            marker: ::std::marker::PhantomData,
         }
     }
 }
@@ -1490,7 +1497,8 @@ impl<'iter> CursorIteratorInner for CursorKeyRangeIter<'iter> {
                 Err(_) => None,
                 Ok((k, _)) => {
                     Some(MdbValue {
-                        value: k.value
+                        value: k.value,
+                        marker: ::std::marker::PhantomData
                     })
                 }
             };
@@ -1509,16 +1517,18 @@ impl<'iter> CursorIteratorInner for CursorKeyRangeIter<'iter> {
     }
 }
 
-#[experimental]
+
 pub struct CursorFromKeyIter<'a> {
     start_key: MdbValue<'a>,
+    marker: ::std::marker::PhantomData<&'a ()>,
 }
 
-#[experimental]
+
 impl<'a> CursorFromKeyIter<'a> {
     pub fn new<K: ToMdbValue+'a>(start_key: &'a K) -> CursorFromKeyIter<'a> {
         CursorFromKeyIter {
             start_key: start_key.to_mdb_value(),
+            marker: ::std::marker::PhantomData
         }
     }
 }
@@ -1535,16 +1545,18 @@ impl<'iter> CursorIteratorInner for CursorFromKeyIter<'iter> {
     }
 }
 
-#[experimental]
+
 pub struct CursorToKeyIter<'a> {
     end_key: MdbValue<'a>,
+    marker: ::std::marker::PhantomData<&'a ()>,
 }
 
-#[experimental]
+
 impl<'a> CursorToKeyIter<'a> {
     pub fn new<K: ToMdbValue+'a>(end_key: &'a K) -> CursorToKeyIter<'a> {
         CursorToKeyIter {
             end_key: end_key.to_mdb_value(),
+            marker: ::std::marker::PhantomData,
         }
     }
 }
@@ -1566,7 +1578,8 @@ impl<'iter> CursorIteratorInner for CursorToKeyIter<'iter> {
                 Err(_) => None,
                 Ok((k, _)) => {
                     Some(MdbValue {
-                        value: k.value
+                        value: k.value,
+                        marker: ::std::marker::PhantomData
                     })
                 }
             };
@@ -1585,11 +1598,11 @@ impl<'iter> CursorIteratorInner for CursorToKeyIter<'iter> {
     }
 }
 
-#[experimental]
+
 #[allow(missing_copy_implementations)]
 pub struct CursorIter;
 
-#[experimental]
+
 impl<'iter> CursorIteratorInner for CursorIter {
     fn init_cursor<'a, 'b: 'a>(&'a self, cursor: & mut Cursor<'b>) -> bool {
         cursor.to_first().is_ok()
@@ -1600,16 +1613,18 @@ impl<'iter> CursorIteratorInner for CursorIter {
     }
 }
 
-#[experimental]
+
 pub struct CursorItemIter<'a> {
     key: MdbValue<'a>,
+    marker: ::std::marker::PhantomData<&'a ()>,
 }
 
-#[experimental]
+
 impl<'a> CursorItemIter<'a> {
     pub fn new<K: ToMdbValue+'a>(key: &'a K) -> CursorItemIter<'a> {
         CursorItemIter {
             key: key.to_mdb_value(),
+            marker: ::std::marker::PhantomData
         }
     }
 }
@@ -1636,7 +1651,8 @@ impl<'iter> CursorIteratorInner for CursorItemIter<'iter> {
 #[stable]
 #[derive(Copy)]
 pub struct MdbValue<'a> {
-    value: MDB_val
+    value: MDB_val,
+    marker: ::std::marker::PhantomData<&'a ()>,
 }
 
 impl<'a> MdbValue<'a> {
@@ -1646,7 +1662,8 @@ impl<'a> MdbValue<'a> {
             value: MDB_val {
                 mv_data: data,
                 mv_size: len as size_t
-            }
+            },
+            marker: ::std::marker::PhantomData
         }
     }
 

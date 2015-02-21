@@ -24,7 +24,7 @@ use ffi::MDB_val;
 /// `ToMdbValue` is supposed to convert a value to a memory
 /// slice which `lmdb` uses to prevent multiple copying data
 /// multiple times. May be unsafe.
-#[experimental]
+
 pub trait ToMdbValue {
     fn to_mdb_value<'a>(&'a self) -> MdbValue<'a>;
 }
@@ -32,7 +32,7 @@ pub trait ToMdbValue {
 /// `FromMdbValue` is supposed to reconstruct a value from
 /// memory slice. It allows to use zero copy where it is
 /// required.
-#[experimental]
+
 pub trait FromMdbValue {
     fn from_mdb_value(value: &MdbValue) -> Self;
 }
@@ -91,7 +91,7 @@ impl FromMdbValue for String {
     fn from_mdb_value(value: &MdbValue) -> String {
         unsafe {
             let ptr = mem::transmute(value.get_ref());
-            let data: Vec<u8> = slice::from_raw_buf(&ptr, value.get_size()).to_vec();
+            let data: Vec<u8> = slice::from_raw_parts(ptr, value.get_size()).to_vec();
             String::from_utf8(data).unwrap()
         }
     }
@@ -100,8 +100,9 @@ impl FromMdbValue for String {
 impl FromMdbValue for Vec<u8> {
     fn from_mdb_value(value: &MdbValue) -> Vec<u8> {
         unsafe {
-            Vec::from_raw_buf(std::mem::transmute(value.get_ref()),
-                              value.get_size() as usize)
+            Vec::from_raw_parts(mem::transmute(value.get_ref()),
+                                value.get_size() as usize,
+                                value.get_size() as usize)
         }
     }
 }
