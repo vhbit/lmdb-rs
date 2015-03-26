@@ -2,22 +2,17 @@
 #![feature(unsafe_destructor)]
 #![feature(libc)]
 #![feature(core)]
-#![feature(std_misc)]
-#![feature(path)]
-#![feature(fs)]
-#![feature(old_io)]
-#![feature(os)]
-#![feature(env)]
-//#![feature(collections)]
-//#![feature(hash)]
-#![allow(unused_features)]
+#![feature(path_ext)]
+#![allow(trivial_casts)]
+#![allow(trivial_numeric_casts)]
+#![cfg_attr(test, feature(convert))]
 
 extern crate libc;
 
 #[macro_use] extern crate bitflags;
 #[macro_use] extern crate log;
 
-extern crate "liblmdb-sys" as ffi;
+extern crate liblmdb_sys as ffi;
 
 #[stable]
 pub use ffi::{mdb_filehandle_t, MDB_stat, MDB_envinfo};

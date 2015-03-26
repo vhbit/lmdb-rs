@@ -50,7 +50,7 @@ use std::ffi::{AsOsStr, CString};
 use std::path::Path;
 use std::fs::PathExt;
 use std::mem;
-use std::os::unix::{OsStrExt};
+use std::os::unix::ffi::{OsStrExt};
 use std::ptr;
 use std::result::Result;
 use std::sync::{Arc, Mutex};

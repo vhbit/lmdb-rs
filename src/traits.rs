@@ -48,7 +48,7 @@ impl ToMdbValue for Vec<u8> {
 impl ToMdbValue for String {
     fn to_mdb_value<'a>(&'a self) -> MdbValue<'a> {
         unsafe {
-            let t = self.as_slice();
+            let t: &'a str = self;
             MdbValue::new(std::mem::transmute(t.as_ptr()), t.len())
         }
     }
@@ -101,8 +101,8 @@ impl FromMdbValue for Vec<u8> {
     fn from_mdb_value(value: &MdbValue) -> Vec<u8> {
         unsafe {
             Vec::from_raw_parts(mem::transmute(value.get_ref()),
-                                value.get_size() as usize,
-                                value.get_size() as usize)
+                                value.get_size(),
+                                value.get_size())
         }
     }
 }

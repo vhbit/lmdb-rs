@@ -1,6 +1,5 @@
 use std::env;
 use std::fs::{self, PathExt};
-use std::old_io::USER_DIR;
 use std::path::{PathBuf};
 use std::sync::atomic::{AtomicUsize, ATOMIC_USIZE_INIT, Ordering};
 use std::sync::{Once, ONCE_INIT};
@@ -8,12 +7,13 @@ use std::thread;
 
 use core::{self, EnvBuilder, DbFlags, EnvNoMemInit, EnvNoMetaSync};
 
+const USER_DIR: u32 = 0o777;
 static TEST_ROOT_DIR: &'static str = "test-dbs";
 static NEXT_ID: AtomicUsize = ATOMIC_USIZE_INIT;
 static INIT_DIR_ONCE: Once = ONCE_INIT;
 
 fn next_path() -> PathBuf {
-    let out_dir = PathBuf::new(&env::var("OUT_DIR").unwrap());
+    let out_dir = PathBuf::from(&env::var("OUT_DIR").unwrap());
     let root_dir = out_dir.join(TEST_ROOT_DIR);
 
     INIT_DIR_ONCE.call_once(|| {
@@ -33,7 +33,7 @@ fn next_path() -> PathBuf {
 fn test_environment() {
     let mut env = EnvBuilder::new()
         .max_readers(33)
-        .open(&next_path(), USER_DIR.bits()).unwrap();
+        .open(&next_path(), USER_DIR).unwrap();
 
     env.sync(true).unwrap();
 
@@ -53,14 +53,14 @@ fn test_environment() {
     db.set(&key, &value).unwrap();
 
     let v = db.get::<&str>(&key).unwrap();
-    assert!(v.as_slice() == value.as_slice(), "Written {} and read {}", value.as_slice(), v.as_slice());
+    assert!(v == value, "Written {} and read {}", &value, &v);
 }
 
 #[test]
 fn test_single_values() {
     let mut env = EnvBuilder::new()
         .max_dbs(5)
-        .open(&next_path(), USER_DIR.bits())
+        .open(&next_path(), USER_DIR)
         .unwrap();
 
     let db = env.get_default_db(DbFlags::empty()).unwrap();
@@ -75,11 +75,11 @@ fn test_single_values() {
 
     assert!(db.set(&test_key1, &test_data1).is_ok());
     let v = db.get::<&str>(&test_key1).unwrap();
-    assert!(v.as_slice() == test_data1.as_slice(), "Data written differs from data read");
+    assert!(v == test_data1, "Data written differs from data read");
 
     assert!(db.set(&test_key1, &test_data2).is_ok());
     let v = db.get::<&str>(&test_key1).unwrap();
-    assert!(v.as_slice() == test_data2.as_slice(), "Data written differs from data read");
+    assert!(v == test_data2, "Data written differs from data read");
 
     assert!(db.del(&test_key1).is_ok());
     assert!(db.get::<()>(&test_key1).is_err(), "Key should be deleted");
@@ -89,7 +89,7 @@ fn test_single_values() {
 fn test_multiple_values() {
     let mut env = EnvBuilder::new()
         .max_dbs(5)
-        .open(&next_path(), USER_DIR.bits())
+        .open(&next_path(), USER_DIR)
         .unwrap();
 
     let db = env.get_default_db(core::DbAllowDups).unwrap();
@@ -104,16 +104,16 @@ fn test_multiple_values() {
 
     assert!(db.set(&test_key1, &test_data1).is_ok());
     let v = db.get::<&str>(&test_key1).unwrap();
-    assert!(v.as_slice() == test_data1.as_slice(), "Data written differs from data read");
+    assert!(v == test_data1, "Data written differs from data read");
 
     assert!(db.set(&test_key1, &test_data2).is_ok());
     let v = db.get::<&str>(&test_key1).unwrap();
-    assert!(v.as_slice() == test_data1.as_slice(), "It should still return first value");
+    assert!(v == test_data1, "It should still return first value");
 
     assert!(db.del_item(&test_key1, &test_data1).is_ok());
 
     let v = db.get::<&str>(&test_key1).unwrap();
-    assert!(v.as_slice() == test_data2.as_slice(), "It should return second value");
+    assert!(v == test_data2, "It should return second value");
     assert!(db.del(&test_key1).is_ok());
 
     assert!(db.get::<()>(&test_key1).is_err(), "Key shouldn't exist anymore!");
@@ -123,7 +123,7 @@ fn test_multiple_values() {
 fn test_cursors() {
     let mut env = EnvBuilder::new()
         .max_dbs(5)
-        .open(&next_path(), USER_DIR.bits())
+        .open(&next_path(), USER_DIR)
         .unwrap();
 
     let db = env.get_default_db(core::DbAllowDups).unwrap();
@@ -158,7 +158,7 @@ fn test_cursors() {
         let (_, v) = cursor.get::<(), &str>().unwrap();
         // NOTE: this asserting will work once new_value is
         // of the same length as it is inplace change
-        assert!(v.as_slice() == new_value.as_slice());
+        assert!(v == new_value);
     }
 
     assert!(cursor.del_all().is_ok());
@@ -172,7 +172,7 @@ fn test_cursors() {
 fn test_cursor_item_manip() {
     let mut env = EnvBuilder::new()
         .max_dbs(5)
-        .open(&next_path(), USER_DIR.bits())
+        .open(&next_path(), USER_DIR)
         .unwrap();
 
     let db = env.get_default_db(core::DbAllowDups | core::DbAllowIntDups).unwrap();
@@ -208,14 +208,14 @@ fn test_cursor_item_manip() {
 }
 
 fn as_slices(v: &Vec<String>) -> Vec<&str> {
-    v.iter().map(|s| s.as_slice()).collect::<Vec<&str>>()
+    v.iter().map(|s| &s[..]).collect::<Vec<&str>>()
 }
 
 #[test]
 fn test_item_iter() {
     let mut env = EnvBuilder::new()
         .max_dbs(5)
-        .open(&next_path(), USER_DIR.bits())
+        .open(&next_path(), USER_DIR)
         .unwrap();
 
     let db = env.get_default_db(core::DbAllowDups).unwrap();
@@ -234,11 +234,11 @@ fn test_item_iter() {
 
     let iter = db.item_iter(&test_key1).unwrap();
     let values: Vec<String> = iter.map(|cv| cv.get_value::<String>()).collect();
-    assert_eq!(as_slices(&values).as_slice(), vec![test_data1, test_data2].as_slice());
+    assert_eq!(as_slices(&values), vec![test_data1, test_data2]);
 
     let iter = db.item_iter(&test_key2).unwrap();
     let values: Vec<String> = iter.map(|cv| cv.get_value::<String>()).collect();
-    assert_eq!(as_slices(&values).as_slice(), vec![test_data1].as_slice());
+    assert_eq!(as_slices(&values), vec![test_data1]);
 
     let iter = db.item_iter(&test_key3).unwrap();
     let values: Vec<String> = iter.map(|cv| cv.get_value::<String>()).collect();
@@ -249,7 +249,7 @@ fn test_item_iter() {
 fn test_db_creation() {
     let mut env = EnvBuilder::new()
         .max_dbs(5)
-        .open(&next_path(), USER_DIR.bits())
+        .open(&next_path(), USER_DIR)
         .unwrap();
     assert!(env.create_db("test-db", DbFlags::empty()).is_ok());
 }
@@ -258,7 +258,7 @@ fn test_db_creation() {
 fn test_read_only_txn() {
     let env = EnvBuilder::new()
         .max_dbs(5)
-        .open(&next_path(), USER_DIR.bits())
+        .open(&next_path(), USER_DIR)
         .unwrap();
     env.get_reader().unwrap();
 }
@@ -267,7 +267,7 @@ fn test_read_only_txn() {
 fn test_cursor_in_txns() {
     let mut env = EnvBuilder::new()
         .max_dbs(5)
-        .open(&next_path(), USER_DIR.bits())
+        .open(&next_path(), USER_DIR)
         .unwrap();
 
     {
@@ -299,7 +299,7 @@ fn test_cursor_in_txns() {
 fn test_multithread_env() {
     let mut env = EnvBuilder::new()
         .max_dbs(5)
-        .open(&next_path(), USER_DIR.bits())
+        .open(&next_path(), USER_DIR)
         .unwrap();
 
     let mut shared_env = env.clone();
@@ -320,12 +320,12 @@ fn test_multithread_env() {
     let txn = env.get_reader().unwrap();
     let db = txn.bind(&db);
     let value2: String = db.get(&key).unwrap();
-    assert_eq!(value, value2.as_slice());
+    assert_eq!(value, value2);
 }
 
 #[test]
 fn test_keyrange_to() {
-    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR.bits()).unwrap();
+    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
     let db = env.get_default_db(core::DbIntKey).unwrap();
     let keys:   Vec<u64> = vec![1, 2, 3];
     let values: Vec<u64> = vec![5, 6, 7];
@@ -352,14 +352,14 @@ fn test_keyrange_to() {
         let iter = db.keyrange_to(&last_key).unwrap();
 
         let res: Vec<_> = iter.map(|cv| cv.get_value::<u64>()).collect();
-        assert_eq!(res.as_slice(), &values.as_slice()[..last_idx]);
+        assert_eq!(res, &values[..last_idx]);
     }
 }
 
 
 #[test]
 fn test_keyrange_from() {
-    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR.bits()).unwrap();
+    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
     let db = env.get_default_db(core::DbIntKey).unwrap();
     let keys:   Vec<u64> = vec![1, 2, 3];
     let values: Vec<u64> = vec![5, 6, 7];
@@ -385,13 +385,13 @@ fn test_keyrange_from() {
         let iter = db.keyrange_from(&last_key).unwrap();
 
         let res: Vec<_> = iter.map(|cv| cv.get_value::<u64>()).collect();
-        assert_eq!(res.as_slice(), &values.as_slice()[start_idx..]);
+        assert_eq!(res, &values[start_idx..]);
     }
 }
 
 #[test]
 fn test_keyrange() {
-    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR.bits()).unwrap();
+    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
     let db = env.get_default_db(core::DbAllowDups | core::DbIntKey).unwrap();
     let keys:   Vec<u64> = vec![ 1,  2,  3,  4,  5,  6];
     let values: Vec<u64> = vec![10, 11, 12, 13, 14, 15];
@@ -419,7 +419,7 @@ fn test_keyrange() {
         let res: Vec<_> = iter.map(|cv| cv.get_value::<u64>()).collect();
 
          //  +1 as Rust slices do not include end
-        assert_eq!(res.as_slice(), &values.as_slice()[start_idx.. end_idx + 1]);
+        assert_eq!(res, &values[start_idx.. end_idx + 1]);
     }
 }
 

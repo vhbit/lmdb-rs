@@ -1,7 +1,4 @@
-#![feature(core)]
-#![feature(env)]
-#![feature(process)]
-#![feature(path)]
+#![feature(convert)]
 
 use std::env;
 use std::path::{PathBuf};
@@ -35,12 +32,12 @@ fn ios_cflags(target: &str) -> String {
                                           .output()
                                           .unwrap()
                                           .stdout;
-    let sdk_path = String::from_utf8_lossy(sdk_output.as_slice());
+    let sdk_path = String::from_utf8_lossy(&sdk_output);
 
     let target = target.replace("aarch64-", "arm64-");
 
-    let flags = format!(" -target {} -isysroot {} -m{}=7.0", target, sdk_path.as_slice().trim(), sdk_min_ver);
-    cflags.push_str(flags.as_slice());
+    let flags = format!(" -target {} -isysroot {} -m{}=7.0", target, sdk_path.trim(), sdk_min_ver);
+    cflags.push_str(&flags);
 
     // Actually only "arm" arch requires a little patching
     // other branches simply filter out invalid archs
@@ -55,7 +52,7 @@ fn ios_cflags(target: &str) -> String {
     }
 
     if target.starts_with("arm-") {
-        cflags.push_str(format!(" -arch armv7").as_slice());
+        cflags.push_str(&format!(" -arch armv7"));
     }
 
     cflags
@@ -70,11 +67,11 @@ fn cflags() -> String {
 
     if target.contains("-ios") {
         cflags.push_str(" ");
-        cflags.push_str(ios_cflags(target.as_slice()).as_slice());
+        cflags.push_str(&ios_cflags(&target));
     } else {
         if target.contains("i686") || target.contains("i386") {
             cflags.push_str(" -m32");
-        } else if target.as_slice().contains("x86_64") {
+        } else if target.contains("x86_64") {
             cflags.push_str(" -m64");
         }
 
@@ -87,8 +84,8 @@ fn cflags() -> String {
 }
 
 fn main() {
-    let root = PathBuf::new(&env::var("CARGO_MANIFEST_DIR").unwrap());
-    let dst = PathBuf::new(&env::var("OUT_DIR").unwrap());
+    let root = PathBuf::from(&env::var("CARGO_MANIFEST_DIR").unwrap());
+    let dst = PathBuf::from(&env::var("OUT_DIR").unwrap());
 
     let mut mdb_root = root.clone();
 
