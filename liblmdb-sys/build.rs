@@ -110,5 +110,5 @@ fn main() {
         .arg(&mdb_root.join(STATIC_LIB_NAME))
         .arg(&lib_dir.join(STATIC_LIB_NAME)));
 
-    println!("cargo:rustc-flags=-L {} -l lmdb:static", lib_dir.display());
+    println!("cargo:rustc-flags=-L {} -l static=lmdb", lib_dir.display());
 }
