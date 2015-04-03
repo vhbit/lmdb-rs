@@ -1,6 +1,6 @@
 [package]
 name = "lmdb-rs"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["Valerii Hiora <valerii.hiora@gmail.com>"]
 license = "MIT"
 description = "LMDB bindings"
@@ -11,7 +11,7 @@ keywords = ["lmdb", "db", "key-value", "kvs", "kv"]
 
 [dependencies.liblmdb-sys]
 path = "liblmdb-sys"
-version = "0.1.1"
+version = "0.1.2"
 
 [dependencies]
 log = "0.2"
