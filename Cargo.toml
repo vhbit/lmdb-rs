@@ -8,6 +8,11 @@ repository = "https://github.com/vhbit/lmdb-rs"
 documentation = "https://vhbit.github.io/lmdb-rs/lmdb-rs"
 readme = "README.md"
 keywords = ["lmdb", "db", "key-value", "kvs", "kv"]
+exclude = [
+        ".gitignore",
+        ".travis.yml",
+        "up_doc.sh",
+]
 
 [dependencies.liblmdb-sys]
 path = "liblmdb-sys"
