@@ -2,6 +2,7 @@
 #![feature(unsafe_destructor)]
 #![feature(libc)]
 #![feature(core)]
+#![feature(convert)]
 #![feature(path_ext)]
 #![allow(trivial_casts)]
 #![allow(trivial_numeric_casts)]
