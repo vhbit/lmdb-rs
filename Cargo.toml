@@ -19,6 +19,7 @@ path = "liblmdb-sys"
 version = "0.1.2"
 
 [dependencies]
-log = "0.2"
-regex = "0.1.10"
-bitflags = "0.1.1"
+log = "0.3"
+libc = "0.1"
+regex = "0.1"
+bitflags = "0.1"

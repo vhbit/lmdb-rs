@@ -1,5 +1,4 @@
 #![allow(dead_code, non_camel_case_types)]
-#![feature(libc)]
 
 extern crate libc;
 
@@ -56,7 +55,7 @@ pub struct MDB_cursor;
 
 #[repr(C)]
 #[stable]
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 pub struct MDB_stat {
     pub ms_psize: c_uint,
     pub ms_depth: c_uint,
@@ -79,7 +78,7 @@ pub struct MDB_envinfo {
 }
 
 #[repr(C)]
-#[derive(Copy, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum MDB_cursor_op {
     MDB_FIRST,
     MDB_FIRST_DUP,

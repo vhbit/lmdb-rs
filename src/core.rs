@@ -432,7 +432,7 @@ impl<'a> Database<'a> {
 }
 
 #[stable]
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 pub struct EnvBuilder {
     flags: EnvCreateFlags,
     max_readers: Option<usize>,
@@ -783,7 +783,7 @@ impl Clone for Environment {
 }
 
 #[allow(dead_code)]
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 /// A handle to a database
 ///
 /// It can be cached to avoid opening db on every access
@@ -986,7 +986,6 @@ impl<'a> NativeTransaction<'a> {
     */
 }
 
-#[unsafe_destructor]
 impl<'a> Drop for NativeTransaction<'a> {
     fn drop(&mut self) {
         //debug!("Dropping native transaction!");
@@ -1326,7 +1325,6 @@ impl<'txn> Cursor<'txn> {
     }
 }
 
-#[unsafe_destructor]
 impl<'txn> Drop for Cursor<'txn> {
     fn drop(&mut self) {
         unsafe { ffi::mdb_cursor_close(self.handle) };
@@ -1649,7 +1647,7 @@ impl<'iter> CursorIteratorInner for CursorItemIter<'iter> {
 }
 
 #[stable]
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 pub struct MdbValue<'a> {
     value: MDB_val,
     marker: ::std::marker::PhantomData<&'a ()>,

@@ -8,6 +8,5 @@ description = "LMDB native lib"
 repository = "https://github.com/vhbit/lmdb-rs"
 build = "build.rs"
 
-[lib]
-    name = "liblmdb_sys"
-    path = "lib.rs"
+[dependencies]
+libc = "0.1"

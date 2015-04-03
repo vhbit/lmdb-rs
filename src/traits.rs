@@ -11,9 +11,6 @@
 //!
 //! It would be extremely helpful to create `compile-fail` tests to ensure
 //! this, but unfortunately there is no way yet.
-//!
-//! Note that due to https://github.com/rust-lang/rust/issues/17322 it is
-//! impossible to convert `&'a str` and `&'a [u8]` for now
 
 
 use std::{self, mem, slice};
@@ -115,10 +112,7 @@ impl FromMdbValue for () {
 impl<'b> FromMdbValue for &'b str {
     fn from_mdb_value(value: &MdbValue) -> &'b str {
         unsafe {
-            std::mem::transmute(std::raw::Slice {
-                data: value.get_ref(),
-                len: value.get_size(),
-            })
+            std::mem::transmute(slice::from_raw_parts(value.get_ref(), value.get_size()))
         }
     }
 }
@@ -126,10 +120,7 @@ impl<'b> FromMdbValue for &'b str {
 impl<'b> FromMdbValue for &'b [u8] {
     fn from_mdb_value(value: &MdbValue) -> &'b [u8] {
         unsafe {
-            std::mem::transmute(std::raw::Slice {
-                data: value.get_ref(),
-                len: value.get_size(),
-            })
+            std::mem::transmute(slice::from_raw_parts(value.get_ref(), value.get_size()))
         }
     }
 }
