@@ -46,9 +46,8 @@ use std::borrow::ToOwned;
 use std::cell::{UnsafeCell};
 use std::collections::HashMap;
 use std::error::Error;
-use std::ffi::{AsOsStr, CString};
+use std::ffi::{CString};
 use std::path::Path;
-use std::fs::PathExt;
 use std::mem;
 use std::os::unix::ffi::{OsStrExt};
 use std::ptr;
@@ -56,7 +55,8 @@ use std::result::Result;
 use std::sync::{Arc, Mutex};
 
 use ffi::{self, MDB_val};
-pub use MdbError::{NotFound, KeyExists, Other, StateError, Corrupted, Panic, InvalidPath, TxnFull, CursorFull, PageFull, CacheError};
+pub use MdbError::{NotFound, KeyExists, Other, StateError, Corrupted, Panic};
+pub use MdbError::{InvalidPath, TxnFull, CursorFull, PageFull, CacheError};
 use traits::{ToMdbValue, FromMdbValue};
 use utils::{error_msg};
 
@@ -438,10 +438,13 @@ pub struct EnvBuilder {
     max_readers: Option<usize>,
     max_dbs: Option<usize>,
     map_size: Option<u64>,
+    autocreate_dir: bool,
 }
 
 /// Constructs environment with settigs which couldn't be
-/// changed after opening
+/// changed after opening. By default it tries to create
+/// corresponding dir if it doesn't exist, use `autocreate_dir()`
+/// to override that behaviour
 #[stable]
 impl EnvBuilder {
     pub fn new() -> EnvBuilder {
@@ -450,6 +453,7 @@ impl EnvBuilder {
             max_readers: None,
             max_dbs: None,
             map_size: None,
+            autocreate_dir: true,
         }
     }
 
@@ -478,6 +482,13 @@ impl EnvBuilder {
         self
     }
 
+    /// Sets whetever `lmdb-rs` should try to autocreate dir with default
+    /// permissions on opening (default is true)
+    pub fn autocreate_dir(mut self, autocreate_dir: bool)  -> EnvBuilder {
+        self.autocreate_dir = autocreate_dir;
+        self
+    }
+
     /// Opens environment in specified path
     pub fn open(self, path: &Path, perms: u32) -> MdbResult<Environment> {
         let env: *mut ffi::MDB_env = ptr::null_mut();
@@ -500,16 +511,20 @@ impl EnvBuilder {
             try_mdb!(unsafe { ffi::mdb_env_set_maxdbs(env, max_dbs as u32)});
         }
 
-        let _ = try!(EnvBuilder::check_path(path, self.flags, perms));
+        if self.autocreate_dir {
+            let _ = try!(EnvBuilder::check_path(path, self.flags));
+        }
 
         let res = unsafe {
-            let c_path = path.as_os_str().to_cstring().unwrap();
+            // FIXME: revert back once `convert` is stable
+            // let c_path = path.as_os_str().to_cstring().unwrap();
+            let path_str = try!(path.to_str().ok_or(MdbError::InvalidPath));
+            let c_path = try!(CString::new(path_str).map_err(|_| MdbError::InvalidPath));
             ffi::mdb_env_open(mem::transmute(env), c_path.as_ptr(), self.flags.bits,
                               perms as libc::mode_t)
         };
 
         drop(self);
-
         match res {
             ffi::MDB_SUCCESS => {
                 Ok(Environment::from_raw(env))
@@ -522,27 +537,37 @@ impl EnvBuilder {
 
     }
 
-    fn check_path(path: &Path, flags: EnvCreateFlags, perms: u32) -> MdbResult<()> {
-        let as_file = flags.contains(EnvCreateNoSubDir);
+    fn check_path(path: &Path, flags: EnvCreateFlags) -> MdbResult<()> {
+        use std::{fs, io};
 
-        if as_file {
-            // FIXME: check file existence/absence
-            Ok(())
-        } else {
-            // There should be a directory before open
-            match (path.exists(), path.is_dir()) {
-                (false, _) => {
-                    let c_path = path.as_os_str().to_cstring().unwrap();
-                    lift_mdb!(unsafe {
-                        libc::mkdir(c_path.as_ptr(), perms as libc::mode_t)
+        if flags.contains(EnvCreateNoSubDir) {
+            // FIXME: check parent dir existence/absence
+            warn!("checking for path in NoSubDir mode isn't implemented yet");
+            return Ok(());
+        }
+
+        // There should be a directory before open
+
+        match fs::metadata(path) {
+            Ok(meta) => {
+                if meta.is_dir() {
+                    Ok(())
+                } else {
+                    Err(MdbError::InvalidPath)
+                }
+            },
+            Err(e) => {
+                if e.kind() == io::ErrorKind::NotFound {
+                    fs::create_dir_all(path.clone()).map_err(|e| {
+                        error!("failed to auto create dir: {}", e);
+                        MdbError::InvalidPath
                     })
-                },
-                (true, true) => Ok(()),
-                (true, false) => Err(InvalidPath),
+                } else {
+                    Err(MdbError::InvalidPath)
+                }
             }
         }
     }
-
 }
 
 struct EnvHandle(*mut ffi::MDB_env);
@@ -647,7 +672,11 @@ impl Environment {
     /// Creates a backup copy in specified path
     // FIXME: check who is responsible for creating path: callee or caller
     pub fn copy_to_path(&self, path: &Path) -> MdbResult<()> {
-        let c_path = path.as_os_str().to_cstring().unwrap();
+        // FIXME: revert back once `convert` is stable
+        // let c_path = path.as_os_str().to_cstring().unwrap();
+        let path_str = try!(path.to_str().ok_or(MdbError::InvalidPath));
+        let c_path = try!(CString::new(path_str).map_err(|_| MdbError::InvalidPath));
+
         unsafe {
             lift_mdb!(ffi::mdb_env_copy(self.env.0, c_path.as_ptr()))
         }

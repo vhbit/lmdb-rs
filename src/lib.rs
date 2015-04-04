@@ -1,7 +1,5 @@
-#![feature(convert, path_ext)]
 #![allow(trivial_casts)]
 #![allow(trivial_numeric_casts)]
-#![cfg_attr(test, feature(convert))]
 
 extern crate libc;
 

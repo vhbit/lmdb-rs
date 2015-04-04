@@ -1,5 +1,5 @@
 use std::env;
-use std::fs::{self, PathExt};
+use std::fs::{self};
 use std::path::{PathBuf};
 use std::sync::atomic::{AtomicUsize, ATOMIC_USIZE_INIT, Ordering};
 use std::sync::{Once, ONCE_INIT};
@@ -17,9 +17,11 @@ fn next_path() -> PathBuf {
     let root_dir = out_dir.join(TEST_ROOT_DIR);
 
     INIT_DIR_ONCE.call_once(|| {
-        if root_dir.exists() {
-            let _ = fs::remove_dir_all(&root_dir);
-        };
+        if let Ok(root_meta) = fs::metadata(root_dir.clone()) {
+            if root_meta.is_dir() {
+                let _ = fs::remove_dir_all(&root_dir);
+            }
+        }
         assert!(fs::create_dir_all(&root_dir).is_ok());
     });
 
