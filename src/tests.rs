@@ -308,7 +308,7 @@ fn test_multithread_env() {
     let key = "key";
     let value = "value";
 
-    thread::spawn(move || {
+    let _ = thread::spawn(move || {
         let db = shared_env.create_db("test1", DbFlags::empty()).unwrap();
         let txn = shared_env.new_transaction().unwrap();
         {
@@ -316,7 +316,7 @@ fn test_multithread_env() {
             assert!(db.set(&key, &value).is_ok());
         }
         assert!(txn.commit().is_ok());
-    }).join().unwrap();
+    }).join();
 
     let db = env.create_db("test1", DbFlags::empty()).unwrap();
     let txn = env.get_reader().unwrap();
