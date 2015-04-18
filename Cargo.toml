@@ -1,6 +1,6 @@
 [package]
 name = "lmdb-rs"
-version = "0.3.1"
+version = "0.3.2"
 authors = ["Valerii Hiora <valerii.hiora@gmail.com>"]
 license = "MIT"
 description = "LMDB bindings"
