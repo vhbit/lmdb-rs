@@ -112,7 +112,7 @@ macro_rules! assert_state_not {
 
 /// MdbError wraps information about LMDB error
 
-#[unstable]
+
 #[derive(Debug)]
 pub enum MdbError {
     NotFound,
@@ -128,7 +128,7 @@ pub enum MdbError {
     Other(c_int, String)
 }
 
-#[unstable]
+
 impl MdbError {
     pub fn new_with_code(code: c_int) -> MdbError {
         match code {
@@ -175,12 +175,12 @@ impl Error for MdbError {
     }
 }
 
-#[stable]
+
 pub type MdbResult<T> = Result<T, MdbError>;
 
 bitflags! {
     #[doc = "A set of environment flags which could be changed after opening"]
-    #[unstable]
+
     flags EnvFlags: c_uint {
         #[doc="Don't flush system buffers to disk when committing a transaction. This optimization means a system crash can corrupt the database or lose the last transactions if buffers are not yet flushed to disk. The risk is governed by how often the system flushes dirty buffers to disk and how often mdb_env_sync() is called. However, if the filesystem preserves write order and the MDB_WRITEMAP flag is not used, transactions exhibit ACI (atomicity, consistency, isolation) properties and only lose D (durability). I.e. database integrity is maintained, but a system crash may undo the final transactions. Note that (MDB_NOSYNC | MDB_WRITEMAP) leaves the system with no hint for when to write transactions to disk, unless mdb_env_sync() is called. (MDB_MAPASYNC | MDB_WRITEMAP) may be preferable. This flag may be changed at any time using mdb_env_set_flags()."]
         const EnvNoSync      = ffi::MDB_NOSYNC,
@@ -195,7 +195,7 @@ bitflags! {
 
 bitflags! {
     #[doc = "A set of all environment flags"]
-    #[unstable]
+
     flags EnvCreateFlags: c_uint {
         #[doc="Use a fixed address for the mmap region. This flag must be"]
         #[doc=" specified when creating the environment, and is stored persistently"]
@@ -301,7 +301,7 @@ bitflags! {
 
 bitflags! {
     #[doc = "A set of database flags"]
-    #[stable]
+
     flags DbFlags: c_uint {
         #[doc="Keys are strings to be compared in reverse order, from the"]
         #[doc=" end of the strings to the beginning. By default, Keys are"]
@@ -338,7 +338,7 @@ bitflags! {
 }
 
 /// Database
-#[unstable]
+
 pub struct Database<'a> {
     handle: ffi::MDB_dbi,
     txn: &'a NativeTransaction<'a>,
@@ -346,7 +346,7 @@ pub struct Database<'a> {
 
 // FIXME: provide different interfaces for read-only/read-write databases
 // FIXME: provide different interfaces for simple KV and storage with duplicates
-#[unstable]
+
 impl<'a> Database<'a> {
     fn new_with_handle(handle: ffi::MDB_dbi, txn: &'a NativeTransaction<'a>) -> Database<'a> {
         Database { handle: handle, txn: txn }
@@ -431,7 +431,7 @@ impl<'a> Database<'a> {
     }
 }
 
-#[stable]
+
 #[derive(Copy, Clone)]
 pub struct EnvBuilder {
     flags: EnvCreateFlags,
@@ -445,7 +445,7 @@ pub struct EnvBuilder {
 /// changed after opening. By default it tries to create
 /// corresponding dir if it doesn't exist, use `autocreate_dir()`
 /// to override that behaviour
-#[stable]
+
 impl EnvBuilder {
     pub fn new() -> EnvBuilder {
         EnvBuilder {
@@ -583,13 +583,13 @@ impl Drop for EnvHandle {
 }
 
 /// Represents LMDB Environment. Should be opened using `EnvBuilder`
-#[unstable]
+
 pub struct Environment {
     env: Arc<EnvHandle>,
     db_cache: Arc<Mutex<UnsafeCell<HashMap<String, ffi::MDB_dbi>>>>,
 }
 
-#[unstable]
+
 impl Environment {
     pub fn new() -> EnvBuilder {
         EnvBuilder::new()
@@ -1022,12 +1022,12 @@ impl<'a> Drop for NativeTransaction<'a> {
     }
 }
 
-#[unstable]
+
 pub struct Transaction<'a> {
     inner: NativeTransaction<'a>,
 }
 
-#[unstable]
+
 impl<'a> Transaction<'a> {
     fn new_with_native(txn: NativeTransaction<'a>) -> Transaction<'a> {
         Transaction {
@@ -1064,12 +1064,12 @@ impl<'a> Transaction<'a> {
 }
 
 
-#[unstable]
+
 pub struct ReadonlyTransaction<'a> {
     inner: NativeTransaction<'a>,
 }
 
-#[unstable]
+
 impl<'a> ReadonlyTransaction<'a> {
     fn new_with_native(txn: NativeTransaction<'a>) -> ReadonlyTransaction<'a> {
         ReadonlyTransaction {
@@ -1106,7 +1106,7 @@ impl<'a> ReadonlyTransaction<'a> {
     }
 }
 
-#[unstable]
+
 pub struct Cursor<'txn> {
     handle: *mut ffi::MDB_cursor,
     data_val: ffi::MDB_val,
@@ -1116,7 +1116,7 @@ pub struct Cursor<'txn> {
     valid_key: bool,
 }
 
-#[unstable]
+
 impl<'txn> Cursor<'txn> {
     fn new(txn: &'txn NativeTransaction, db: ffi::MDB_dbi) -> MdbResult<Cursor<'txn>> {
         debug!("Opening cursor in {}", db);
@@ -1675,7 +1675,7 @@ impl<'iter> CursorIteratorInner for CursorItemIter<'iter> {
     }
 }
 
-#[stable]
+
 #[derive(Copy, Clone)]
 pub struct MdbValue<'a> {
     value: MDB_val,
@@ -1683,7 +1683,6 @@ pub struct MdbValue<'a> {
 }
 
 impl<'a> MdbValue<'a> {
-    #[unstable]
     pub unsafe fn new(data: *const c_void, len: usize) -> MdbValue<'a> {
         MdbValue {
             value: MDB_val {
