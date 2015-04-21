@@ -5,7 +5,7 @@ lmdb-rs
 
 Rust bindings for [LMDB](http://symas.com/mdb/)
 
-[Documentation (master branch)](http://vhbit.github.io/lmdb-rs/lmdb-rs/)
+[Documentation (master branch)](http://vhbit.github.io/lmdb-rs/lmdb_rs/)
 
 Building
 ========
