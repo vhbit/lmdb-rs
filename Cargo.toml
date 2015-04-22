@@ -1,11 +1,11 @@
 [package]
 name = "lmdb-rs"
-version = "0.3.2"
+version = "0.3.3"
 authors = ["Valerii Hiora <valerii.hiora@gmail.com>"]
 license = "MIT"
 description = "LMDB bindings"
 repository = "https://github.com/vhbit/lmdb-rs"
-documentation = "https://vhbit.github.io/lmdb-rs/lmdb-rs"
+documentation = "https://vhbit.github.io/lmdb-rs/lmdb_rs"
 readme = "README.md"
 keywords = ["lmdb", "db", "key-value", "kvs", "kv"]
 exclude = [
