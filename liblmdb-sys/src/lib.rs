@@ -10,9 +10,9 @@ use libc::{c_int, c_uint, c_void, c_char, size_t};
 mod os {
     use libc;
 
-    #[stable]
+    
     pub type mdb_mode_t = libc::mode_t;
-    #[stable]
+    
     pub type mdb_filehandle_t = libc::c_int;
 }
 
@@ -20,9 +20,9 @@ mod os {
 mod os {
     use libc::{c_int, c_void};
 
-    #[stable]
+    
     pub type mdb_mode_t = c_int;
-    #[stable]
+    
     pub type mdb_filehandle_t = *const c_void;
 }
 
@@ -35,7 +35,7 @@ pub type MDB_cmp_func = fn(*const MDB_val, *const MDB_val) -> c_int;
 #[derive(Copy, Clone)]
 #[allow(raw_pointer_derive)]
 #[repr(C)]
-#[stable]
+
 pub struct MDB_val {
     pub mv_size: size_t,
     pub mv_data: *const c_void,
@@ -54,7 +54,7 @@ pub struct MDB_txn;
 pub struct MDB_cursor;
 
 #[repr(C)]
-#[stable]
+
 #[derive(Copy, Clone)]
 pub struct MDB_stat {
     pub ms_psize: c_uint,
@@ -66,7 +66,7 @@ pub struct MDB_stat {
 }
 
 #[repr(C)]
-#[stable]
+
 #[allow(missing_copy_implementations)]
 pub struct MDB_envinfo {
     pub me_mapaddr: *const c_void,
