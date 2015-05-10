@@ -1346,7 +1346,7 @@ impl<'txn> Cursor<'txn> {
         lift_mdb!(unsafe {ffi::mdb_cursor_count(self.handle, &mut tmp)}, tmp)
     }
 
-    pub fn get_item<'k, K: ToMdbValue>(&'txn self, k: &'k K) -> CursorItemAccessor<'txn, 'k, K> {
+    pub fn get_item<'k, K: ToMdbValue>(&'txn mut self, k: &'k K) -> CursorItemAccessor<'txn, 'k, K> {
         CursorItemAccessor {
             cursor: self,
             key: k
@@ -1363,32 +1363,28 @@ impl<'txn> Drop for Cursor<'txn> {
 
 
 pub struct CursorItemAccessor<'c, 'k, K: 'k> {
-    cursor: &'c Cursor<'c>,
+    cursor: &'c mut Cursor<'c>,
     key: &'k K,
 }
 
 impl<'k, 'c: 'k, K: ToMdbValue> CursorItemAccessor<'c, 'k, K> {
     pub fn get<'a, V: FromMdbValue + 'a>(&'a mut self) -> MdbResult<V> {
-        let c: &'c mut Cursor<'c> = unsafe { mem::transmute(self.cursor) };
-        try!(c.to_key(self.key));
-        c.get_value()
+        try!(self.cursor.to_key(self.key));
+        self.cursor.get_value()
     }
 
     pub fn add<V: ToMdbValue>(&mut self, v: &V) -> MdbResult<()> {
-        let c: &mut Cursor = unsafe { mem::transmute(self.cursor)};
-        c.set(self.key, v, 0)
+        self.cursor.set(self.key, v, 0)
     }
 
     pub fn del<V: ToMdbValue>(&mut self, v: &V) -> MdbResult<()> {
-        let c: &mut Cursor = unsafe {mem::transmute(self.cursor)};
-        try!(c.to_item(self.key, v));
-        c.del_item()
+        try!(self.cursor.to_item(self.key, v));
+        self.cursor.del_item()
     }
 
     pub fn del_all(&mut self) -> MdbResult<()> {
-        let c: &mut Cursor = unsafe {mem::transmute(self.cursor)};
-        try!(c.to_key(self.key));
-        c.del_all()
+        try!(self.cursor.to_key(self.key));
+        self.cursor.del_all()
     }
 }
 
