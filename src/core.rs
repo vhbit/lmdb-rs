@@ -1473,7 +1473,7 @@ impl<'txn> Cursor<'txn> {
         lift_mdb!(unsafe {ffi::mdb_cursor_count(self.handle, &mut tmp)}, tmp)
     }
 
-    pub fn get_item<'k, K: ToMdbValue>(&'txn mut self, k: &'k K) -> CursorItemAccessor<'txn, 'k, K> {
+    pub fn get_item<'k, K: ToMdbValue>(self, k: &'k K) -> CursorItemAccessor<'txn, 'k, K> {
         CursorItemAccessor {
             cursor: self,
             key: k
@@ -1488,7 +1488,7 @@ impl<'txn> Drop for Cursor<'txn> {
 }
 
 pub struct CursorItemAccessor<'c, 'k, K: 'k> {
-    cursor: &'c mut Cursor<'c>,
+    cursor: Cursor<'c>,
     key: &'k K,
 }
 
@@ -1510,6 +1510,11 @@ impl<'k, 'c: 'k, K: ToMdbValue> CursorItemAccessor<'c, 'k, K> {
     pub fn del_all(&mut self) -> MdbResult<()> {
         try!(self.cursor.to_key(self.key));
         self.cursor.del_all()
+    }
+
+    pub fn into_inner(self) -> Cursor<'c> {
+        let tmp = self;
+        tmp.cursor
     }
 }
 
