@@ -60,7 +60,7 @@ fn test_environment() {
 
 #[test]
 fn test_single_values() {
-    let mut env = EnvBuilder::new()
+    let env = EnvBuilder::new()
         .max_dbs(5)
         .open(&next_path(), USER_DIR)
         .unwrap();
@@ -89,7 +89,7 @@ fn test_single_values() {
 
 #[test]
 fn test_multiple_values() {
-    let mut env = EnvBuilder::new()
+    let env = EnvBuilder::new()
         .max_dbs(5)
         .open(&next_path(), USER_DIR)
         .unwrap();
@@ -123,7 +123,7 @@ fn test_multiple_values() {
 
 #[test]
 fn test_stat() {
-    let mut env = EnvBuilder::new()
+    let env = EnvBuilder::new()
         .max_dbs(5)
         .open(&next_path(), USER_DIR)
         .unwrap();
@@ -163,7 +163,7 @@ fn test_stat() {
 
 #[test]
 fn test_cursors() {
-    let mut env = EnvBuilder::new()
+    let env = EnvBuilder::new()
         .max_dbs(5)
         .open(&next_path(), USER_DIR)
         .unwrap();
@@ -212,7 +212,7 @@ fn test_cursors() {
 
 #[test]
 fn test_cursor_item_manip() {
-    let mut env = EnvBuilder::new()
+    let env = EnvBuilder::new()
         .max_dbs(5)
         .open(&next_path(), USER_DIR)
         .unwrap();
@@ -255,7 +255,7 @@ fn as_slices(v: &Vec<String>) -> Vec<&str> {
 
 #[test]
 fn test_item_iter() {
-    let mut env = EnvBuilder::new()
+    let env = EnvBuilder::new()
         .max_dbs(5)
         .open(&next_path(), USER_DIR)
         .unwrap();
@@ -289,7 +289,7 @@ fn test_item_iter() {
 
 #[test]
 fn test_db_creation() {
-    let mut env = EnvBuilder::new()
+    let env = EnvBuilder::new()
         .max_dbs(5)
         .open(&next_path(), USER_DIR)
         .unwrap();
@@ -307,7 +307,7 @@ fn test_read_only_txn() {
 
 #[test]
 fn test_cursor_in_txns() {
-    let mut env = EnvBuilder::new()
+    let env = EnvBuilder::new()
         .max_dbs(5)
         .open(&next_path(), USER_DIR)
         .unwrap();
@@ -339,12 +339,12 @@ fn test_cursor_in_txns() {
 
 #[test]
 fn test_multithread_env() {
-    let mut env = EnvBuilder::new()
+    let env = EnvBuilder::new()
         .max_dbs(5)
         .open(&next_path(), USER_DIR)
         .unwrap();
 
-    let mut shared_env = env.clone();
+    let shared_env = env.clone();
     let key = "key";
     let value = "value";
 
@@ -367,7 +367,7 @@ fn test_multithread_env() {
 
 #[test]
 fn test_keyrange_to() {
-    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
+    let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
     let db = env.get_default_db(core::DbIntKey).unwrap();
     let keys:   Vec<u64> = vec![1, 2, 3];
     let values: Vec<u64> = vec![5, 6, 7];
@@ -402,7 +402,7 @@ fn test_keyrange_to() {
 /// the smallest key in the db yields an empty range.
 #[test]
 fn test_keyrange_to_init_cursor() {
-    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
+    let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
     let db = env.get_default_db(core::DbIntKey).unwrap();
     let recs: Vec<(u64, u64)> = vec![(10, 50), (11, 60), (12, 70)];
 
@@ -430,7 +430,7 @@ fn test_keyrange_to_init_cursor() {
 
 #[test]
 fn test_keyrange_from() {
-    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
+    let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
     let db = env.get_default_db(core::DbIntKey).unwrap();
     let keys:   Vec<u64> = vec![1, 2, 3];
     let values: Vec<u64> = vec![5, 6, 7];
@@ -464,7 +464,7 @@ fn test_keyrange_from() {
 /// the biggest key in the db yields an empty range.
 #[test]
 fn test_keyrange_from_init_cursor() {
-    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
+    let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
     let db = env.get_default_db(core::DbIntKey).unwrap();
     let recs: Vec<(u64, u64)> = vec![(10, 50), (11, 60), (12, 70)];
 
@@ -492,7 +492,7 @@ fn test_keyrange_from_init_cursor() {
 
 #[test]
 fn test_keyrange() {
-    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
+    let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
     let db = env.get_default_db(core::DbAllowDups | core::DbIntKey).unwrap();
     let keys:   Vec<u64> = vec![ 1,  2,  3,  4,  5,  6];
     let values: Vec<u64> = vec![10, 11, 12, 13, 14, 15];
@@ -528,7 +528,7 @@ fn test_keyrange() {
 /// yields an empty range.
 #[test]
 fn test_keyrange_init_cursor() {
-    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
+    let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
     let db = env.get_default_db(core::DbAllowDups | core::DbIntKey).unwrap();
     let keys:   Vec<u64> = vec![ 1,  2,  3,  4,  5,  6];
     let values: Vec<u64> = vec![10, 11, 12, 13, 14, 15];
@@ -573,7 +573,7 @@ fn test_keyrange_init_cursor() {
 
 #[test]
 fn test_keyrange_from_to() {
-    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
+    let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
     let db = env.get_default_db(core::DbAllowDups | core::DbIntKey).unwrap();
     let recs: Vec<(u64, u64)> = vec![(10, 11), (20, 21), (30, 31), (40, 41), (50, 51)];
 

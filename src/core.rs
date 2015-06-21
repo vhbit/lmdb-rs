@@ -781,13 +781,13 @@ impl Environment {
     }
 
     /// Opens or creates a DB
-    pub fn create_db(&mut self, db_name: &str, flags: DbFlags) -> MdbResult<DbHandle> {
+    pub fn create_db(&self, db_name: &str, flags: DbFlags) -> MdbResult<DbHandle> {
         let db = try!(self._open_db(db_name, flags, true));
         Ok(DbHandle {handle: db, flags: flags})
     }
 
     /// Opens default DB with specified flags
-    pub fn get_default_db(&mut self, flags: DbFlags) -> MdbResult<DbHandle> {
+    pub fn get_default_db(&self, flags: DbFlags) -> MdbResult<DbHandle> {
         self.get_db("", flags)
     }
 

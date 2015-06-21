@@ -5,7 +5,7 @@ use lmdb::{EnvBuilder, DbFlags};
 
 fn main() {
     let path = Path::new("test-lmdb");
-    let mut env = EnvBuilder::new().open(&path, 0o777).unwrap();
+    let env = EnvBuilder::new().open(&path, 0o777).unwrap();
 
     let db_handle = env.get_default_db(DbFlags::empty()).unwrap();
     let txn = env.new_transaction().unwrap();
