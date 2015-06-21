@@ -53,12 +53,13 @@ use std::mem;
 use std::os::unix::ffi::{OsStrExt};
 use std::ptr;
 use std::result::Result;
+use std::slice;
 use std::sync::{Arc, Mutex};
 
 use ffi::{self, MDB_val};
 pub use MdbError::{NotFound, KeyExists, Other, StateError, Corrupted, Panic};
 pub use MdbError::{InvalidPath, TxnFull, CursorFull, PageFull, CacheError};
-use traits::{AsByteSlice, FromMdbValue};
+use traits::{AsByteSlice, FromBytes};
 use utils::{error_msg};
 
 
@@ -143,20 +144,6 @@ impl<'a> AsByteSlice for &'a str {
     #[inline(always)]
     fn as_byte_slice<'b>(&'b self) -> &'b [u8] {
         self.as_bytes()
-    }
-}
-
-impl AsByteSlice for u64 {
-    #[inline(always)]
-    fn as_byte_slice<'a>(&'a self) -> &'a [u8] {
-        unsafe {std::slice::from_raw_parts(mem::transmute(self), 8)}
-    }
-}
-
-impl AsByteSlice for bool {
-    #[inline(always)]
-    fn as_byte_slice<'a>(&'a self) -> &'a [u8] {
-        unsafe {std::slice::from_raw_parts(mem::transmute(self), 1)}
     }
 }
 
@@ -469,7 +456,7 @@ impl<'a> Database<'a> {
     }
 
     /// Retrieves a value by key. In case of DbAllowDups it will be the first value
-    pub fn get<V: FromMdbValue + 'a>(&'a self, key: &AsByteSlice) -> MdbResult<V> {
+    pub fn get<V: FromBytes + 'a>(&'a self, key: &AsByteSlice) -> MdbResult<V> {
         self.txn.get(self.handle, key)
     }
 
@@ -1038,17 +1025,17 @@ impl<'a> RawTransaction<'a> {
         }
     }
 
-    fn get_value<V: FromMdbValue + 'a>(&'a self, db: ffi::MDB_dbi, key: &AsByteSlice) -> MdbResult<V> {
+    fn get_value<V: FromBytes + 'a>(&'a self, db: ffi::MDB_dbi, key: &AsByteSlice) -> MdbResult<V> {
         let tmp_slice = key.as_byte_slice();
         let mut key_val = tmp_slice.to_mdb_value();
         unsafe {
             let mut data_val: MdbValue = std::mem::zeroed();
             try_mdb!(ffi::mdb_get(self.handle, db, &mut key_val.value, &mut data_val.value));
-            Ok(FromMdbValue::from_mdb_value(&data_val))
+            Ok(FromBytes::from_bytes(&data_val.as_ref()))
         }
     }
 
-    fn get<V: FromMdbValue + 'a>(&'a self, db: ffi::MDB_dbi, key: &AsByteSlice) -> MdbResult<V> {
+    fn get<V: FromBytes + 'a>(&'a self, db: ffi::MDB_dbi, key: &AsByteSlice) -> MdbResult<V> {
         assert_state_eq!(txn, self.state, TransactionState::Normal);
         self.get_value(db, key)
     }
@@ -1366,31 +1353,25 @@ impl<'txn> Cursor<'txn> {
     }
 
     /// Retrieves current key/value as tuple
-    pub fn get<'a, T: FromMdbValue + 'a, U: FromMdbValue + 'a>(&'a mut self) -> MdbResult<(T, U)> {
+    pub fn get<'a, T: FromBytes + 'a, U: FromBytes + 'a>(&'a mut self) -> MdbResult<(T, U)> {
         let (k, v) = try!(self.get_plain());
 
-        unsafe {
-            Ok((FromMdbValue::from_mdb_value(mem::transmute(&k)),
-                FromMdbValue::from_mdb_value(mem::transmute(&v))))
-        }
+        Ok((FromBytes::from_bytes(&k.as_ref()),
+            FromBytes::from_bytes(&v.as_ref())))
     }
 
     /// Retrieves current value
-    pub fn get_value<'a, V: FromMdbValue + 'a>(&'a mut self) -> MdbResult<V> {
+    pub fn get_value<'a, V: FromBytes + 'a>(&'a mut self) -> MdbResult<V> {
         let (_, v) = try!(self.get_plain());
 
-        unsafe {
-            Ok(FromMdbValue::from_mdb_value(mem::transmute(&v)))
-        }
+        Ok(FromBytes::from_bytes(&v.as_ref()))
     }
 
     /// Retrieves current key
-    pub fn get_key<'a, K: FromMdbValue + 'a>(&'a mut self) -> MdbResult<K> {
+    pub fn get_key<'a, K: FromBytes + 'a>(&'a mut self) -> MdbResult<K> {
         let (k, _) = try!(self.get_plain());
 
-        unsafe {
-            Ok(FromMdbValue::from_mdb_value(mem::transmute(&k)))
-        }
+        Ok(FromBytes::from_bytes(&k.as_ref()))
     }
 
     /// Compares the cursor's current key with the specified other one.
@@ -1524,7 +1505,7 @@ pub struct CursorItemAccessor<'c, 'k, K: 'k> {
 }
 
 impl<'k, 'c: 'k, K: AsByteSlice> CursorItemAccessor<'c, 'k, K> {
-    pub fn get<'a, V: FromMdbValue + 'a>(&'a mut self) -> MdbResult<V> {
+    pub fn get<'a, V: FromBytes + 'a>(&'a mut self) -> MdbResult<V> {
         try!(self.cursor.to_key(self.key));
         self.cursor.get_value()
     }
@@ -1566,17 +1547,17 @@ pub struct CursorValue<'cursor> {
 /// avoiding any data conversions and memory copy. Lifetime
 /// is limited to iterator lifetime
 impl<'cursor> CursorValue<'cursor> {
-    pub fn get_key<T: FromMdbValue + 'cursor>(&'cursor self) -> T {
-        FromMdbValue::from_mdb_value(&self.key)
+    pub fn get_key<T: FromBytes + 'cursor>(&'cursor self) -> T {
+        FromBytes::from_bytes(&self.key.as_ref())
     }
 
-    pub fn get_value<T: FromMdbValue + 'cursor>(&'cursor self) -> T {
-        FromMdbValue::from_mdb_value(&self.value)
+    pub fn get_value<T: FromBytes + 'cursor>(&'cursor self) -> T {
+        FromBytes::from_bytes(&self.value.as_ref())
     }
 
-    pub fn get<T: FromMdbValue + 'cursor, U: FromMdbValue + 'cursor>(&'cursor self) -> (T, U) {
-        (FromMdbValue::from_mdb_value(&self.key),
-         FromMdbValue::from_mdb_value(&self.value))
+    pub fn get<T: FromBytes + 'cursor, U: FromBytes + 'cursor>(&'cursor self) -> (T, U) {
+        (FromBytes::from_bytes(&self.key.as_ref()),
+         FromBytes::from_bytes(&self.value.as_ref()))
     }
 }
 
@@ -1799,11 +1780,20 @@ impl<'a> MdbValue<'a> {
         }
     }
 
+    #[inline(always)]
     pub unsafe fn get_ref(&'a self) -> *const c_void {
         self.value.mv_data
     }
 
+    #[inline(always)]
     pub fn get_size(&self) -> usize {
         self.value.mv_size as usize
+    }
+}
+
+impl<'t> AsRef<[u8]> for MdbValue<'t> {
+    #[inline(always)]
+    fn as_ref(&self) -> &[u8] {
+        unsafe {slice::from_raw_parts(mem::transmute(self.get_ref()), self.get_size())}
     }
 }

@@ -15,8 +15,6 @@
 
 use std::{self, mem, slice};
 
-use core::MdbValue;
-
 pub trait AsByteSlice {
     fn as_byte_slice<'a>(&'a self) -> &'a [u8];
 }
@@ -24,57 +22,56 @@ pub trait AsByteSlice {
 /// `FromMdbValue` is supposed to reconstruct a value from
 /// memory slice. It allows to use zero copy where it is
 /// required.
-pub trait FromMdbValue {
-    fn from_mdb_value(value: &MdbValue) -> Self;
+pub trait FromBytes {
+    fn from_bytes(value: &[u8]) -> Self;
 }
 
-impl FromMdbValue for String {
-    fn from_mdb_value(value: &MdbValue) -> String {
+impl FromBytes for String {
+    fn from_bytes(value: &[u8]) -> String {
+        let data: Vec<u8> = value.to_owned();
+        String::from_utf8(data).unwrap()
+    }
+}
+
+impl FromBytes for Vec<u8> {
+    fn from_bytes(value: &[u8]) -> Vec<u8> {
+        value.to_owned()
+    }
+}
+
+impl FromBytes for () {
+    fn from_bytes(_: &[u8]) {
+    }
+}
+
+impl<'b> FromBytes for &'b str {
+    fn from_bytes(value: &[u8]) -> &'b str {
         unsafe {
-            let ptr = mem::transmute(value.get_ref());
-            let data: Vec<u8> = slice::from_raw_parts(ptr, value.get_size()).to_vec();
-            String::from_utf8(data).unwrap()
+            mem::transmute(slice::from_raw_parts(value.as_ptr(), value.len()))
         }
     }
 }
 
-impl FromMdbValue for Vec<u8> {
-    fn from_mdb_value(value: &MdbValue) -> Vec<u8> {
+impl<'b> FromBytes for &'b [u8] {
+    fn from_bytes(value: &[u8]) -> &'b [u8] {
         unsafe {
-            Vec::from_raw_parts(mem::transmute(value.get_ref()),
-                                value.get_size(),
-                                value.get_size())
-        }
-    }
-}
-
-impl FromMdbValue for () {
-    fn from_mdb_value(_: &MdbValue) {
-    }
-}
-
-impl<'b> FromMdbValue for &'b str {
-    fn from_mdb_value(value: &MdbValue) -> &'b str {
-        unsafe {
-            std::mem::transmute(slice::from_raw_parts(value.get_ref(), value.get_size()))
-        }
-    }
-}
-
-impl<'b> FromMdbValue for &'b [u8] {
-    fn from_mdb_value(value: &MdbValue) -> &'b [u8] {
-        unsafe {
-            std::mem::transmute(slice::from_raw_parts(value.get_ref(), value.get_size()))
+            slice::from_raw_parts(value.as_ptr(), value.len())
         }
     }
 }
 
 macro_rules! mdb_for_primitive {
     ($t:ty) => (
-        impl FromMdbValue for $t {
-            fn from_mdb_value(value: &MdbValue) -> $t {
+        impl AsByteSlice for $t {
+            fn as_byte_slice<'a>(&'a self) -> &'a [u8] {
+                unsafe {std::slice::from_raw_parts(mem::transmute(self), mem::size_of::<$t>())}
+            }
+        }
+
+        impl FromBytes for $t {
+            fn from_bytes(value: &[u8]) -> $t {
                 unsafe {
-                    let t: *mut $t = mem::transmute(value.get_ref());
+                    let t: *mut $t = mem::transmute(value.as_ptr());
                     *t
                 }
             }
@@ -83,14 +80,35 @@ macro_rules! mdb_for_primitive {
         )
 }
 
+macro_rules! mdb_for_int {
+    ($t:ty, $e:expr) => (
+        impl AsByteSlice for $t {
+            fn as_byte_slice<'a>(&'a self) -> &'a [u8] {
+                unsafe {std::slice::from_raw_parts(mem::transmute(self), mem::size_of::<$t>())}
+            }
+        }
+
+        impl FromBytes for $t {
+            fn from_bytes(value: &[u8]) -> $t {
+                unsafe {
+                    let t: *mut $t = mem::transmute(value.as_ptr());
+                    *t
+                }
+            }
+        }
+        )
+}
+
+
 mdb_for_primitive!(u8);
 mdb_for_primitive!(i8);
-mdb_for_primitive!(u16);
-mdb_for_primitive!(i16);
-mdb_for_primitive!(u32);
-mdb_for_primitive!(i32);
-mdb_for_primitive!(u64);
-mdb_for_primitive!(i64);
 mdb_for_primitive!(f32);
 mdb_for_primitive!(f64);
 mdb_for_primitive!(bool);
+
+mdb_for_int!(u16, u16::from_le);
+mdb_for_int!(i16, i16::from_le);
+mdb_for_int!(u32, u32::from_le);
+mdb_for_int!(i32, i32::from_le);
+mdb_for_int!(u64, u64::from_le);
+mdb_for_int!(i64, i64::from_le);
