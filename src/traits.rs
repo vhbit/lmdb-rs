@@ -16,73 +16,17 @@
 use std::{self, mem, slice};
 
 use core::MdbValue;
-use ffi::MDB_val;
 
-/// `ToMdbValue` is supposed to convert a value to a memory
-/// slice which `lmdb` uses to prevent multiple copying data
-/// multiple times. May be unsafe.
-
-pub trait ToMdbValue {
-    fn to_mdb_value<'a>(&'a self) -> MdbValue<'a>;
+pub trait AsByteSlice {
+    fn as_byte_slice<'a>(&'a self) -> &'a [u8];
 }
 
 /// `FromMdbValue` is supposed to reconstruct a value from
 /// memory slice. It allows to use zero copy where it is
 /// required.
-
 pub trait FromMdbValue {
     fn from_mdb_value(value: &MdbValue) -> Self;
 }
-
-impl ToMdbValue for Vec<u8> {
-    fn to_mdb_value<'a>(&'a self) -> MdbValue<'a> {
-        unsafe {
-            MdbValue::new(std::mem::transmute(self.as_ptr()), self.len())
-        }
-    }
-}
-
-impl ToMdbValue for String {
-    fn to_mdb_value<'a>(&'a self) -> MdbValue<'a> {
-        unsafe {
-            let t: &'a str = self;
-            MdbValue::new(std::mem::transmute(t.as_ptr()), t.len())
-        }
-    }
-}
-
-impl<'a> ToMdbValue for &'a str {
-    fn to_mdb_value<'b, 's>(&'s self) -> MdbValue<'b> {
-        unsafe {
-            MdbValue::new(mem::transmute(self.as_ptr()),
-                          self.len())
-        }
-    }
-}
-
-impl<'a> ToMdbValue for &'a [u8] {
-    fn to_mdb_value<'b>(&'b self) -> MdbValue<'b> {
-        unsafe {
-            MdbValue::new(std::mem::transmute(self.as_ptr()),
-                          self.len())
-        }
-    }
-}
-
-impl ToMdbValue for MDB_val {
-    fn to_mdb_value<'a>(&'a self) -> MdbValue<'a> {
-        unsafe {
-            MdbValue::new((*self).mv_data, (*self).mv_size as usize)
-        }
-    }
-}
-
-impl<'a> ToMdbValue for MdbValue<'a> {
-    fn to_mdb_value<'b>(&'b self) -> MdbValue<'b> {
-        *self
-    }
-}
-
 
 impl FromMdbValue for String {
     fn from_mdb_value(value: &MdbValue) -> String {
@@ -127,12 +71,6 @@ impl<'b> FromMdbValue for &'b [u8] {
 
 macro_rules! mdb_for_primitive {
     ($t:ty) => (
-        impl ToMdbValue for $t {
-            fn to_mdb_value<'a>(&'a self) -> MdbValue<'a> {
-                MdbValue::new_from_sized(self)
-            }
-        }
-
         impl FromMdbValue for $t {
             fn from_mdb_value(value: &MdbValue) -> $t {
                 unsafe {

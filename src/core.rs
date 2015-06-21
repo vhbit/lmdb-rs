@@ -58,7 +58,7 @@ use std::sync::{Arc, Mutex};
 use ffi::{self, MDB_val};
 pub use MdbError::{NotFound, KeyExists, Other, StateError, Corrupted, Panic};
 pub use MdbError::{InvalidPath, TxnFull, CursorFull, PageFull, CacheError};
-use traits::{ToMdbValue, FromMdbValue};
+use traits::{AsByteSlice, FromMdbValue};
 use utils::{error_msg};
 
 
@@ -109,6 +109,69 @@ macro_rules! assert_state_not {
                 let msg = format!("{} shouldn't be in {:?}", stringify!($log), e);
                 return Err(StateError(msg))
             }})
+}
+
+trait InternalMdbValue<'a> {
+    fn to_mdb_value(&'a self) -> MdbValue<'a>;
+}
+
+impl<'a> InternalMdbValue<'a> for &'a [u8] {
+    #[inline(always)]
+    fn to_mdb_value(&'a self) -> MdbValue<'a> {
+        unsafe {
+            MdbValue::new(std::mem::transmute(self.as_ptr()),
+                          self.len())
+        }
+    }
+}
+
+impl AsByteSlice for [u8] {
+    #[inline(always)]
+    fn as_byte_slice<'a>(&'a self) -> &'a [u8] {
+        self
+    }
+}
+
+impl AsByteSlice for str {
+    #[inline(always)]
+    fn as_byte_slice<'a>(&'a self) -> &'a [u8] {
+        self.as_bytes()
+    }
+}
+
+impl<'a> AsByteSlice for &'a str {
+    #[inline(always)]
+    fn as_byte_slice<'b>(&'b self) -> &'b [u8] {
+        self.as_bytes()
+    }
+}
+
+impl AsByteSlice for u64 {
+    #[inline(always)]
+    fn as_byte_slice<'a>(&'a self) -> &'a [u8] {
+        unsafe {std::slice::from_raw_parts(mem::transmute(self), 8)}
+    }
+}
+
+impl AsByteSlice for bool {
+    #[inline(always)]
+    fn as_byte_slice<'a>(&'a self) -> &'a [u8] {
+        unsafe {std::slice::from_raw_parts(mem::transmute(self), 1)}
+    }
+}
+
+impl AsByteSlice for String {
+    #[inline(always)]
+    fn as_byte_slice<'a>(&'a self) -> &'a [u8] {
+        self.as_bytes()
+    }
+}
+
+impl AsByteSlice for Vec<u8> {
+    #[inline(always)]
+    fn as_byte_slice<'a>(&'a self) -> &'a [u8] {
+        &self
+    }
 }
 
 /// MdbError wraps information about LMDB error
@@ -389,14 +452,14 @@ bitflags! {
 /// Database
 pub struct Database<'a> {
     handle: ffi::MDB_dbi,
-    txn: &'a NativeTransaction<'a>,
+    txn: &'a RawTransaction<'a>,
 }
 
 // FIXME: provide different interfaces for read-only/read-write databases
 // FIXME: provide different interfaces for simple KV and storage with duplicates
 
 impl<'a> Database<'a> {
-    fn new_with_handle(handle: ffi::MDB_dbi, txn: &'a NativeTransaction<'a>) -> Database<'a> {
+    fn new_with_handle(handle: ffi::MDB_dbi, txn: &'a RawTransaction<'a>) -> Database<'a> {
         Database { handle: handle, txn: txn }
     }
 
@@ -406,22 +469,22 @@ impl<'a> Database<'a> {
     }
 
     /// Retrieves a value by key. In case of DbAllowDups it will be the first value
-    pub fn get<V: FromMdbValue + 'a>(&'a self, key: &ToMdbValue) -> MdbResult<V> {
+    pub fn get<V: FromMdbValue + 'a>(&'a self, key: &AsByteSlice) -> MdbResult<V> {
         self.txn.get(self.handle, key)
     }
 
     /// Sets value for key. In case of DbAllowDups it will add a new item
-    pub fn set<K: ToMdbValue, V: ToMdbValue>(&self, key: &K, value: &V) -> MdbResult<()> {
+    pub fn set<K: AsByteSlice, V: AsByteSlice>(&self, key: &K, value: &V) -> MdbResult<()> {
         self.txn.set(self.handle, key, value)
     }
 
     /// Deletes value for key.
-    pub fn del<K: ToMdbValue>(&self, key: &K) -> MdbResult<()> {
+    pub fn del<K: AsByteSlice>(&self, key: &K) -> MdbResult<()> {
         self.txn.del(self.handle, key)
     }
 
     /// Should be used only with DbAllowDups. Deletes corresponding (key, value)
-    pub fn del_item(&self, key: &ToMdbValue, data: &ToMdbValue) -> MdbResult<()> {
+    pub fn del_item(&self, key: &AsByteSlice, data: &AsByteSlice) -> MdbResult<()> {
         self.txn.del_item(self.handle, key, data)
     }
 
@@ -447,7 +510,7 @@ impl<'a> Database<'a> {
     }
 
     /// Returns an iterator through keys starting with start_key (>=), start_key is included
-    pub fn keyrange_from<'c, K: ToMdbValue + 'c>(&'c self, start_key: &'c K) -> MdbResult<CursorIterator<'c, CursorFromKeyIter>> {
+    pub fn keyrange_from<'c, K: AsByteSlice + 'c>(&'c self, start_key: &'c K) -> MdbResult<CursorIterator<'c, CursorFromKeyIter<K>>> {
         let cursor = try!(self.txn.new_cursor(self.handle));
         let key_range = CursorFromKeyIter::new(start_key);
         let wrap = CursorIterator::wrap(cursor, key_range);
@@ -455,7 +518,7 @@ impl<'a> Database<'a> {
     }
 
     /// Returns an iterator through keys less than end_key, end_key is not included
-    pub fn keyrange_to<'c, K: ToMdbValue + 'c>(&'c self, end_key: &'c K) -> MdbResult<CursorIterator<'c, CursorToKeyIter>> {
+    pub fn keyrange_to<'c, K: AsByteSlice + 'c>(&'c self, end_key: &'c K) -> MdbResult<CursorIterator<'c, CursorToKeyIter>> {
         let cursor = try!(self.txn.new_cursor(self.handle));
         let key_range = CursorToKeyIter::new(end_key);
         let wrap = CursorIterator::wrap(cursor, key_range);
@@ -464,8 +527,8 @@ impl<'a> Database<'a> {
 
     /// Returns an iterator through keys `start_key <= x < end_key`. This is, start_key is
     /// included in the iteration, while end_key is kept excluded.
-    pub fn keyrange_from_to<'c, K: ToMdbValue + 'c>(&'c self, start_key: &'c K, end_key: &'c K)
-                               -> MdbResult<CursorIterator<'c, CursorKeyRangeIter>>
+    pub fn keyrange_from_to<'c, K: AsByteSlice + 'c>(&'c self, start_key: &'c K, end_key: &'c K)
+                               -> MdbResult<CursorIterator<'c, CursorKeyRangeIter<K>>>
     {
         let cursor = try!(self.txn.new_cursor(self.handle));
         let key_range = CursorKeyRangeIter::new(start_key, end_key, false);
@@ -477,8 +540,8 @@ impl<'a> Database<'a> {
     /// Currently it works only for unique keys (i.e. it will skip
     /// multiple items when DB created with ffi::MDB_DUPSORT).
     /// Iterator is valid while cursor is valid
-    pub fn keyrange<'c, K: ToMdbValue + 'c>(&'c self, start_key: &'c K, end_key: &'c K)
-                               -> MdbResult<CursorIterator<'c, CursorKeyRangeIter>>
+    pub fn keyrange<'c, K: AsByteSlice + 'c>(&'c self, start_key: &'c K, end_key: &'c K)
+                               -> MdbResult<CursorIterator<'c, CursorKeyRangeIter<K>>>
     {
         let cursor = try!(self.txn.new_cursor(self.handle));
         let key_range = CursorKeyRangeIter::new(start_key, end_key, true);
@@ -487,7 +550,7 @@ impl<'a> Database<'a> {
     }
 
     /// Returns an iterator for all items (i.e. values with same key)
-    pub fn item_iter<'c, 'db: 'c, K: ToMdbValue>(&'db self, key: &'c K) -> MdbResult<CursorIterator<'c, CursorItemIter<'c>>> {
+    pub fn item_iter<'c, 'db: 'c, K: AsByteSlice>(&'db self, key: &'c K) -> MdbResult<CursorIterator<'c, CursorItemIter<'c, K>>> {
         let cursor = try!(self.txn.new_cursor(self.handle));
         let inner_iter = CursorItemIter::<'c>::new(key);
         Ok(CursorIterator::<'c>::wrap(cursor, inner_iter))
@@ -742,7 +805,7 @@ impl Environment {
         }
     }
 
-    fn create_transaction(&self, parent: Option<NativeTransaction>, flags: c_uint) -> MdbResult<NativeTransaction> {
+    fn create_transaction(&self, parent: Option<RawTransaction>, flags: c_uint) -> MdbResult<RawTransaction> {
         let mut handle: *mut ffi::MDB_txn = ptr::null_mut();
         let parent_handle = match parent {
             Some(t) => t.handle,
@@ -750,7 +813,7 @@ impl Environment {
         };
 
         lift_mdb!(unsafe { ffi::mdb_txn_begin(self.env.0, parent_handle, flags, &mut handle) },
-                 NativeTransaction::new_with_handle(handle, flags as usize, self))
+                 RawTransaction::new_with_handle(handle, flags as usize, self))
     }
 
     /// Creates a new read-write transaction
@@ -893,17 +956,17 @@ enum TransactionState {
     Invalid,  // Invalid, no further operation possible
 }
 
-struct NativeTransaction<'a> {
+struct RawTransaction<'a> {
     handle: *mut ffi::MDB_txn,
     env: &'a Environment,
     flags: usize,
     state: TransactionState,
 }
 
-impl<'a> NativeTransaction<'a> {
-    fn new_with_handle(h: *mut ffi::MDB_txn, flags: usize, env: &Environment) -> NativeTransaction {
+impl<'a> RawTransaction<'a> {
+    fn new_with_handle(h: *mut ffi::MDB_txn, flags: usize, env: &Environment) -> RawTransaction {
         // debug!("new native txn");
-        NativeTransaction {
+        RawTransaction {
             handle: h,
             flags: flags,
             state: TransactionState::Normal,
@@ -960,10 +1023,10 @@ impl<'a> NativeTransaction<'a> {
         Ok(())
     }
 
-    fn new_child(&self, flags: c_uint) -> MdbResult<NativeTransaction> {
+    fn new_child(&self, flags: c_uint) -> MdbResult<RawTransaction> {
         let mut out: *mut ffi::MDB_txn = ptr::null_mut();
         try_mdb!(unsafe { ffi::mdb_txn_begin(ffi::mdb_txn_env(self.handle), self.handle, flags, &mut out) });
-        Ok(NativeTransaction::new_with_handle(out, flags as usize, self.env))
+        Ok(RawTransaction::new_with_handle(out, flags as usize, self.env))
     }
 
     /// Used in Drop to switch state
@@ -975,8 +1038,9 @@ impl<'a> NativeTransaction<'a> {
         }
     }
 
-    fn get_value<V: FromMdbValue + 'a>(&'a self, db: ffi::MDB_dbi, key: &ToMdbValue) -> MdbResult<V> {
-        let mut key_val = key.to_mdb_value();
+    fn get_value<V: FromMdbValue + 'a>(&'a self, db: ffi::MDB_dbi, key: &AsByteSlice) -> MdbResult<V> {
+        let tmp_slice = key.as_byte_slice();
+        let mut key_val = tmp_slice.to_mdb_value();
         unsafe {
             let mut data_val: MdbValue = std::mem::zeroed();
             try_mdb!(ffi::mdb_get(self.handle, db, &mut key_val.value, &mut data_val.value));
@@ -984,19 +1048,21 @@ impl<'a> NativeTransaction<'a> {
         }
     }
 
-    fn get<V: FromMdbValue + 'a>(&'a self, db: ffi::MDB_dbi, key: &ToMdbValue) -> MdbResult<V> {
+    fn get<V: FromMdbValue + 'a>(&'a self, db: ffi::MDB_dbi, key: &AsByteSlice) -> MdbResult<V> {
         assert_state_eq!(txn, self.state, TransactionState::Normal);
         self.get_value(db, key)
     }
 
-    fn set_value(&self, db: ffi::MDB_dbi, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
+    fn set_value(&self, db: ffi::MDB_dbi, key: &AsByteSlice, value: &AsByteSlice) -> MdbResult<()> {
         self.set_value_with_flags(db, key, value, 0)
     }
 
-    fn set_value_with_flags(&self, db: ffi::MDB_dbi, key: &ToMdbValue, value: &ToMdbValue, flags: c_uint) -> MdbResult<()> {
+    fn set_value_with_flags(&self, db: ffi::MDB_dbi, key: &AsByteSlice, value: &AsByteSlice, flags: c_uint) -> MdbResult<()> {
         unsafe {
-            let mut key_val = key.to_mdb_value();
-            let mut data_val = value.to_mdb_value();
+            let tmp1 = key.as_byte_slice();
+            let mut key_val = tmp1.to_mdb_value();
+            let tmp2 = value.as_byte_slice();
+            let mut data_val = tmp2.to_mdb_value();
 
             lift_mdb!(ffi::mdb_put(self.handle, db, &mut key_val.value, &mut data_val.value, flags))
         }
@@ -1007,32 +1073,35 @@ impl<'a> NativeTransaction<'a> {
     // FIXME: add explicit append function
     // FIXME: think about creating explicit separation of
     // all traits for databases with dup keys
-    fn set(&self, db: ffi::MDB_dbi, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
+    fn set(&self, db: ffi::MDB_dbi, key: &AsByteSlice, value: &AsByteSlice) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TransactionState::Normal);
         self.set_value(db, key, value)
     }
 
     /// Deletes all values by key
-    fn del_value(&self, db: ffi::MDB_dbi, key: &ToMdbValue) -> MdbResult<()> {
+    fn del_value(&self, db: ffi::MDB_dbi, key: &AsByteSlice) -> MdbResult<()> {
         unsafe {
-            let mut key_val = key.to_mdb_value();
+            let tmp = key.as_byte_slice();
+            let mut key_val = tmp.to_mdb_value();
             lift_mdb!(ffi::mdb_del(self.handle, db, &mut key_val.value, ptr::null_mut()))
         }
     }
 
     /// If duplicate keys are allowed deletes value for key which is equal to data
-    fn del_item(&self, db: ffi::MDB_dbi, key: &ToMdbValue, data: &ToMdbValue) -> MdbResult<()> {
+    fn del_item(&self, db: ffi::MDB_dbi, key: &AsByteSlice, data: &AsByteSlice) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TransactionState::Normal);
         unsafe {
-            let mut key_val = key.to_mdb_value();
-            let mut data_val = data.to_mdb_value();
+            let tmp1 = key.as_byte_slice();
+            let mut key_val = tmp1.to_mdb_value();
+            let tmp2 = data.as_byte_slice();
+            let mut data_val = tmp2.to_mdb_value();
 
             lift_mdb!(ffi::mdb_del(self.handle, db, &mut key_val.value, &mut data_val.value))
         }
     }
 
     /// Deletes all values for key
-    fn del(&self, db: ffi::MDB_dbi, key: &ToMdbValue) -> MdbResult<()> {
+    fn del(&self, db: ffi::MDB_dbi, key: &AsByteSlice) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TransactionState::Normal);
         self.del_value(db, key)
     }
@@ -1064,22 +1133,9 @@ impl<'a> NativeTransaction<'a> {
         let mut tmp: ffi::MDB_stat = unsafe { std::mem::zeroed() };
         lift_mdb!(unsafe { ffi::mdb_stat(self.handle, db, &mut tmp)}, tmp)
     }
-
-    /*
-    fn get_db(&self, name: &str, flags: DbFlags) -> MdbResult<Database> {
-        self.env.get_db(name, flags)
-            .and_then(|db| Ok(Database::new_with_handle(db.handle, self)))
-    }
-    */
-
-    /*
-    fn get_or_create_db(&self, name: &str, flags: DbFlags) -> MdbResult<Database> {
-        self.get_db(name, flags | DbCreate)
-    }
-    */
 }
 
-impl<'a> Drop for NativeTransaction<'a> {
+impl<'a> Drop for RawTransaction<'a> {
     fn drop(&mut self) {
         //debug!("Dropping native transaction!");
         self.silent_abort();
@@ -1087,11 +1143,11 @@ impl<'a> Drop for NativeTransaction<'a> {
 }
 
 pub struct Transaction<'a> {
-    inner: NativeTransaction<'a>,
+    inner: RawTransaction<'a>,
 }
 
 impl<'a> Transaction<'a> {
-    fn new_with_native(txn: NativeTransaction<'a>) -> Transaction<'a> {
+    fn new_with_native(txn: RawTransaction<'a>) -> Transaction<'a> {
         Transaction {
             inner: txn
         }
@@ -1127,12 +1183,12 @@ impl<'a> Transaction<'a> {
 
 
 pub struct ReadonlyTransaction<'a> {
-    inner: NativeTransaction<'a>,
+    inner: RawTransaction<'a>,
 }
 
 
 impl<'a> ReadonlyTransaction<'a> {
-    fn new_with_native(txn: NativeTransaction<'a>) -> ReadonlyTransaction<'a> {
+    fn new_with_native(txn: RawTransaction<'a>) -> ReadonlyTransaction<'a> {
         ReadonlyTransaction {
             inner: txn,
         }
@@ -1196,14 +1252,14 @@ pub struct Cursor<'txn> {
     handle: *mut ffi::MDB_cursor,
     data_val: ffi::MDB_val,
     key_val: ffi::MDB_val,
-    txn: &'txn NativeTransaction<'txn>,
+    txn: &'txn RawTransaction<'txn>,
     db: ffi::MDB_dbi,
     valid_key: bool,
 }
 
 
 impl<'txn> Cursor<'txn> {
-    fn new(txn: &'txn NativeTransaction, db: ffi::MDB_dbi) -> MdbResult<Cursor<'txn>> {
+    fn new(txn: &'txn RawTransaction, db: ffi::MDB_dbi) -> MdbResult<Cursor<'txn>> {
         debug!("Opening cursor in {}", db);
         let mut tmp: *mut ffi::MDB_cursor = std::ptr::null_mut();
         try_mdb!(unsafe { ffi::mdb_cursor_open(txn.handle, db, &mut tmp) });
@@ -1239,10 +1295,10 @@ impl<'txn> Cursor<'txn> {
     }
 
     fn move_to<K, V>(&mut self, key: &K, value: Option<&V>, op: ffi::MDB_cursor_op) -> MdbResult<()>
-        where K: ToMdbValue, V: ToMdbValue {
-        self.key_val = key.to_mdb_value().value;
+        where K: AsByteSlice, V: AsByteSlice {
+        self.key_val = key.as_byte_slice().to_mdb_value().value;
         self.data_val = match value {
-            Some(v) => v.to_mdb_value().value,
+            Some(v) => v.as_byte_slice().to_mdb_value().value,
             _ => unsafe {std::mem::zeroed() }
         };
 
@@ -1260,20 +1316,20 @@ impl<'txn> Cursor<'txn> {
     }
 
     /// Moves cursor to first entry for key if it exists
-    pub fn to_key<'k, K: ToMdbValue>(&mut self, key: &'k K) -> MdbResult<()> {
-        self.move_to(key, None::<&MdbValue<'k>>, ffi::MDB_cursor_op::MDB_SET_KEY)
+    pub fn to_key<'k, K: AsByteSlice>(&mut self, key: &'k K) -> MdbResult<()> {
+        self.move_to(key, None::<&K>, ffi::MDB_cursor_op::MDB_SET_KEY)
     }
 
     /// Moves cursor to first entry for key greater than
-    /// or equal to ke
-    pub fn to_gte_key<'k, K: ToMdbValue>(&mut self, key: &'k K) -> MdbResult<()> {
-        self.move_to(key, None::<&MdbValue<'k>>, ffi::MDB_cursor_op::MDB_SET_RANGE)
+    /// or equal to key
+    pub fn to_gte_key<'k, K: AsByteSlice>(&mut self, key: &'k K) -> MdbResult<()> {
+        self.move_to(key, None::<&K>, ffi::MDB_cursor_op::MDB_SET_RANGE)
     }
 
     /// Moves cursor to specific item (for example, if cursor
     /// already points to a correct key and you need to delete
     /// a specific item through cursor)
-    pub fn to_item<K, V>(&mut self, key: &K, value: & V) -> MdbResult<()> where K: ToMdbValue, V: ToMdbValue {
+    pub fn to_item<K, V>(&mut self, key: &K, value: & V) -> MdbResult<()> where K: AsByteSlice, V: AsByteSlice {
         self.move_to(key, Some(value), ffi::MDB_cursor_op::MDB_GET_BOTH)
     }
 
@@ -1339,11 +1395,12 @@ impl<'txn> Cursor<'txn> {
 
     /// Compares the cursor's current key with the specified other one.
     #[inline]
-    fn cmp_key(&mut self, other: &MdbValue) -> MdbResult<Ordering> {
+    fn cmp_key(&mut self, other: &[u8]) -> MdbResult<Ordering> {
         let (k, _) = try!(self.get_plain());
         let mut kval = k.value;
+        let mut other_mdb = other.to_mdb_value();
         let cmp = unsafe {
-            ffi::mdb_cmp(self.txn.handle, self.db, &mut kval, mem::transmute(other))
+            ffi::mdb_cmp(self.txn.handle, self.db, &mut kval, &mut other_mdb.value)
         };
         Ok(match cmp {
             n if n < 0 => Ordering::Less,
@@ -1386,14 +1443,14 @@ impl<'txn> Cursor<'txn> {
         }
     }
 
-    fn set_value<V: ToMdbValue>(&mut self, value: &V, flags: c_uint) -> MdbResult<()> {
+    fn set_value<V: AsByteSlice>(&mut self, value: &V, flags: c_uint) -> MdbResult<()> {
         try!(self.ensure_key_valid());
-        self.data_val = value.to_mdb_value().value;
+        self.data_val = value.as_byte_slice().to_mdb_value().value;
         lift_mdb!(unsafe {ffi::mdb_cursor_put(self.handle, &mut self.key_val, &mut self.data_val, flags)})
     }
 
-    pub fn set<K: ToMdbValue, V: ToMdbValue>(&mut self, key: &K, value: &V, flags: c_uint) -> MdbResult<()> {
-        self.key_val = key.to_mdb_value().value;
+    pub fn set<K: AsByteSlice, V: AsByteSlice>(&mut self, key: &K, value: &V, flags: c_uint) -> MdbResult<()> {
+        self.key_val = key.as_byte_slice().to_mdb_value().value;
         self.valid_key = true;
         let res = self.set_value(value, flags);
         self.valid_key = false;
@@ -1402,14 +1459,14 @@ impl<'txn> Cursor<'txn> {
 
     /// Overwrites value for current item
     /// Note: overwrites max cur_value.len() bytes
-    pub fn replace<V: ToMdbValue>(&mut self, value: &V) -> MdbResult<()> {
+    pub fn replace<V: AsByteSlice>(&mut self, value: &V) -> MdbResult<()> {
         let res = self.set_value(value, ffi::MDB_CURRENT);
         self.valid_key = false;
         res
     }
 
     /// Adds a new item when created with allowed duplicates
-    pub fn add_item<V: ToMdbValue>(&mut self, value: &V) -> MdbResult<()> {
+    pub fn add_item<V: AsByteSlice>(&mut self, value: &V) -> MdbResult<()> {
         let res = self.set_value(value, 0);
         self.valid_key = false;
         res
@@ -1441,12 +1498,13 @@ impl<'txn> Cursor<'txn> {
     }
 
     /// Returns count of items with the same key as current
-    pub fn item_count(&self) -> MdbResult<size_t> {
+    pub fn get_item_count(&self) -> MdbResult<size_t> {
         let mut tmp: size_t = 0;
         lift_mdb!(unsafe {ffi::mdb_cursor_count(self.handle, &mut tmp)}, tmp)
     }
 
-    pub fn get_item<'k, K: ToMdbValue>(&'txn mut self, k: &'k K) -> CursorItemAccessor<'txn, 'k, K> {
+    /// Consumes cursor to provide an accessor to item (i.e. a set of duplicates for one key)
+    pub fn get_item<'k, K: AsByteSlice>(self, k: &'k K) -> CursorItemAccessor<'txn, 'k, K> {
         CursorItemAccessor {
             cursor: self,
             key: k
@@ -1461,21 +1519,21 @@ impl<'txn> Drop for Cursor<'txn> {
 }
 
 pub struct CursorItemAccessor<'c, 'k, K: 'k> {
-    cursor: &'c mut Cursor<'c>,
+    cursor: Cursor<'c>,
     key: &'k K,
 }
 
-impl<'k, 'c: 'k, K: ToMdbValue> CursorItemAccessor<'c, 'k, K> {
+impl<'k, 'c: 'k, K: AsByteSlice> CursorItemAccessor<'c, 'k, K> {
     pub fn get<'a, V: FromMdbValue + 'a>(&'a mut self) -> MdbResult<V> {
         try!(self.cursor.to_key(self.key));
         self.cursor.get_value()
     }
 
-    pub fn add<V: ToMdbValue>(&mut self, v: &V) -> MdbResult<()> {
+    pub fn add<V: AsByteSlice>(&mut self, v: &V) -> MdbResult<()> {
         self.cursor.set(self.key, v, 0)
     }
 
-    pub fn del<V: ToMdbValue>(&mut self, v: &V) -> MdbResult<()> {
+    pub fn del<V: AsByteSlice>(&mut self, v: &V) -> MdbResult<()> {
         try!(self.cursor.to_item(self.key, v));
         self.cursor.del_item()
     }
@@ -1484,13 +1542,24 @@ impl<'k, 'c: 'k, K: ToMdbValue> CursorItemAccessor<'c, 'k, K> {
         try!(self.cursor.to_key(self.key));
         self.cursor.del_all()
     }
+
+    /// Returns number of values in current item
+    pub fn count(&self) -> MdbResult<usize> {
+        let result = try!(self.cursor.get_item_count());
+        Ok(result as usize)
+    }
+
+    /// Returns back internal cursor
+    pub fn into_inner(self) -> Cursor<'c> {
+        let tmp = self;
+        tmp.cursor
+    }
 }
 
 
 pub struct CursorValue<'cursor> {
     key: MdbValue<'cursor>,
     value: MdbValue<'cursor>,
-    marker: ::std::marker::PhantomData<&'cursor ()>,
 }
 
 /// CursorValue performs lazy data extraction from iterator
@@ -1532,7 +1601,6 @@ pub struct CursorIterator<'c, I> {
     inner: I,
     has_data: bool,
     cursor: Cursor<'c>,
-    marker: ::std::marker::PhantomData<&'c ()>,
 }
 
 impl<'c, I: CursorIteratorInner + 'c> CursorIterator<'c, I> {
@@ -1543,7 +1611,6 @@ impl<'c, I: CursorIteratorInner + 'c> CursorIterator<'c, I> {
             inner: inner,
             has_data: has_data,
             cursor: cursor,
-            marker: ::std::marker::PhantomData,
         }
     }
 
@@ -1567,7 +1634,6 @@ impl<'c, I: CursorIteratorInner + 'c> Iterator for CursorIterator<'c, I> {
                     Some(CursorValue {
                         key: k,
                         value: v,
-                        marker: ::std::marker::PhantomData
                     })
                 }
             }
@@ -1579,30 +1645,25 @@ impl<'c, I: CursorIteratorInner + 'c> Iterator for CursorIterator<'c, I> {
     }
 }
 
-pub struct CursorKeyRangeIter<'a> {
-    start_key: MdbValue<'a>,
-    end_key: MdbValue<'a>,
+pub struct CursorKeyRangeIter<'a, K: AsByteSlice+'a> {
+    start_key: &'a K,
+    end_key: &'a K,
     end_inclusive: bool,
-    marker: ::std::marker::PhantomData<&'a ()>,
 }
 
-impl<'a> CursorKeyRangeIter<'a> {
-    pub fn new<K: ToMdbValue+'a>(start_key: &'a K, end_key: &'a K, end_inclusive: bool) -> CursorKeyRangeIter<'a> {
+impl<'a, K: AsByteSlice> CursorKeyRangeIter<'a, K> {
+    pub fn new(start_key: &'a K, end_key: &'a K, end_inclusive: bool) -> CursorKeyRangeIter<'a, K> {
         CursorKeyRangeIter {
-            start_key: start_key.to_mdb_value(),
-            end_key: end_key.to_mdb_value(),
+            start_key: start_key,
+            end_key: end_key,
             end_inclusive: end_inclusive,
-            marker: ::std::marker::PhantomData,
         }
     }
 }
 
-impl<'iter> CursorIteratorInner for CursorKeyRangeIter<'iter> {
-    fn init_cursor<'a, 'b: 'a>(&'a self, cursor: & mut Cursor<'b>) -> bool {
-        let ok = unsafe {
-            cursor.to_gte_key(mem::transmute::<&'a MdbValue<'a>, &'b MdbValue<'b>>(&self.start_key)).is_ok()
-        };
-        ok && cursor.cmp_key(&self.end_key).is_less(self.end_inclusive)
+impl<'iter, K: AsByteSlice> CursorIteratorInner for CursorKeyRangeIter<'iter, K> {
+    fn init_cursor<'a, 'b: 'a>(&'a self, cursor: &mut Cursor<'b>) -> bool {
+        cursor.to_gte_key(self.start_key).is_ok() && cursor.cmp_key(self.end_key.as_byte_slice()).is_less(self.end_inclusive)
     }
 
     fn move_to_next<'i, 'c: 'i>(&'i self, cursor: &'c mut Cursor<'c>) -> bool {
@@ -1610,31 +1671,28 @@ impl<'iter> CursorIteratorInner for CursorKeyRangeIter<'iter> {
         if !moved {
             false
         } else {
-            cursor.cmp_key(&self.end_key).is_less(self.end_inclusive)
+            cursor.cmp_key(self.end_key.as_byte_slice()).is_less(self.end_inclusive)
         }
     }
 }
 
-pub struct CursorFromKeyIter<'a> {
-    start_key: MdbValue<'a>,
-    marker: ::std::marker::PhantomData<&'a ()>,
+
+pub struct CursorFromKeyIter<'a, K: AsByteSlice + 'a> {
+    start_key: &'a K,
 }
 
 
-impl<'a> CursorFromKeyIter<'a> {
-    pub fn new<K: ToMdbValue+'a>(start_key: &'a K) -> CursorFromKeyIter<'a> {
+impl<'a, K: AsByteSlice> CursorFromKeyIter<'a, K> {
+    pub fn new(start_key: &'a K) -> CursorFromKeyIter<'a, K> {
         CursorFromKeyIter {
-            start_key: start_key.to_mdb_value(),
-            marker: ::std::marker::PhantomData
+            start_key: start_key,
         }
     }
 }
 
-impl<'iter> CursorIteratorInner for CursorFromKeyIter<'iter> {
+impl<'iter, K: AsByteSlice> CursorIteratorInner for CursorFromKeyIter<'iter, K> {
     fn init_cursor<'a, 'b: 'a>(&'a self, cursor: & mut Cursor<'b>) -> bool {
-        unsafe {
-            cursor.to_gte_key(mem::transmute::<&'a MdbValue<'a>, &'b MdbValue<'b>>(&self.start_key)).is_ok()
-        }
+        cursor.to_gte_key(self.start_key).is_ok()
     }
 
     fn move_to_next<'i, 'c: 'i>(&'i self, cursor: &'c mut Cursor<'c>) -> bool {
@@ -1644,16 +1702,14 @@ impl<'iter> CursorIteratorInner for CursorFromKeyIter<'iter> {
 
 
 pub struct CursorToKeyIter<'a> {
-    end_key: MdbValue<'a>,
-    marker: ::std::marker::PhantomData<&'a ()>,
+    end_key: &'a [u8],
 }
 
 
 impl<'a> CursorToKeyIter<'a> {
-    pub fn new<K: ToMdbValue+'a>(end_key: &'a K) -> CursorToKeyIter<'a> {
+    pub fn new<K: AsByteSlice+'a>(end_key: &'a K) -> CursorToKeyIter<'a> {
         CursorToKeyIter {
-            end_key: end_key.to_mdb_value(),
-            marker: ::std::marker::PhantomData,
+            end_key: end_key.as_byte_slice(),
         }
     }
 }
@@ -1689,26 +1745,22 @@ impl<'iter> CursorIteratorInner for CursorIter {
 }
 
 
-pub struct CursorItemIter<'a> {
-    key: MdbValue<'a>,
-    marker: ::std::marker::PhantomData<&'a ()>,
+pub struct CursorItemIter<'a, K: AsByteSlice + 'a> {
+    key: &'a K,
 }
 
 
-impl<'a> CursorItemIter<'a> {
-    pub fn new<K: ToMdbValue+'a>(key: &'a K) -> CursorItemIter<'a> {
+impl<'a, K: AsByteSlice> CursorItemIter<'a, K> {
+    pub fn new(key: &'a K) -> CursorItemIter<'a, K> {
         CursorItemIter {
-            key: key.to_mdb_value(),
-            marker: ::std::marker::PhantomData
+            key: key,
         }
     }
 }
 
-impl<'iter> CursorIteratorInner for CursorItemIter<'iter> {
+impl<'iter, K: AsByteSlice> CursorIteratorInner for CursorItemIter<'iter, K> {
     fn init_cursor<'a, 'b: 'a>(&'a self, cursor: & mut Cursor<'b>) -> bool {
-        unsafe {
-            cursor.to_key(mem::transmute::<&MdbValue, &'b MdbValue<'b>>(&self.key)).is_ok()
-        }
+        cursor.to_key(self.key).is_ok()
     }
 
     fn move_to_next<'i, 'c: 'i>(&'i self, cursor: &'c mut Cursor<'c>) -> bool {
@@ -1716,7 +1768,7 @@ impl<'iter> CursorIteratorInner for CursorItemIter<'iter> {
     }
 
     fn get_size_hint(&self, c: &Cursor) -> (usize, Option<usize>) {
-        match c.item_count() {
+        match c.get_item_count() {
             Err(_) => (0, None),
             Ok(cnt) => (0, Some(cnt as usize))
         }
