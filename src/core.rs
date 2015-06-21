@@ -1516,9 +1516,10 @@ impl<'a> CursorKeyRangeIter<'a> {
 
 impl<'iter> CursorIteratorInner for CursorKeyRangeIter<'iter> {
     fn init_cursor<'a, 'b: 'a>(&'a self, cursor: & mut Cursor<'b>) -> bool {
-        unsafe {
+        let ok = unsafe {
             cursor.to_gte_key(mem::transmute::<&'a MdbValue<'a>, &'b MdbValue<'b>>(&self.start_key)).is_ok()
-        }
+        };
+        ok && curr_cursor_lte(cursor, &self.end_key, self.end_inclusive)
     }
 
     fn move_to_next<'i, 'c: 'i>(&'i self, cursor: &'c mut Cursor<'c>) -> bool {
@@ -1526,36 +1527,10 @@ impl<'iter> CursorIteratorInner for CursorKeyRangeIter<'iter> {
         if !moved {
             false
         } else {
-            // As `get_plain` borrows mutably there is no
-            // way to get comparison straight after
-            // so here goes the workaround
-            let k = match cursor.get_plain() {
-                Err(_) => None,
-                Ok((k, _)) => {
-                    Some(MdbValue {
-                        value: k.value,
-                        marker: ::std::marker::PhantomData
-                    })
-                }
-            };
-
-            match k {
-                None => false,
-                Some(mut k) => {
-                    let cmp_res = unsafe {
-                        ffi::mdb_cmp(cursor.txn.handle, cursor.db,
-                                     &mut k.value, mem::transmute(&self.end_key.value))
-                    };
-                    match self.end_inclusive {
-                        true => cmp_res <= 0, // include end key
-                        _    => cmp_res < 0, // exclude end key
-                    }
-                }
-            }
+            curr_cursor_lte(cursor, &self.end_key, self.end_inclusive)
         }
     }
 }
-
 
 pub struct CursorFromKeyIter<'a> {
     start_key: MdbValue<'a>,
@@ -1602,7 +1577,8 @@ impl<'a> CursorToKeyIter<'a> {
 
 impl<'iter> CursorIteratorInner for CursorToKeyIter<'iter> {
     fn init_cursor<'a, 'b: 'a>(&'a self, cursor: & mut Cursor<'b>) -> bool {
-        cursor.to_first().is_ok()
+        let ok = cursor.to_first().is_ok();
+        ok && curr_cursor_lte(cursor, &self.end_key, false)
     }
 
     fn move_to_next<'i, 'c: 'i>(&'i self, cursor: &'c mut Cursor<'c>) -> bool {
@@ -1610,33 +1586,42 @@ impl<'iter> CursorIteratorInner for CursorToKeyIter<'iter> {
         if !moved {
             false
         } else {
-            // As `get_plain` borrows mutably there is no
-            // way to get comparison straight after
-            // so here goes the workaround
-            let k = match cursor.get_plain() {
-                Err(_) => None,
-                Ok((k, _)) => {
-                    Some(MdbValue {
-                        value: k.value,
-                        marker: ::std::marker::PhantomData
-                    })
-                }
-            };
-
-            match k {
-                None => false,
-                Some(mut k) => {
-                    let cmp_res = unsafe {
-                        ffi::mdb_cmp(cursor.txn.handle, cursor.db,
-                                     &mut k.value, mem::transmute(&self.end_key.value))
-                    };
-                    cmp_res < 0
-                }
-            }
+            curr_cursor_lte(cursor, &self.end_key, false)
         }
     }
 }
 
+/// Determines whether `cursor.get_plain().key` is less than or equal
+/// to `key` (where the inclusiveness depends on the `inclusive`
+/// parameter).
+fn curr_cursor_lte(c: &mut Cursor, key: &MdbValue, inclusive: bool) -> bool {
+    // As `get_plain` borrows mutably there is no
+    // way to get comparison straight after
+    // so here goes the workaround
+    let k = match c.get_plain() {
+        Err(_) => None,
+        Ok((k, _)) => {
+            Some(MdbValue {
+                value: k.value,
+                marker: ::std::marker::PhantomData
+            })
+        }
+    };
+
+    match k {
+        None => false,
+        Some(mut k) => {
+            let cmp_res = unsafe {
+                ffi::mdb_cmp(c.txn.handle, c.db,
+                             &mut k.value, mem::transmute(key))
+            };
+            match inclusive {
+                true => cmp_res <= 0, // include key
+                _    => cmp_res < 0, // exclude key
+            }
+        }
+    }
+}
 
 #[allow(missing_copy_implementations)]
 pub struct CursorIter;

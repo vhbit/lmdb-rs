@@ -358,6 +358,35 @@ fn test_keyrange_to() {
     }
 }
 
+/// Test that selecting a key range with an upper bound smaller than
+/// the smallest key in the db yields an empty range.
+#[test]
+fn test_keyrange_to_init_cursor() {
+    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
+    let db = env.get_default_db(core::DbIntKey).unwrap();
+    let recs: Vec<(u64, u64)> = vec![(10, 50), (11, 60), (12, 70)];
+
+    let txn = env.new_transaction().unwrap();
+    {
+        let db = txn.bind(&db);
+        for &(k, v) in recs.iter() {
+            assert!(db.set(&k, &v).is_ok());
+        }
+    }
+    assert!(txn.commit().is_ok());
+
+    let txn = env.get_reader().unwrap();
+    {
+        let db = txn.bind(&db);
+
+        // last key is excluded
+        let upper_bound: u64 = 1;
+        let iter = db.keyrange_to(&upper_bound).unwrap();
+
+        let res: Vec<_> = iter.map(|cv| cv.get_value::<u64>()).collect();
+        assert_eq!(res, &[]);
+    }
+}
 
 #[test]
 fn test_keyrange_from() {
@@ -388,6 +417,36 @@ fn test_keyrange_from() {
 
         let res: Vec<_> = iter.map(|cv| cv.get_value::<u64>()).collect();
         assert_eq!(res, &values[start_idx..]);
+    }
+}
+
+/// Test that selecting a key range with a lower bound greater than
+/// the biggest key in the db yields an empty range.
+#[test]
+fn test_keyrange_from_init_cursor() {
+    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
+    let db = env.get_default_db(core::DbIntKey).unwrap();
+    let recs: Vec<(u64, u64)> = vec![(10, 50), (11, 60), (12, 70)];
+
+    let txn = env.new_transaction().unwrap();
+    {
+        let db = txn.bind(&db);
+        for &(k, v) in recs.iter() {
+            assert!(db.set(&k, &v).is_ok());
+        }
+    }
+    assert!(txn.commit().is_ok());
+
+    let txn = env.get_reader().unwrap();
+    {
+        let db = txn.bind(&db);
+
+        // last key is excluded
+        let lower_bound = recs[recs.len()-1].0 + 1;
+        let iter = db.keyrange_from(&lower_bound).unwrap();
+
+        let res: Vec<_> = iter.map(|cv| cv.get_value::<u64>()).collect();
+        assert_eq!(res, &[]);
     }
 }
 
@@ -425,6 +484,82 @@ fn test_keyrange() {
     }
 }
 
+/// Test that select a key range outside the available data correctly
+/// yields an empty range.
+#[test]
+fn test_keyrange_init_cursor() {
+    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
+    let db = env.get_default_db(core::DbAllowDups | core::DbIntKey).unwrap();
+    let keys:   Vec<u64> = vec![ 1,  2,  3,  4,  5,  6];
+    let values: Vec<u64> = vec![10, 11, 12, 13, 14, 15];
+
+    // to avoid problems caused by updates
+    assert_eq!(keys.len(), values.len());
+
+    let txn = env.new_transaction().unwrap();
+    {
+        let db = txn.bind(&db);
+        for (k, v) in keys.iter().zip(values.iter()) {
+            assert!(db.set(k, v).is_ok());
+        }
+    }
+    assert!(txn.commit().is_ok());
+
+    // test the cursor initialization before the available data range
+    let txn = env.get_reader().unwrap();
+    {
+        let db = txn.bind(&db);
+
+        let start_key = 0u64;
+        let end_key = 0u64;
+        let iter = db.keyrange(&start_key, &end_key).unwrap();
+
+        let res: Vec<_> = iter.map(|cv| cv.get_value::<u64>()).collect();
+        assert_eq!(res, &[]);
+    }
+
+    // test the cursor initialization after the available data range
+    {
+        let db = txn.bind(&db);
+
+        let start_key = 10;
+        let end_key = 20;
+        let iter = db.keyrange(&start_key, &end_key).unwrap();
+
+        let res: Vec<_> = iter.map(|cv| cv.get_value::<u64>()).collect();
+        assert!(res.is_empty());
+    }
+}
+
+#[test]
+fn test_keyrange_from_to() {
+    let mut env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
+    let db = env.get_default_db(core::DbAllowDups | core::DbIntKey).unwrap();
+    let recs: Vec<(u64, u64)> = vec![(10, 11), (20, 21), (30, 31), (40, 41), (50, 51)];
+
+    let txn = env.new_transaction().unwrap();
+    {
+        let db = txn.bind(&db);
+        for &(k, v) in recs.iter() {
+            assert!(db.set(&k, &v).is_ok());
+        }
+    }
+    assert!(txn.commit().is_ok());
+
+    let txn = env.get_reader().unwrap();
+    {
+        let db = txn.bind(&db);
+
+        let start_idx = 1;
+        let end_idx = 3;
+        let iter = db.keyrange_from_to(&recs[start_idx].0, &recs[end_idx].0).unwrap();
+
+        let res: Vec<_> = iter.map(|cv| cv.get_value::<u64>()).collect();
+        // ~ end_key must be excluded here
+        let exp: Vec<_> = recs[start_idx .. end_idx].iter().map(|x| x.1).collect();
+        assert_eq!(res, exp);
+    }
+}
 
 /*
 #[test]
