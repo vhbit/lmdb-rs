@@ -112,8 +112,6 @@ macro_rules! assert_state_not {
 }
 
 /// MdbError wraps information about LMDB error
-
-
 #[derive(Debug)]
 pub enum MdbError {
     NotFound,
@@ -183,13 +181,63 @@ bitflags! {
     #[doc = "A set of environment flags which could be changed after opening"]
 
     flags EnvFlags: c_uint {
-        #[doc="Don't flush system buffers to disk when committing a transaction. This optimization means a system crash can corrupt the database or lose the last transactions if buffers are not yet flushed to disk. The risk is governed by how often the system flushes dirty buffers to disk and how often mdb_env_sync() is called. However, if the filesystem preserves write order and the MDB_WRITEMAP flag is not used, transactions exhibit ACI (atomicity, consistency, isolation) properties and only lose D (durability). I.e. database integrity is maintained, but a system crash may undo the final transactions. Note that (MDB_NOSYNC | MDB_WRITEMAP) leaves the system with no hint for when to write transactions to disk, unless mdb_env_sync() is called. (MDB_MAPASYNC | MDB_WRITEMAP) may be preferable. This flag may be changed at any time using mdb_env_set_flags()."]
+
+        #[doc="Don't flush system buffers to disk when committing a
+        transaction. This optimization means a system crash can
+        corrupt the database or lose the last transactions if buffers
+        are not yet flushed to disk. The risk is governed by how
+        often the system flushes dirty buffers to disk and how often
+        mdb_env_sync() is called. However, if the filesystem
+        preserves write order and the MDB_WRITEMAP flag is not used,
+        transactions exhibit ACI (atomicity, consistency, isolation)
+        properties and only lose D (durability). I.e. database
+        integrity is maintained, but a system crash may undo the
+        final transactions. Note that (MDB_NOSYNC | MDB_WRITEMAP)
+        leaves the system with no hint for when to write transactions
+        to disk, unless mdb_env_sync() is called. (MDB_MAPASYNC |
+        MDB_WRITEMAP) may be preferable. This flag may be changed at
+        any time using mdb_env_set_flags()."]
         const EnvNoSync      = ffi::MDB_NOSYNC,
-        #[doc="Flush system buffers to disk only once per transaction, omit the metadata flush. Defer that until the system flushes files to disk, or next non-MDB_RDONLY commit or mdb_env_sync(). This optimization maintains database integrity, but a system crash may undo the last committed transaction. I.e. it preserves the ACI (atomicity, consistency, isolation) but not D (durability) database property. This flag may be changed at any time using mdb_env_set_flags()."]
+
+        #[doc="Flush system buffers to disk only once per transaction,
+        omit the metadata flush. Defer that until the system flushes
+        files to disk, or next non-MDB_RDONLY commit or
+        mdb_env_sync(). This optimization maintains database
+        integrity, but a system crash may undo the last committed
+        transaction. I.e. it preserves the ACI (atomicity,
+        consistency, isolation) but not D (durability) database
+        property. This flag may be changed at any time using
+        mdb_env_set_flags()."]
         const EnvNoMetaSync  = ffi::MDB_NOMETASYNC,
-        #[doc="When using MDB_WRITEMAP, use asynchronous flushes to disk. As with MDB_NOSYNC, a system crash can then corrupt the database or lose the last transactions. Calling mdb_env_sync() ensures on-disk database integrity until next commit. This flag may be changed at any time using mdb_env_set_flags()."]
+
+        #[doc="When using MDB_WRITEMAP, use asynchronous flushes to
+        disk. As with MDB_NOSYNC, a system crash can then corrupt the
+        database or lose the last transactions. Calling
+        mdb_env_sync() ensures on-disk database integrity until next
+        commit. This flag may be changed at any time using
+        mdb_env_set_flags()."]
         const EnvMapAsync    = ffi::MDB_MAPASYNC,
-        #[doc="Don't initialize malloc'd memory before writing to unused spaces in the data file. By default, memory for pages written to the data file is obtained using malloc. While these pages may be reused in subsequent transactions, freshly malloc'd pages will be initialized to zeroes before use. This avoids persisting leftover data from other code (that used the heap and subsequently freed the memory) into the data file. Note that many other system libraries may allocate and free memory from the heap for arbitrary uses. E.g., stdio may use the heap for file I/O buffers. This initialization step has a modest performance cost so some applications may want to disable it using this flag. This option can be a problem for applications which handle sensitive data like passwords, and it makes memory checkers like Valgrind noisy. This flag is not needed with MDB_WRITEMAP, which writes directly to the mmap instead of using malloc for pages. The initialization is also skipped if MDB_RESERVE is used; the caller is expected to overwrite all of the memory that was reserved in that case. This flag may be changed at any time using mdb_env_set_flags()."]
+
+        #[doc="Don't initialize malloc'd memory before writing to
+        unused spaces in the data file. By default, memory for pages
+        written to the data file is obtained using malloc. While
+        these pages may be reused in subsequent transactions, freshly
+        malloc'd pages will be initialized to zeroes before use. This
+        avoids persisting leftover data from other code (that used
+        the heap and subsequently freed the memory) into the data
+        file. Note that many other system libraries may allocate and
+        free memory from the heap for arbitrary uses. E.g., stdio may
+        use the heap for file I/O buffers. This initialization step
+        has a modest performance cost so some applications may want
+        to disable it using this flag. This option can be a problem
+        for applications which handle sensitive data like passwords,
+        and it makes memory checkers like Valgrind noisy. This flag
+        is not needed with MDB_WRITEMAP, which writes directly to the
+        mmap instead of using malloc for pages. The initialization is
+        also skipped if MDB_RESERVE is used; the caller is expected
+        to overwrite all of the memory that was reserved in that
+        case. This flag may be changed at any time using
+        mdb_env_set_flags()."]
         const EnvNoMemInit   = ffi::MDB_NOMEMINIT
     }
 }
@@ -339,7 +387,6 @@ bitflags! {
 }
 
 /// Database
-
 pub struct Database<'a> {
     handle: ffi::MDB_dbi,
     txn: &'a NativeTransaction<'a>,
@@ -430,7 +477,6 @@ impl<'a> Database<'a> {
     /// Currently it works only for unique keys (i.e. it will skip
     /// multiple items when DB created with ffi::MDB_DUPSORT).
     /// Iterator is valid while cursor is valid
-
     pub fn keyrange<'c, K: ToMdbValue + 'c>(&'c self, start_key: &'c K, end_key: &'c K)
                                -> MdbResult<CursorIterator<'c, CursorKeyRangeIter>>
     {
@@ -449,6 +495,10 @@ impl<'a> Database<'a> {
 }
 
 
+/// Constructs environment with settigs which couldn't be
+/// changed after opening. By default it tries to create
+/// corresponding dir if it doesn't exist, use `autocreate_dir()`
+/// to override that behavior
 #[derive(Copy, Clone)]
 pub struct EnvBuilder {
     flags: EnvCreateFlags,
@@ -457,11 +507,6 @@ pub struct EnvBuilder {
     map_size: Option<u64>,
     autocreate_dir: bool,
 }
-
-/// Constructs environment with settigs which couldn't be
-/// changed after opening. By default it tries to create
-/// corresponding dir if it doesn't exist, use `autocreate_dir()`
-/// to override that behaviour
 
 impl EnvBuilder {
     pub fn new() -> EnvBuilder {
@@ -564,7 +609,6 @@ impl EnvBuilder {
         }
 
         // There should be a directory before open
-
         match fs::metadata(path) {
             Ok(meta) => {
                 if meta.is_dir() {
@@ -600,12 +644,10 @@ impl Drop for EnvHandle {
 }
 
 /// Represents LMDB Environment. Should be opened using `EnvBuilder`
-
 pub struct Environment {
     env: Arc<EnvHandle>,
     db_cache: Arc<Mutex<UnsafeCell<HashMap<String, ffi::MDB_dbi>>>>,
 }
-
 
 impl Environment {
     pub fn new() -> EnvBuilder {
@@ -851,14 +893,12 @@ enum TransactionState {
     Invalid,  // Invalid, no further operation possible
 }
 
-
 struct NativeTransaction<'a> {
     handle: *mut ffi::MDB_txn,
     env: &'a Environment,
     flags: usize,
     state: TransactionState,
 }
-
 
 impl<'a> NativeTransaction<'a> {
     fn new_with_handle(h: *mut ffi::MDB_txn, flags: usize, env: &Environment) -> NativeTransaction {
@@ -1046,11 +1086,9 @@ impl<'a> Drop for NativeTransaction<'a> {
     }
 }
 
-
 pub struct Transaction<'a> {
     inner: NativeTransaction<'a>,
 }
-
 
 impl<'a> Transaction<'a> {
     fn new_with_native(txn: NativeTransaction<'a>) -> Transaction<'a> {
@@ -1086,7 +1124,6 @@ impl<'a> Transaction<'a> {
         Database::new_with_handle(db_handle.handle, &self.inner)
     }
 }
-
 
 
 pub struct ReadonlyTransaction<'a> {
@@ -1423,8 +1460,6 @@ impl<'txn> Drop for Cursor<'txn> {
     }
 }
 
-
-
 pub struct CursorItemAccessor<'c, 'k, K: 'k> {
     cursor: &'c mut Cursor<'c>,
     key: &'k K,
@@ -1461,7 +1496,6 @@ pub struct CursorValue<'cursor> {
 /// CursorValue performs lazy data extraction from iterator
 /// avoiding any data conversions and memory copy. Lifetime
 /// is limited to iterator lifetime
-
 impl<'cursor> CursorValue<'cursor> {
     pub fn get_key<T: FromMdbValue + 'cursor>(&'cursor self) -> T {
         FromMdbValue::from_mdb_value(&self.key)
@@ -1479,7 +1513,6 @@ impl<'cursor> CursorValue<'cursor> {
 
 /// This one should once become public and allow to create custom
 /// iterators
-
 trait CursorIteratorInner {
     /// Returns true if initialization successful, for example that
     /// the key exists.
@@ -1546,14 +1579,12 @@ impl<'c, I: CursorIteratorInner + 'c> Iterator for CursorIterator<'c, I> {
     }
 }
 
-
 pub struct CursorKeyRangeIter<'a> {
     start_key: MdbValue<'a>,
     end_key: MdbValue<'a>,
     end_inclusive: bool,
     marker: ::std::marker::PhantomData<&'a ()>,
 }
-
 
 impl<'a> CursorKeyRangeIter<'a> {
     pub fn new<K: ToMdbValue+'a>(start_key: &'a K, end_key: &'a K, end_inclusive: bool) -> CursorKeyRangeIter<'a> {
