@@ -44,6 +44,7 @@ use libc::{self, c_int, c_uint, size_t, c_void};
 use std;
 use std::borrow::ToOwned;
 use std::cell::{UnsafeCell};
+use std::cmp::{Ordering};
 use std::collections::HashMap;
 use std::error::Error;
 use std::ffi::{CString};
@@ -1117,6 +1118,30 @@ impl<'a> ReadonlyTransaction<'a> {
     }
 }
 
+/// Helper to determine the property of "less than or equal to" where
+/// the "equal to" part is to be specified at runtime.
+trait IsLess {
+    fn is_less(&self, or_equal: bool) -> bool;
+}
+
+impl IsLess for Ordering {
+    fn is_less(&self, or_equal: bool) -> bool {
+        match (*self, or_equal) {
+            (Ordering::Less, _) => true,
+            (Ordering::Equal, true) => true,
+            _ => false,
+        }
+    }
+}
+
+impl IsLess for MdbResult<Ordering> {
+    fn is_less(&self, or_equal: bool) -> bool {
+        match *self {
+            Ok(ord) => ord.is_less(or_equal),
+            Err(_) => false,
+        }
+    }
+}
 
 pub struct Cursor<'txn> {
     handle: *mut ffi::MDB_cursor,
@@ -1261,6 +1286,30 @@ impl<'txn> Cursor<'txn> {
         unsafe {
             Ok(FromMdbValue::from_mdb_value(mem::transmute(&k)))
         }
+    }
+
+    /// Compares the cursor's current key with the specified other one.
+    #[inline]
+    fn cmp_key(&mut self, other: &MdbValue) -> MdbResult<Ordering> {
+        let (k, _) = try!(self.get_plain());
+        let mut kval = k.value;
+        let cmp = unsafe {
+            ffi::mdb_cmp(self.txn.handle, self.db, &mut kval, mem::transmute(other))
+        };
+        Ok(match cmp {
+            n if n < 0 => Ordering::Less,
+            n if n > 0 => Ordering::Greater,
+            _          => Ordering::Equal,
+        })
+    }
+
+    /// Compares the cursor's current key with the specified other one
+    /// or returns `err_val` if the comparison resulted in an error.
+    /// This method is equivalen to calling
+    /// `cursor.cmp_key(&other).unwrap_or(err_val)`.
+    #[inline]
+    fn cmp_key_or(&mut self, other: &MdbValue, err_val: Ordering) -> Ordering {
+        self.cmp_key(other).unwrap_or(err_val)
     }
 
     #[inline]
@@ -1519,7 +1568,7 @@ impl<'iter> CursorIteratorInner for CursorKeyRangeIter<'iter> {
         let ok = unsafe {
             cursor.to_gte_key(mem::transmute::<&'a MdbValue<'a>, &'b MdbValue<'b>>(&self.start_key)).is_ok()
         };
-        ok && curr_cursor_lte(cursor, &self.end_key, self.end_inclusive)
+        ok && cursor.cmp_key_or(&self.end_key, Ordering::Greater).is_less(self.end_inclusive)
     }
 
     fn move_to_next<'i, 'c: 'i>(&'i self, cursor: &'c mut Cursor<'c>) -> bool {
@@ -1527,7 +1576,7 @@ impl<'iter> CursorIteratorInner for CursorKeyRangeIter<'iter> {
         if !moved {
             false
         } else {
-            curr_cursor_lte(cursor, &self.end_key, self.end_inclusive)
+            cursor.cmp_key_or(&self.end_key, Ordering::Greater).is_less(self.end_inclusive)
         }
     }
 }
@@ -1578,7 +1627,7 @@ impl<'a> CursorToKeyIter<'a> {
 impl<'iter> CursorIteratorInner for CursorToKeyIter<'iter> {
     fn init_cursor<'a, 'b: 'a>(&'a self, cursor: & mut Cursor<'b>) -> bool {
         let ok = cursor.to_first().is_ok();
-        ok && curr_cursor_lte(cursor, &self.end_key, false)
+        ok && cursor.cmp_key_or(&self.end_key, Ordering::Greater) == Ordering::Less
     }
 
     fn move_to_next<'i, 'c: 'i>(&'i self, cursor: &'c mut Cursor<'c>) -> bool {
@@ -1586,39 +1635,7 @@ impl<'iter> CursorIteratorInner for CursorToKeyIter<'iter> {
         if !moved {
             false
         } else {
-            curr_cursor_lte(cursor, &self.end_key, false)
-        }
-    }
-}
-
-/// Determines whether `cursor.get_plain().key` is less than or equal
-/// to `key` (where the inclusiveness depends on the `inclusive`
-/// parameter).
-fn curr_cursor_lte(c: &mut Cursor, key: &MdbValue, inclusive: bool) -> bool {
-    // As `get_plain` borrows mutably there is no
-    // way to get comparison straight after
-    // so here goes the workaround
-    let k = match c.get_plain() {
-        Err(_) => None,
-        Ok((k, _)) => {
-            Some(MdbValue {
-                value: k.value,
-                marker: ::std::marker::PhantomData
-            })
-        }
-    };
-
-    match k {
-        None => false,
-        Some(mut k) => {
-            let cmp_res = unsafe {
-                ffi::mdb_cmp(c.txn.handle, c.db,
-                             &mut k.value, mem::transmute(key))
-            };
-            match inclusive {
-                true => cmp_res <= 0, // include key
-                _    => cmp_res < 0, // exclude key
-            }
+            cursor.cmp_key_or(&self.end_key, Ordering::Greater) == Ordering::Less
         }
     }
 }
