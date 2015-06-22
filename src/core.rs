@@ -1303,15 +1303,6 @@ impl<'txn> Cursor<'txn> {
         })
     }
 
-    /// Compares the cursor's current key with the specified other one
-    /// or returns `err_val` if the comparison resulted in an error.
-    /// This method is equivalen to calling
-    /// `cursor.cmp_key(&other).unwrap_or(err_val)`.
-    #[inline]
-    fn cmp_key_or(&mut self, other: &MdbValue, err_val: Ordering) -> Ordering {
-        self.cmp_key(other).unwrap_or(err_val)
-    }
-
     #[inline]
     fn ensure_key_valid(&mut self) -> MdbResult<()> {
         // If key might be invalid simply perform cursor get to be sure
@@ -1568,7 +1559,7 @@ impl<'iter> CursorIteratorInner for CursorKeyRangeIter<'iter> {
         let ok = unsafe {
             cursor.to_gte_key(mem::transmute::<&'a MdbValue<'a>, &'b MdbValue<'b>>(&self.start_key)).is_ok()
         };
-        ok && cursor.cmp_key_or(&self.end_key, Ordering::Greater).is_less(self.end_inclusive)
+        ok && cursor.cmp_key(&self.end_key).is_less(self.end_inclusive)
     }
 
     fn move_to_next<'i, 'c: 'i>(&'i self, cursor: &'c mut Cursor<'c>) -> bool {
@@ -1576,7 +1567,7 @@ impl<'iter> CursorIteratorInner for CursorKeyRangeIter<'iter> {
         if !moved {
             false
         } else {
-            cursor.cmp_key_or(&self.end_key, Ordering::Greater).is_less(self.end_inclusive)
+            cursor.cmp_key(&self.end_key).is_less(self.end_inclusive)
         }
     }
 }
@@ -1627,7 +1618,7 @@ impl<'a> CursorToKeyIter<'a> {
 impl<'iter> CursorIteratorInner for CursorToKeyIter<'iter> {
     fn init_cursor<'a, 'b: 'a>(&'a self, cursor: & mut Cursor<'b>) -> bool {
         let ok = cursor.to_first().is_ok();
-        ok && cursor.cmp_key_or(&self.end_key, Ordering::Greater) == Ordering::Less
+        ok && cursor.cmp_key(&self.end_key).is_less(false)
     }
 
     fn move_to_next<'i, 'c: 'i>(&'i self, cursor: &'c mut Cursor<'c>) -> bool {
@@ -1635,7 +1626,7 @@ impl<'iter> CursorIteratorInner for CursorToKeyIter<'iter> {
         if !moved {
             false
         } else {
-            cursor.cmp_key_or(&self.end_key, Ordering::Greater) == Ordering::Less
+            cursor.cmp_key(&self.end_key).is_less(false)
         }
     }
 }
