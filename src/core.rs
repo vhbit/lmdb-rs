@@ -44,6 +44,7 @@ use libc::{self, c_int, c_uint, size_t, c_void};
 use std;
 use std::borrow::ToOwned;
 use std::cell::{UnsafeCell};
+use std::cmp::{Ordering};
 use std::collections::HashMap;
 use std::error::Error;
 use std::ffi::{CString};
@@ -409,6 +410,17 @@ impl<'a> Database<'a> {
         Ok(wrap)
     }
 
+    /// Returns an iterator through keys `start_key <= x < end_key`. This is, start_key is
+    /// included in the iteration, while end_key is kept excluded.
+    pub fn keyrange_from_to<'c, K: ToMdbValue + 'c>(&'c self, start_key: &'c K, end_key: &'c K)
+                               -> MdbResult<CursorIterator<'c, CursorKeyRangeIter>>
+    {
+        let cursor = try!(self.txn.new_cursor(self.handle));
+        let key_range = CursorKeyRangeIter::new(start_key, end_key, false);
+        let wrap = CursorIterator::wrap(cursor, key_range);
+        Ok(wrap)
+    }
+
     /// Returns an iterator for values between start_key and end_key (included).
     /// Currently it works only for unique keys (i.e. it will skip
     /// multiple items when DB created with ffi::MDB_DUPSORT).
@@ -418,7 +430,7 @@ impl<'a> Database<'a> {
                                -> MdbResult<CursorIterator<'c, CursorKeyRangeIter>>
     {
         let cursor = try!(self.txn.new_cursor(self.handle));
-        let key_range = CursorKeyRangeIter::new(start_key, end_key);
+        let key_range = CursorKeyRangeIter::new(start_key, end_key, true);
         let wrap = CursorIterator::wrap(cursor, key_range);
         Ok(wrap)
     }
@@ -1106,6 +1118,30 @@ impl<'a> ReadonlyTransaction<'a> {
     }
 }
 
+/// Helper to determine the property of "less than or equal to" where
+/// the "equal to" part is to be specified at runtime.
+trait IsLess {
+    fn is_less(&self, or_equal: bool) -> bool;
+}
+
+impl IsLess for Ordering {
+    fn is_less(&self, or_equal: bool) -> bool {
+        match (*self, or_equal) {
+            (Ordering::Less, _) => true,
+            (Ordering::Equal, true) => true,
+            _ => false,
+        }
+    }
+}
+
+impl IsLess for MdbResult<Ordering> {
+    fn is_less(&self, or_equal: bool) -> bool {
+        match *self {
+            Ok(ord) => ord.is_less(or_equal),
+            Err(_) => false,
+        }
+    }
+}
 
 pub struct Cursor<'txn> {
     handle: *mut ffi::MDB_cursor,
@@ -1250,6 +1286,21 @@ impl<'txn> Cursor<'txn> {
         unsafe {
             Ok(FromMdbValue::from_mdb_value(mem::transmute(&k)))
         }
+    }
+
+    /// Compares the cursor's current key with the specified other one.
+    #[inline]
+    fn cmp_key(&mut self, other: &MdbValue) -> MdbResult<Ordering> {
+        let (k, _) = try!(self.get_plain());
+        let mut kval = k.value;
+        let cmp = unsafe {
+            ffi::mdb_cmp(self.txn.handle, self.db, &mut kval, mem::transmute(other))
+        };
+        Ok(match cmp {
+            n if n < 0 => Ordering::Less,
+            n if n > 0 => Ordering::Greater,
+            _          => Ordering::Equal,
+        })
     }
 
     #[inline]
@@ -1487,15 +1538,17 @@ impl<'c, I: CursorIteratorInner + 'c> Iterator for CursorIterator<'c, I> {
 pub struct CursorKeyRangeIter<'a> {
     start_key: MdbValue<'a>,
     end_key: MdbValue<'a>,
+    end_inclusive: bool,
     marker: ::std::marker::PhantomData<&'a ()>,
 }
 
 
 impl<'a> CursorKeyRangeIter<'a> {
-    pub fn new<K: ToMdbValue+'a>(start_key: &'a K, end_key: &'a K) -> CursorKeyRangeIter<'a> {
+    pub fn new<K: ToMdbValue+'a>(start_key: &'a K, end_key: &'a K, end_inclusive: bool) -> CursorKeyRangeIter<'a> {
         CursorKeyRangeIter {
             start_key: start_key.to_mdb_value(),
             end_key: end_key.to_mdb_value(),
+            end_inclusive: end_inclusive,
             marker: ::std::marker::PhantomData,
         }
     }
@@ -1503,9 +1556,10 @@ impl<'a> CursorKeyRangeIter<'a> {
 
 impl<'iter> CursorIteratorInner for CursorKeyRangeIter<'iter> {
     fn init_cursor<'a, 'b: 'a>(&'a self, cursor: & mut Cursor<'b>) -> bool {
-        unsafe {
+        let ok = unsafe {
             cursor.to_gte_key(mem::transmute::<&'a MdbValue<'a>, &'b MdbValue<'b>>(&self.start_key)).is_ok()
-        }
+        };
+        ok && cursor.cmp_key(&self.end_key).is_less(self.end_inclusive)
     }
 
     fn move_to_next<'i, 'c: 'i>(&'i self, cursor: &'c mut Cursor<'c>) -> bool {
@@ -1513,33 +1567,10 @@ impl<'iter> CursorIteratorInner for CursorKeyRangeIter<'iter> {
         if !moved {
             false
         } else {
-            // As `get_plain` borrows mutably there is no
-            // way to get comparison straight after
-            // so here goes the workaround
-            let k = match cursor.get_plain() {
-                Err(_) => None,
-                Ok((k, _)) => {
-                    Some(MdbValue {
-                        value: k.value,
-                        marker: ::std::marker::PhantomData
-                    })
-                }
-            };
-
-            match k {
-                None => false,
-                Some(mut k) => {
-                    let cmp_res = unsafe {
-                        ffi::mdb_cmp(cursor.txn.handle, cursor.db,
-                                     &mut k.value, mem::transmute(&self.end_key.value))
-                    };
-                    cmp_res <= 0 // include end key
-                }
-            }
+            cursor.cmp_key(&self.end_key).is_less(self.end_inclusive)
         }
     }
 }
-
 
 pub struct CursorFromKeyIter<'a> {
     start_key: MdbValue<'a>,
@@ -1586,7 +1617,8 @@ impl<'a> CursorToKeyIter<'a> {
 
 impl<'iter> CursorIteratorInner for CursorToKeyIter<'iter> {
     fn init_cursor<'a, 'b: 'a>(&'a self, cursor: & mut Cursor<'b>) -> bool {
-        cursor.to_first().is_ok()
+        let ok = cursor.to_first().is_ok();
+        ok && cursor.cmp_key(&self.end_key).is_less(false)
     }
 
     fn move_to_next<'i, 'c: 'i>(&'i self, cursor: &'c mut Cursor<'c>) -> bool {
@@ -1594,33 +1626,10 @@ impl<'iter> CursorIteratorInner for CursorToKeyIter<'iter> {
         if !moved {
             false
         } else {
-            // As `get_plain` borrows mutably there is no
-            // way to get comparison straight after
-            // so here goes the workaround
-            let k = match cursor.get_plain() {
-                Err(_) => None,
-                Ok((k, _)) => {
-                    Some(MdbValue {
-                        value: k.value,
-                        marker: ::std::marker::PhantomData
-                    })
-                }
-            };
-
-            match k {
-                None => false,
-                Some(mut k) => {
-                    let cmp_res = unsafe {
-                        ffi::mdb_cmp(cursor.txn.handle, cursor.db,
-                                     &mut k.value, mem::transmute(&self.end_key.value))
-                    };
-                    cmp_res < 0
-                }
-            }
+            cursor.cmp_key(&self.end_key).is_less(false)
         }
     }
 }
-
 
 #[allow(missing_copy_implementations)]
 pub struct CursorIter;
