@@ -353,6 +353,11 @@ impl<'a> Database<'a> {
         Database { handle: handle, txn: txn }
     }
 
+    /// Retrieves current db's statistics.
+    pub fn stat(&'a self) -> MdbResult<ffi::MDB_stat> {
+        self.txn.stat(self.handle)
+    }
+
     /// Retrieves a value by key. In case of DbAllowDups it will be the first value
     pub fn get<V: FromMdbValue + 'a>(&'a self, key: &ToMdbValue) -> MdbResult<V> {
         self.txn.get(self.handle, key)
@@ -622,6 +627,7 @@ impl Environment {
         lift_mdb!(unsafe { ffi::mdb_reader_check(self.env.0, &mut dead as *mut c_int)}, dead)
     }
 
+    /// Retrieve environment statistics
     pub fn stat(&self) -> MdbResult<ffi::MDB_stat> {
         let mut tmp: ffi::MDB_stat = unsafe { std::mem::zeroed() };
         lift_mdb!(unsafe { ffi::mdb_env_stat(self.env.0, &mut tmp)}, tmp)
@@ -991,7 +997,7 @@ impl<'a> NativeTransaction<'a> {
         self.del_value(db, key)
     }
 
-    /// creates a new cursor in current transaction tied to db
+    /// Creates a new cursor in current transaction tied to db
     fn new_cursor(&'a self, db: ffi::MDB_dbi) -> MdbResult<Cursor<'a>> {
         Cursor::new(self, db)
     }
@@ -1011,6 +1017,12 @@ impl<'a> NativeTransaction<'a> {
         unsafe {
             lift_mdb!(ffi::mdb_drop(self.handle, db, 0))
         }
+    }
+
+    /// Retrieves provided database's statistics
+    fn stat(&self, db: ffi::MDB_dbi) -> MdbResult<ffi::MDB_stat> {
+        let mut tmp: ffi::MDB_stat = unsafe { std::mem::zeroed() };
+        lift_mdb!(unsafe { ffi::mdb_stat(self.handle, db, &mut tmp)}, tmp)
     }
 
     /*

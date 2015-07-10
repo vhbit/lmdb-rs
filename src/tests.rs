@@ -122,6 +122,46 @@ fn test_multiple_values() {
 }
 
 #[test]
+fn test_stat() {
+    let mut env = EnvBuilder::new()
+        .max_dbs(5)
+        .open(&next_path(), USER_DIR)
+        .unwrap();
+
+    // ~ the two dataset; each to end up in its own database
+    let dss = [
+        // ~ keep the "default db" dataset here at the beginning (see
+        // the assertion at the end of this test)
+        ("", vec![("default", "db"), ("has", "some"), ("extras", "prepared")]),
+        ("db1", vec![("foo", "bar"), ("quux", "qak")]),
+        ("db2", vec![("a", "abc"), ("b", "bcd"), ("c", "cde"), ("d", "def")]),
+        ("db3", vec![("hip", "hop")])];
+
+    // ~ create each db, populate it, and assert db.stat() for each seperately
+    for &(name, ref ds) in &dss {
+        let db = env.create_db(name, DbFlags::empty()).unwrap();
+        let tx = env.new_transaction().unwrap();
+        {
+            let db = tx.bind(&db);
+            for &(k, v) in ds {
+                assert!(db.set(&k, &v).is_ok());
+            }
+            // ~ verify the expected number of entries (key/value pairs) in the db
+            let stat = db.stat().unwrap();
+            assert_eq!(ds.len() as u64, stat.ms_entries);
+        }
+        tx.commit().unwrap();
+    }
+
+    // ~ now verify the number of data items in this _environment_ (this
+    // is the number key/value pairs in the default database plus the
+    // number of other databases)
+    let stat = env.stat().unwrap();
+    assert_eq!(dss[0].1.len() as u64 + dss[1..].len() as u64, stat.ms_entries);
+}
+
+
+#[test]
 fn test_cursors() {
     let mut env = EnvBuilder::new()
         .max_dbs(5)
