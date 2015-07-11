@@ -1,0 +1,23 @@
+
+
+general:
+  branches:
+    ignore:
+      - gh-pages
+
+checkout:
+  post:
+    - git submodule sync
+    - git submodule update --init --recursive
+
+dependencies:
+  pre:
+    - curl -sS https://static.rust-lang.org/rustup.sh > rustup.sh
+    - chmod +x ./rustup.sh
+    - ./rustup.sh --yes
+
+test:
+  override:
+    - cargo test -j4 --verbose
+  post:
+    - cargo doc -j4 --verbose --no-deps
