@@ -1,6 +1,6 @@
 [package]
 name = "liblmdb-sys"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Valerii Hiora <valerii.hiora@gmail.com>"]
 links = "lmdb"
 license = "MIT"
