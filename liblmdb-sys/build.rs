@@ -76,6 +76,11 @@ fn cflags() -> String {
         if !target.contains("i686") {
             cflags.push_str(" -fPIC");
         }
+
+        if target.contains("dragonfly") {
+            cflags.push_str(" -DMDB_DSYNC=O_SYNC");
+            cflags.push_str(" -Dfdatasync=fsync");
+        }
     }
 
     cflags
