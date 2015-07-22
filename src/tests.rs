@@ -122,6 +122,35 @@ fn test_multiple_values() {
 }
 
 #[test]
+fn test_insert_values() {
+    let env = EnvBuilder::new()
+        .max_dbs(5)
+        .open(&next_path(), USER_DIR)
+        .unwrap();
+
+    let db = env.get_default_db(DbFlags::empty()).unwrap();
+    let txn = env.new_transaction().unwrap();
+    let db = txn.bind(&db);
+
+    let test_key1 = "key1";
+    let test_data1 = "value1";
+    let test_data2 = "value2";
+
+    assert!(db.get::<()>(&test_key1).is_err(), "Key shouldn't exist yet");
+
+    assert!(db.set(&test_key1, &test_data1).is_ok());
+    let v = db.get::<&str>(&test_key1).unwrap();
+    assert!(v == test_data1, "Data written differs from data read");
+
+    assert!(db.insert(&test_key1, &test_data2).is_err(), "Inserting should fail if key exists");
+
+    assert!(db.del(&test_key1).is_ok());
+    assert!(db.get::<()>(&test_key1).is_err(), "Key should be deleted");
+
+    assert!(db.insert(&test_key1, &test_data2).is_ok(), "Inserting should succeed");
+}
+
+#[test]
 fn test_stat() {
     let env = EnvBuilder::new()
         .max_dbs(5)
