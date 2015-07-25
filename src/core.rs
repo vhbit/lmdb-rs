@@ -415,6 +415,11 @@ impl<'a> Database<'a> {
         self.txn.set(self.handle, key, value)
     }
 
+    /// Set value for key. Fails if key already exists, even when duplicates are allowed.
+    pub fn insert<K: ToMdbValue, V: ToMdbValue>(&self, key: &K, value: &V) -> MdbResult<()> {
+        self.txn.insert(self.handle, key, value)
+    }
+
     /// Deletes value for key.
     pub fn del<K: ToMdbValue>(&self, key: &K) -> MdbResult<()> {
         self.txn.del(self.handle, key)
@@ -1010,6 +1015,13 @@ impl<'a> NativeTransaction<'a> {
     fn set(&self, db: ffi::MDB_dbi, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TransactionState::Normal);
         self.set_value(db, key, value)
+    }
+
+    /// Set the value for key only if the key does not exist in the database,
+    /// even if the database supports duplicates.
+    fn insert(&self, db: ffi::MDB_dbi, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
+        assert_state_eq!(txn, self.state, TransactionState::Normal);
+        self.set_value_with_flags(db, key, value, ffi::MDB_NOOVERWRITE)
     }
 
     /// Deletes all values by key
