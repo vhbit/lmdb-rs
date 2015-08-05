@@ -558,13 +558,16 @@ impl EnvBuilder {
 
     /// Opens environment in specified path
     pub fn open(self, path: &Path, perms: u32) -> MdbResult<Environment> {
+        let changeable_flags: EnvCreateFlags = EnvCreataMapAsync | EnvCreateNoMemInit | EnvCreateNoSync | EnvCreateNoMetaSync;
+
         let env: *mut ffi::MDB_env = ptr::null_mut();
         unsafe {
             let p_env: *mut *mut ffi::MDB_env = std::mem::transmute(&env);
             let _ = try_mdb!(ffi::mdb_env_create(p_env));
         }
 
-        try_mdb!(unsafe { ffi::mdb_env_set_flags(env, self.flags.bits(), 1)});
+        // Enable only flags which can be changed, otherwise it'll fail
+        try_mdb!(unsafe { ffi::mdb_env_set_flags(env, self.flags.bits() & changeable_flags.bits(), 1)});
 
         if let Some(map_size) = self.map_size {
             try_mdb!(unsafe { ffi::mdb_env_set_mapsize(env, map_size as size_t)});
@@ -587,7 +590,8 @@ impl EnvBuilder {
             // let c_path = path.as_os_str().to_cstring().unwrap();
             let path_str = try!(path.to_str().ok_or(MdbError::InvalidPath));
             let c_path = try!(CString::new(path_str).map_err(|_| MdbError::InvalidPath));
-            ffi::mdb_env_open(mem::transmute(env), c_path.as_ptr(), self.flags.bits,
+
+            ffi::mdb_env_open(mem::transmute(env), c_path.as_ptr(), self.flags.bits(),
                               perms as libc::mode_t)
         };
 

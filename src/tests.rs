@@ -630,6 +630,19 @@ fn test_keyrange_from_to() {
     }
 }
 
+#[test]
+fn test_readonly_env() {
+    let path = next_path();
+    {
+        let rw_env = EnvBuilder::new().open(&path, USER_DIR);
+        assert!(rw_env.is_ok());
+    }
+
+    let env = EnvBuilder::new().flags(core::EnvCreateReadOnly).open(&path, USER_DIR);
+    assert!(env.is_ok());
+}
+
+
 /*
 #[test]
 fn test_compilation_of_moved_items() {
