@@ -585,6 +585,8 @@ impl EnvBuilder {
             let _ = try!(EnvBuilder::check_path(path, self.flags));
         }
 
+        let is_readonly = self.flags.contains(EnvCreateReadOnly);
+
         let res = unsafe {
             // FIXME: revert back once `convert` is stable
             // let c_path = path.as_os_str().to_cstring().unwrap();
@@ -598,7 +600,7 @@ impl EnvBuilder {
         drop(self);
         match res {
             ffi::MDB_SUCCESS => {
-                Ok(Environment::from_raw(env))
+                Ok(Environment::from_raw(env, is_readonly))
             },
             _ => {
                 unsafe { ffi::mdb_env_close(mem::transmute(env)); }
@@ -656,6 +658,7 @@ impl Drop for EnvHandle {
 pub struct Environment {
     env: Arc<EnvHandle>,
     db_cache: Arc<Mutex<UnsafeCell<HashMap<String, ffi::MDB_dbi>>>>,
+    is_readonly: bool, // true if opened in 'read-only' mode
 }
 
 impl Environment {
@@ -663,10 +666,11 @@ impl Environment {
         EnvBuilder::new()
     }
 
-    fn from_raw(env: *mut ffi::MDB_env) -> Environment {
+    fn from_raw(env: *mut ffi::MDB_env, is_readonly: bool) -> Environment {
         Environment {
             env: Arc::new(EnvHandle(env)),
             db_cache: Arc::new(Mutex::new(UnsafeCell::new(HashMap::new()))),
+            is_readonly: is_readonly,
         }
     }
 
@@ -766,6 +770,9 @@ impl Environment {
     ///
     /// Use `get_reader` to get much faster lock-free alternative
     pub fn new_transaction(&self) -> MdbResult<Transaction> {
+        if self.is_readonly {
+            return Err(MdbError::StateError("Error: creating read-write transaction in read-only environment".to_owned()))
+        }
         self.create_transaction(None, 0)
             .and_then(|txn| Ok(Transaction::new_with_native(txn)))
     }
@@ -777,7 +784,7 @@ impl Environment {
     }
 
     fn _open_db(&self, db_name: & str, flags: DbFlags, force_creation: bool) -> MdbResult<ffi::MDB_dbi> {
-        debug!("Opening {} (create={})", db_name, force_creation);
+        debug!("Opening {} (create={}, read_only={})", db_name, force_creation, self.is_readonly);
         // From LMDB docs for mdb_dbi_open:
         //
         // This function must not be called from multiple concurrent
@@ -797,7 +804,10 @@ impl Environment {
                     }
                 }
 
-                let mut txn = try!(self.create_transaction(None, 0));
+                let mut txn = {
+                    let txflags = if self.is_readonly { ffi::MDB_RDONLY } else { 0 };
+                    try!(self.create_transaction(None, txflags))
+                };
                 let opt_name = if db_name.len() > 0 {Some(db_name)} else {None};
                 let flags = if force_creation {flags | DbCreate} else {flags - DbCreate};
 
@@ -875,7 +885,8 @@ impl Clone for Environment {
     fn clone(&self) -> Environment {
         Environment {
             env: self.env.clone(),
-            db_cache: self.db_cache.clone()
+            db_cache: self.db_cache.clone(),
+            is_readonly: self.is_readonly,
         }
     }
 }

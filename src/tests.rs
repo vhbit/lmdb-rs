@@ -632,14 +632,38 @@ fn test_keyrange_from_to() {
 
 #[test]
 fn test_readonly_env() {
+    let recs: Vec<(u32,u32)> = vec![(10, 11), (11, 12), (12, 13), (13,14)];
+
+    // ~ first create a new read-write environment with its default
+    // database containing a few entries
     let path = next_path();
     {
-        let rw_env = EnvBuilder::new().open(&path, USER_DIR);
-        assert!(rw_env.is_ok());
+        let rw_env = EnvBuilder::new().open(&path, USER_DIR).unwrap();
+        let dbh = rw_env.get_default_db(core::DbIntKey).unwrap();
+        let tx = rw_env.new_transaction().unwrap();
+        {
+            let db = tx.bind(&dbh);
+            for &rec in recs.iter() {
+                db.set(&rec.0, &rec.1).unwrap();
+            }
+        }
+        tx.commit().unwrap();
     }
 
-    let env = EnvBuilder::new().flags(core::EnvCreateReadOnly).open(&path, USER_DIR);
-    assert!(env.is_ok());
+    // ~ now re-open the previously created database in read-only mode
+    // and iterate the key/value pairs
+    let ro_env = EnvBuilder::new()
+        .flags(core::EnvCreateReadOnly)
+        .open(&path, USER_DIR).unwrap();
+    let dbh = ro_env.get_default_db(core::DbIntKey).unwrap();
+    assert!(ro_env.new_transaction().is_err());
+    let mut tx = ro_env.get_reader().unwrap();
+    {
+        let db = tx.bind(&dbh);
+        let kvs: Vec<(u32,u32)> = db.iter().unwrap().map(|c| c.get()).collect();
+        assert_eq!(recs, kvs);
+    }
+    tx.abort();
 }
 
 
