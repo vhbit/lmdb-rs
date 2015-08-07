@@ -632,14 +632,48 @@ fn test_keyrange_from_to() {
 
 #[test]
 fn test_readonly_env() {
-    let path = next_path();
-    {
-        let rw_env = EnvBuilder::new().open(&path, USER_DIR);
-        assert!(rw_env.is_ok());
+    // ~ assert the given condition evaluates to `Ok(x)` and result in `x`.
+    macro_rules! assert_ok {
+        ($cond:expr) => {
+            match $cond {
+                Ok(x) => x,
+                Err(_) => panic!(concat!("assertion failed: ", stringify!($cond))),
+            };
+        }
     }
 
-    let env = EnvBuilder::new().flags(core::EnvCreateReadOnly).open(&path, USER_DIR);
-    assert!(env.is_ok());
+    let recs: Vec<(u32,u32)> = vec![(10, 11), (11, 12), (12, 13), (13,14)];
+
+    // ~ first create a new read-write environment with its default
+    // database containing a few entries
+    let path = next_path();
+    {
+        let rw_env = assert_ok!(EnvBuilder::new().open(&path, USER_DIR));
+        let dbh = assert_ok!(rw_env.get_default_db(core::DbIntKey));
+        let tx = assert_ok!(rw_env.new_transaction());
+        {
+            let db = tx.bind(&dbh);
+            for &rec in recs.iter() {
+                assert_ok!(db.set(&rec.0, &rec.1));
+            }
+        }
+        assert_ok!(tx.commit());
+    }
+
+    // ~ now re-open the previously created database in read-only mode
+    // and iterate the key/value pairs
+    let ro_env = assert_ok!(EnvBuilder::new()
+                            .flags(core::EnvCreateReadOnly)
+                            .open(&path, USER_DIR));
+    let dbh = assert_ok!(ro_env.get_default_db(core::DbIntKey));
+    assert_eq!(false, ro_env.new_transaction().is_ok());
+    let mut tx = assert_ok!(ro_env.get_reader());
+    {
+        let db = tx.bind(&dbh);
+        let kvs: Vec<(u32,u32)> = assert_ok!(db.iter()).map(|c| c.get()).collect();
+        assert_eq!(recs, kvs);
+    }
+    tx.abort();
 }
 
 
