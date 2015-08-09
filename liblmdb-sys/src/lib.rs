@@ -36,26 +36,21 @@ pub type MDB_cmp_func = fn(*const MDB_val, *const MDB_val) -> c_int;
 #[derive(Copy, Clone)]
 #[allow(raw_pointer_derive)]
 #[repr(C)]
-
 pub struct MDB_val {
     pub mv_size: size_t,
     pub mv_data: *const c_void,
 }
 
-#[repr(C)]
 #[allow(missing_copy_implementations)]
-pub struct MDB_env;
+pub enum MDB_env {}
 
-#[repr(C)]
 #[allow(missing_copy_implementations)]
-pub struct MDB_txn;
+pub enum MDB_txn {}
 
-#[repr(C)]
 #[allow(missing_copy_implementations)]
-pub struct MDB_cursor;
+pub enum MDB_cursor {}
 
 #[repr(C)]
-
 #[derive(Copy, Clone)]
 pub struct MDB_stat {
     pub ms_psize: c_uint,
@@ -67,7 +62,6 @@ pub struct MDB_stat {
 }
 
 #[repr(C)]
-
 #[allow(missing_copy_implementations)]
 pub struct MDB_envinfo {
     pub me_mapaddr: *const c_void,
