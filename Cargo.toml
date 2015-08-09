@@ -1,6 +1,6 @@
 [package]
 name = "lmdb-rs"
-version = "0.4.3"
+version = "0.4.4"
 authors = ["Valerii Hiora <valerii.hiora@gmail.com>"]
 license = "MIT"
 description = "LMDB bindings"
@@ -16,7 +16,7 @@ exclude = [
 
 [dependencies.liblmdb-sys]
 path = "liblmdb-sys"
-version = "0.1.6"
+version = "0.1.7"
 
 [dependencies]
 log = "0.3"
