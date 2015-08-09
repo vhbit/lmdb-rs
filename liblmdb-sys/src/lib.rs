@@ -29,9 +29,9 @@ mod os {
 
 pub type MDB_dbi = c_uint;
 
-pub type MDB_rel_func = fn(*const MDB_val, *const c_void, *const c_void, *const c_void);
-pub type MDB_msg_func = fn(*const c_char, *const c_void) -> c_int;
-pub type MDB_cmp_func = fn(*const MDB_val, *const MDB_val) -> c_int;
+pub type MDB_rel_func = extern fn(*const MDB_val, *const c_void, *const c_void, *const c_void);
+pub type MDB_msg_func = extern fn(*const c_char, *const c_void) -> c_int;
+pub type MDB_cmp_func = extern fn(*const MDB_val, *const MDB_val) -> c_int;
 
 #[derive(Copy, Clone)]
 #[allow(raw_pointer_derive)]
