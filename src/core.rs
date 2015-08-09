@@ -585,6 +585,8 @@ impl EnvBuilder {
             let _ = try!(EnvBuilder::check_path(path, self.flags));
         }
 
+        let read_only = self.flags.contains(EnvCreateReadOnly);
+
         let res = unsafe {
             // FIXME: revert back once `convert` is stable
             // let c_path = path.as_os_str().to_cstring().unwrap();
@@ -598,7 +600,7 @@ impl EnvBuilder {
         drop(self);
         match res {
             ffi::MDB_SUCCESS => {
-                Ok(Environment::from_raw(env))
+                Ok(Environment::from_raw(env, read_only))
             },
             _ => {
                 unsafe { ffi::mdb_env_close(mem::transmute(env)); }
@@ -656,6 +658,7 @@ impl Drop for EnvHandle {
 pub struct Environment {
     env: Arc<EnvHandle>,
     db_cache: Arc<Mutex<UnsafeCell<HashMap<String, ffi::MDB_dbi>>>>,
+    read_only: bool, // true if opened in 'read-only' mode
 }
 
 impl Environment {
@@ -663,10 +666,11 @@ impl Environment {
         EnvBuilder::new()
     }
 
-    fn from_raw(env: *mut ffi::MDB_env) -> Environment {
+    fn from_raw(env: *mut ffi::MDB_env, read_only: bool) -> Environment {
         Environment {
             env: Arc::new(EnvHandle(env)),
             db_cache: Arc::new(Mutex::new(UnsafeCell::new(HashMap::new()))),
+            read_only: read_only,
         }
     }
 
@@ -777,7 +781,7 @@ impl Environment {
     }
 
     fn _open_db(&self, db_name: & str, flags: DbFlags, force_creation: bool) -> MdbResult<ffi::MDB_dbi> {
-        debug!("Opening {} (create={})", db_name, force_creation);
+        debug!("Opening {} (create={}, read_only={})", db_name, force_creation, self.read_only);
         // From LMDB docs for mdb_dbi_open:
         //
         // This function must not be called from multiple concurrent
@@ -797,7 +801,10 @@ impl Environment {
                     }
                 }
 
-                let mut txn = try!(self.create_transaction(None, 0));
+                let mut txn = {
+                    let txflags = if self.read_only { ffi::MDB_RDONLY } else { 0 };
+                    try!(self.create_transaction(None, txflags))
+                };
                 let opt_name = if db_name.len() > 0 {Some(db_name)} else {None};
                 let flags = if force_creation {flags | DbCreate} else {flags - DbCreate};
 
@@ -875,7 +882,8 @@ impl Clone for Environment {
     fn clone(&self) -> Environment {
         Environment {
             env: self.env.clone(),
-            db_cache: self.db_cache.clone()
+            db_cache: self.db_cache.clone(),
+            read_only: self.read_only,
         }
     }
 }
