@@ -5,7 +5,11 @@ use std::sync::atomic::{AtomicUsize, ATOMIC_USIZE_INIT, Ordering};
 use std::sync::{Once, ONCE_INIT};
 use std::thread;
 
-use core::{self, EnvBuilder, DbFlags, EnvNoMemInit, EnvNoMetaSync};
+use libc::c_int;
+
+use core::{self, EnvBuilder, DbFlags, MdbValue, EnvNoMemInit, EnvNoMetaSync};
+use ffi::MDB_val;
+use traits::FromMdbValue;
 
 const USER_DIR: u32 = 0o777;
 static TEST_ROOT_DIR: &'static str = "test-dbs";
@@ -666,6 +670,96 @@ fn test_readonly_env() {
     tx.abort();
 }
 
+unsafe fn negative_if_odd_i32_val(val: *const MDB_val) -> i32 {
+    let v = MdbValue::new((*val).mv_data, (*val).mv_size as usize);
+    let i = i32::from_mdb_value(&v);
+    if i % 2 == 0 {
+        i
+    } else {
+        -i
+    }
+}
+
+// A nonsensical comparison function that sorts differently that byte-by-byte comparison
+extern "C" fn negative_odd_cmp_fn(lhs_val: *const MDB_val, rhs_val: *const MDB_val) -> c_int {
+    unsafe {
+        let lhs = negative_if_odd_i32_val(lhs_val);
+        let rhs = negative_if_odd_i32_val(rhs_val);
+        lhs - rhs
+    }
+}
+
+#[test]
+fn test_compare() {
+    let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
+    let db_handle = env.get_default_db(DbFlags::empty()).unwrap();
+    let txn = env.new_transaction().unwrap();
+    let val: i32 = 0;
+    {
+        let db = txn.bind(&db_handle);
+        assert!(db.set_compare(negative_odd_cmp_fn).is_ok());
+
+        let i: i32 = 2;
+        db.set(&i, &val).unwrap();
+        let i: i32 = 3;
+        db.set(&i, &val).unwrap();
+    }
+    assert!(txn.commit().is_ok());
+
+    let txn = env.new_transaction().unwrap();
+    {
+        let db = txn.bind(&db_handle);
+        let i: i32 = 4;
+        db.set(&i, &val).unwrap();
+        let i: i32 = 5;
+        db.set(&i, &val).unwrap();
+    }
+    assert!(txn.commit().is_ok());
+
+    let txn = env.new_transaction().unwrap();
+    {
+        let db = txn.bind(&db_handle);
+        let keys: Vec<_> = db.iter().unwrap().map(|cv| cv.get_key::<i32>()).collect();
+        assert_eq!(keys, [5, 3, 2, 4]);
+    }
+    assert!(txn.commit().is_ok());
+}
+
+#[test]
+fn test_dupsort() {
+    let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
+    let db_handle = env.get_default_db(core::DbAllowDups).unwrap();
+    let txn = env.new_transaction().unwrap();
+    let key: i32 = 0;
+    {
+        let db = txn.bind(&db_handle);
+        assert!(db.set_dupsort(negative_odd_cmp_fn).is_ok());
+
+        let i: i32 = 2;
+        db.set(&key, &i).unwrap();
+        let i: i32 = 3;
+        db.set(&key, &i).unwrap();
+    }
+    assert!(txn.commit().is_ok());
+
+    let txn = env.new_transaction().unwrap();
+    {
+        let db = txn.bind(&db_handle);
+        let i: i32 = 4;
+        db.set(&key, &i).unwrap();
+        let i: i32 = 5;
+        db.set(&key, &i).unwrap();
+    }
+    assert!(txn.commit().is_ok());
+
+    let txn = env.new_transaction().unwrap();
+    {
+        let db = txn.bind(&db_handle);
+        let vals: Vec<_> = db.item_iter(&key).unwrap().map(|cv| cv.get_value::<i32>()).collect();
+        assert_eq!(vals, [5, 3, 2, 4]);
+    }
+    assert!(txn.commit().is_ok());
+}
 
 /*
 #[test]
