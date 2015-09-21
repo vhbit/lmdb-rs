@@ -497,6 +497,25 @@ impl<'a> Database<'a> {
         let inner_iter = CursorItemIter::<'c>::new(key);
         Ok(CursorIterator::<'c>::wrap(cursor, inner_iter))
     }
+
+    /// Sets the compare function for this database.
+    ///
+    /// Setting lasts for the lifetime of the underlying db handle.
+    pub fn set_compare(&self, cmp_fn: extern "C" fn(*const MDB_val, *const MDB_val) -> c_int) -> MdbResult<()> {
+        lift_mdb!(unsafe {
+            ffi::mdb_set_compare(self.txn.handle, self.handle, cmp_fn)
+        })
+    }
+
+    /// Sets the value comparison function for values of the same key in this database.
+    ///
+    /// Only makes sense when DbAllowDups is true.
+    /// Setting lasts for the lifetime of the underlying db handle.
+    pub fn set_dupsort(&self, cmp_fn: extern "C" fn(*const MDB_val, *const MDB_val) -> c_int) -> MdbResult<()> {
+        lift_mdb!(unsafe {
+            ffi::mdb_set_dupsort(self.txn.handle, self.handle, cmp_fn)
+        })
+    }
 }
 
 
