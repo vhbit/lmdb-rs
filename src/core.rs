@@ -411,17 +411,17 @@ impl<'a> Database<'a> {
     }
 
     /// Sets value for key. In case of DbAllowDups it will add a new item
-    pub fn set<K: ToMdbValue, V: ToMdbValue>(&self, key: &K, value: &V) -> MdbResult<()> {
+    pub fn set(&self, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
         self.txn.set(self.handle, key, value)
     }
 
     /// Set value for key. Fails if key already exists, even when duplicates are allowed.
-    pub fn insert<K: ToMdbValue, V: ToMdbValue>(&self, key: &K, value: &V) -> MdbResult<()> {
+    pub fn insert(&self, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
         self.txn.insert(self.handle, key, value)
     }
 
     /// Deletes value for key.
-    pub fn del<K: ToMdbValue>(&self, key: &K) -> MdbResult<()> {
+    pub fn del(&self, key: &ToMdbValue) -> MdbResult<()> {
         self.txn.del(self.handle, key)
     }
 
