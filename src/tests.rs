@@ -719,15 +719,8 @@ fn test_compare() {
     let txn = env.new_transaction().unwrap();
     {
         let db = txn.bind(&db_handle);
-        let mut cursor = db.new_cursor().unwrap();
-        assert!(cursor.to_first().is_ok());
-
-        let first_key = cursor.get_key::<i32>().unwrap();
-        assert!(first_key == 5);
-
-        assert!(cursor.to_next_key().is_ok());
-        let second_key = cursor.get_key::<i32>().unwrap();
-        assert!(second_key == 3);
+        let keys: Vec<_> = db.iter().unwrap().map(|cv| cv.get_key::<i32>()).collect();
+        assert_eq!(keys, [5, 3, 2, 4]);
     }
     assert!(txn.commit().is_ok());
 }
@@ -762,15 +755,8 @@ fn test_dupsort() {
     let txn = env.new_transaction().unwrap();
     {
         let db = txn.bind(&db_handle);
-        let mut cursor = db.new_cursor().unwrap();
-        assert!(cursor.to_first().is_ok());
-
-        let first_val = cursor.get_value::<i32>().unwrap();
-        assert!(first_val == 5);
-
-        assert!(cursor.to_next_item().is_ok());
-        let second_val = cursor.get_value::<i32>().unwrap();
-        assert!(second_val == 3);
+        let vals: Vec<_> = db.item_iter(&key).unwrap().map(|cv| cv.get_value::<i32>()).collect();
+        assert_eq!(vals, [5, 3, 2, 4]);
     }
     assert!(txn.commit().is_ok());
 }
