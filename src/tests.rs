@@ -671,7 +671,7 @@ fn test_readonly_env() {
 }
 
 unsafe fn negative_if_odd_i32_val(val: *const MDB_val) -> i32 {
-    let v = MdbValue::new((*val).mv_data, (*val).mv_size as usize);
+    let v = MdbValue::from_raw(val);
     let i = i32::from_mdb_value(&v);
     if i % 2 == 0 {
         i

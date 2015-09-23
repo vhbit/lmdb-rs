@@ -72,7 +72,7 @@ impl<'a> ToMdbValue for &'a [u8] {
 impl ToMdbValue for MDB_val {
     fn to_mdb_value<'a>(&'a self) -> MdbValue<'a> {
         unsafe {
-            MdbValue::new((*self).mv_data, (*self).mv_size as usize)
+            MdbValue::from_raw(self)
         }
     }
 }

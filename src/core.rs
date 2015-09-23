@@ -1798,6 +1798,7 @@ pub struct MdbValue<'a> {
 }
 
 impl<'a> MdbValue<'a> {
+    #[inline]
     pub unsafe fn new(data: *const c_void, len: usize) -> MdbValue<'a> {
         MdbValue {
             value: MDB_val {
@@ -1808,16 +1809,24 @@ impl<'a> MdbValue<'a> {
         }
     }
 
+    #[inline]
+    pub unsafe fn from_raw(mdb_val: *const ffi::MDB_val) -> MdbValue<'a> {
+        MdbValue::new((*mdb_val).mv_data, (*mdb_val).mv_size as usize)
+    }
+
+    #[inline]
     pub fn new_from_sized<T>(data: &'a T) -> MdbValue<'a> {
         unsafe {
             MdbValue::new(mem::transmute(data), mem::size_of::<T>())
         }
     }
 
+    #[inline]
     pub unsafe fn get_ref(&'a self) -> *const c_void {
         self.value.mv_data
     }
 
+    #[inline]
     pub fn get_size(&self) -> usize {
         self.value.mv_size as usize
     }
