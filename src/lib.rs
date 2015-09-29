@@ -8,7 +8,8 @@ extern crate libc;
 
 extern crate liblmdb_sys as ffi;
 
-pub use ffi::{mdb_filehandle_t, MDB_stat, MDB_envinfo};
+pub use libc::c_int;
+pub use ffi::{mdb_filehandle_t, MDB_stat, MDB_envinfo, MDB_val};
 pub use core::{EnvBuilder, Environment, EnvFlags, EnvCreateFlags};
 pub use core::{Database, DbFlags, DbHandle};
 pub use core::{Transaction, ReadonlyTransaction, MdbError, MdbValue};
