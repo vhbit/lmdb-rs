@@ -7,7 +7,7 @@ use std::thread;
 
 use libc::c_int;
 
-use core::{self, EnvBuilder, DbFlags, MdbValue, EnvNoMemInit, EnvNoMetaSync};
+use core::{self, EnvBuilder, DbFlags, MdbValue, EnvNoMemInit, EnvNoMetaSync, KeyExists};
 use ffi::MDB_val;
 use traits::FromMdbValue;
 
@@ -123,6 +123,40 @@ fn test_multiple_values() {
     assert!(db.del(&test_key1).is_ok());
 
     assert!(db.get::<()>(&test_key1).is_err(), "Key shouldn't exist anymore!");
+}
+
+#[test]
+fn test_append_duplicate() {
+    let env = EnvBuilder::new()
+        .max_dbs(5)
+        .open(&next_path(), USER_DIR)
+        .unwrap();
+
+    let db = env.get_default_db(core::DbAllowDups).unwrap();
+    let txn = env.new_transaction().unwrap();
+    let db = txn.bind(&db);
+
+    let test_key1 = "key1";
+    let test_data1 = "value1";
+    let test_data2 = "value2";
+
+    assert!(db.append(&test_key1, &test_data1).is_ok());
+    let v = db.get::<&str>(&test_key1).unwrap();
+    assert!(v == test_data1, "Data written differs from data read");
+
+    assert!(db.append_duplicate(&test_key1, &test_data2).is_ok());
+    let v = db.get::<&str>(&test_key1).unwrap();
+    assert!(v == test_data1, "It should still return first value");
+
+    assert!(db.del_item(&test_key1, &test_data1).is_ok());
+
+    let v = db.get::<&str>(&test_key1).unwrap();
+    assert!(v == test_data2, "It should return second value");
+
+    match db.append_duplicate(&test_key1, &test_data1).err().unwrap() {
+        KeyExists => (),
+        _ => panic!("Expected KeyExists error")
+    }
 }
 
 #[test]

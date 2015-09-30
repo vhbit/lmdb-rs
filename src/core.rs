@@ -415,6 +415,20 @@ impl<'a> Database<'a> {
         self.txn.set(self.handle, key, value)
     }
 
+    /// Appends new key-value pair to database, starting a new page instead of splitting an
+    /// existing one if necessary. Requires that key be >= all existing keys in the database
+    /// (or will return KeyExists error).
+    pub fn append<K: ToMdbValue, V: ToMdbValue>(&self, key: &K, value: &V) -> MdbResult<()> {
+        self.txn.append(self.handle, key, value)
+    }
+
+    /// Appends new value for the given key (requires DbAllowDups), starting a new page instead
+    /// of splitting an existing one if necessary. Requires that value be >= all existing values
+    /// for the given key (or will return KeyExists error).
+    pub fn append_duplicate<K: ToMdbValue, V: ToMdbValue>(&self, key: &K, value: &V) -> MdbResult<()> {
+        self.txn.append_duplicate(self.handle, key, value)
+    }
+
     /// Set value for key. Fails if key already exists, even when duplicates are allowed.
     pub fn insert<K: ToMdbValue, V: ToMdbValue>(&self, key: &K, value: &V) -> MdbResult<()> {
         self.txn.insert(self.handle, key, value)
@@ -1059,12 +1073,21 @@ impl<'a> NativeTransaction<'a> {
 
     /// Sets a new value for key, in case of enabled duplicates
     /// it actually appends a new value
-    // FIXME: add explicit append function
     // FIXME: think about creating explicit separation of
     // all traits for databases with dup keys
     fn set(&self, db: ffi::MDB_dbi, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TransactionState::Normal);
         self.set_value(db, key, value)
+    }
+
+    fn append(&self, db: ffi::MDB_dbi, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
+        assert_state_eq!(txn, self.state, TransactionState::Normal);
+        self.set_value_with_flags(db, key, value, ffi::MDB_APPEND)
+    }
+
+    fn append_duplicate(&self, db: ffi::MDB_dbi, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
+        assert_state_eq!(txn, self.state, TransactionState::Normal);
+        self.set_value_with_flags(db, key, value, ffi::MDB_APPENDDUP)
     }
 
     /// Set the value for key only if the key does not exist in the database,
