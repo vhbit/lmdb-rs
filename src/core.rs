@@ -1362,6 +1362,11 @@ impl<'txn> Cursor<'txn> {
         self.move_to(key, Some(value), ffi::MDB_cursor_op::MDB_GET_BOTH)
     }
 
+    /// Moves cursor to nearest item.
+    pub fn to_gte_item<K, V>(&mut self, key: &K, value: & V) -> MdbResult<()> where K: ToMdbValue, V: ToMdbValue {
+        self.move_to(key, Some(value), ffi::MDB_cursor_op::MDB_GET_BOTH_RANGE)
+    }
+
     /// Moves cursor to next key, i.e. skip items
     /// with duplicate keys
     pub fn to_next_key(&mut self) -> MdbResult<()> {
