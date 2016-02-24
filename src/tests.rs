@@ -795,6 +795,72 @@ fn test_dupsort() {
     assert!(txn.commit().is_ok());
 }
 
+// ~ see #29
+#[test]
+fn test_conversion_to_vecu8() {
+    let rec: (u32, Vec<u8>) = (10, vec![1,2,3,4,5]);
+
+    let path = next_path();
+    let env = EnvBuilder::new().open(&path, USER_DIR).unwrap();
+    let db = env.get_default_db(core::DbIntKey).unwrap();
+
+    // ~ add our test record
+    {
+        let tx = env.new_transaction().unwrap();
+        {
+            let db = tx.bind(&db);
+            db.set(&rec.0, &rec.1).unwrap();
+        }
+        tx.commit().unwrap();
+    }
+
+    // ~ validate the behavior
+    let tx = env.new_transaction().unwrap();
+    {
+        let db = tx.bind(&db);
+        {
+            // ~ now retrieve a Vec<u8> and make sure it is dropped
+            // earlier than our database handle
+            let xs: Vec<u8> = db.get(&rec.0).unwrap();
+            assert_eq!(rec.1, xs);
+        }
+    }
+    tx.abort();
+}
+
+// ~ see #29
+#[test]
+fn test_conversion_to_string() {
+    let rec: (u32, String) = (10, "hello, world".to_owned());
+
+    let path = next_path();
+    let env = EnvBuilder::new().open(&path, USER_DIR).unwrap();
+    let db = env.get_default_db(core::DbIntKey).unwrap();
+
+    // ~ add our test record
+    {
+        let tx = env.new_transaction().unwrap();
+        {
+            let db = tx.bind(&db);
+            db.set(&rec.0, &rec.1).unwrap();
+        }
+        tx.commit().unwrap();
+    }
+
+    // ~ validate the behavior
+    let tx = env.new_transaction().unwrap();
+    {
+        let db = tx.bind(&db);
+        {
+            // ~ now retrieve a String and make sure it is dropped
+            // earlier than our database handle
+            let xs: String = db.get(&rec.0).unwrap();
+            assert_eq!(rec.1, xs);
+        }
+    }
+    tx.abort();
+}
+
 /*
 #[test]
 fn test_compilation_of_moved_items() {
