@@ -97,9 +97,8 @@ impl FromMdbValue for String {
 impl FromMdbValue for Vec<u8> {
     fn from_mdb_value(value: &MdbValue) -> Vec<u8> {
         unsafe {
-            Vec::from_raw_parts(mem::transmute(value.get_ref()),
-                                value.get_size(),
-                                value.get_size())
+            let ptr = mem::transmute(value.get_ref());
+            slice::from_raw_parts(ptr, value.get_size()).to_vec()
         }
     }
 }
