@@ -20,6 +20,6 @@ version = "0.1.9"
 
 [dependencies]
 log = "0.3"
-libc = "0.1"
+libc = "0.2"
 regex = "0.1"
-bitflags = "0.3"
+bitflags = "0.5"
