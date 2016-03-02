@@ -215,7 +215,7 @@ fn test_stat() {
             }
             // ~ verify the expected number of entries (key/value pairs) in the db
             let stat = db.stat().unwrap();
-            assert_eq!(ds.len() as u64, stat.ms_entries);
+            assert_eq!(ds.len() as usize, stat.ms_entries);
         }
         tx.commit().unwrap();
     }
@@ -224,7 +224,7 @@ fn test_stat() {
     // is the number key/value pairs in the default database plus the
     // number of other databases)
     let stat = env.stat().unwrap();
-    assert_eq!(dss[0].1.len() as u64 + dss[1..].len() as u64, stat.ms_entries);
+    assert_eq!(dss[0].1.len() + dss[1..].len(), stat.ms_entries);
 }
 
 

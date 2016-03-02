@@ -1,6 +1,6 @@
 [package]
 name = "liblmdb-sys"
-version = "0.1.9"
+version = "0.2.0"
 authors = ["Valerii Hiora <valerii.hiora@gmail.com>"]
 links = "lmdb"
 license = "MIT"
@@ -9,4 +9,4 @@ repository = "https://github.com/vhbit/lmdb-rs"
 build = "build.rs"
 
 [dependencies]
-libc = "0.1"
+libc = "0.2"
