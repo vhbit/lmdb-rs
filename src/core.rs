@@ -50,7 +50,6 @@ use std::error::Error;
 use std::ffi::{CString};
 use std::path::Path;
 use std::mem;
-use std::os::unix::ffi::{OsStrExt};
 use std::ptr;
 use std::result::Result;
 use std::sync::{Arc, Mutex};
@@ -180,7 +179,7 @@ pub type MdbResult<T> = Result<T, MdbError>;
 bitflags! {
     #[doc = "A set of environment flags which could be changed after opening"]
 
-    pub flags EnvFlags: ::libc::c_uint {
+    pub flags EnvFlags: c_uint {
 
         #[doc="Don't flush system buffers to disk when committing a
         transaction. This optimization means a system crash can
@@ -197,7 +196,7 @@ bitflags! {
         to disk, unless mdb_env_sync() is called. (MDB_MAPASYNC |
         MDB_WRITEMAP) may be preferable. This flag may be changed at
         any time using mdb_env_set_flags()."]
-        const EnvNoSync      = ::ffi::MDB_NOSYNC,
+        const EnvNoSync      = ffi::MDB_NOSYNC,
 
         #[doc="Flush system buffers to disk only once per transaction,
         omit the metadata flush. Defer that until the system flushes
@@ -208,7 +207,7 @@ bitflags! {
         consistency, isolation) but not D (durability) database
         property. This flag may be changed at any time using
         mdb_env_set_flags()."]
-        const EnvNoMetaSync  = ::ffi::MDB_NOMETASYNC,
+        const EnvNoMetaSync  = ffi::MDB_NOMETASYNC,
 
         #[doc="When using MDB_WRITEMAP, use asynchronous flushes to
         disk. As with MDB_NOSYNC, a system crash can then corrupt the
@@ -216,7 +215,7 @@ bitflags! {
         mdb_env_sync() ensures on-disk database integrity until next
         commit. This flag may be changed at any time using
         mdb_env_set_flags()."]
-        const EnvMapAsync    = ::ffi::MDB_MAPASYNC,
+        const EnvMapAsync    = ffi::MDB_MAPASYNC,
 
         #[doc="Don't initialize malloc'd memory before writing to
         unused spaces in the data file. By default, memory for pages
@@ -238,14 +237,14 @@ bitflags! {
         to overwrite all of the memory that was reserved in that
         case. This flag may be changed at any time using
         mdb_env_set_flags()."]
-        const EnvNoMemInit   = ::ffi::MDB_NOMEMINIT
+        const EnvNoMemInit   = ffi::MDB_NOMEMINIT
     }
 }
 
 bitflags! {
     #[doc = "A set of all environment flags"]
 
-    pub flags EnvCreateFlags: ::libc::c_uint {
+    pub flags EnvCreateFlags: c_uint {
         #[doc="Use a fixed address for the mmap region. This flag must be"]
         #[doc=" specified when creating the environment, and is stored persistently"]
         #[doc=" in the environment. If successful, the memory map will always reside"]
@@ -253,13 +252,13 @@ bitflags! {
         #[doc=" in the database will be constant across multiple invocations. This "]
         #[doc="option may not always work, depending on how the operating system has"]
         #[doc=" allocated memory to shared libraries and other uses. The feature is highly experimental."]
-        const EnvCreateFixedMap    = ::ffi::MDB_FIXEDMAP,
+        const EnvCreateFixedMap    = ffi::MDB_FIXEDMAP,
         #[doc="By default, LMDB creates its environment in a directory whose"]
         #[doc=" pathname is given in path, and creates its data and lock files"]
         #[doc=" under that directory. With this option, path is used as-is"]
         #[doc=" for the database main data file. The database lock file is"]
         #[doc=" the path with \"-lock\" appended."]
-        const EnvCreateNoSubDir    = ::ffi::MDB_NOSUBDIR,
+        const EnvCreateNoSubDir    = ffi::MDB_NOSUBDIR,
         #[doc="Don't flush system buffers to disk when committing a"]
         #[doc=" transaction. This optimization means a system crash can corrupt"]
         #[doc=" the database or lose the last transactions if buffers are not"]
@@ -275,11 +274,11 @@ bitflags! {
         #[doc=" disk, unless mdb_env_sync() is called."]
         #[doc=" (MDB_MAPASYNC | MDB_WRITEMAP) may be preferable. This flag"]
         #[doc=" may be changed at any time using mdb_env_set_flags()."]
-        const EnvCreateNoSync      = ::ffi::MDB_NOSYNC,
+        const EnvCreateNoSync      = ffi::MDB_NOSYNC,
         #[doc="Open the environment in read-only mode. No write operations"]
         #[doc=" will be allowed. LMDB will still modify the lock file - except"]
         #[doc=" on read-only filesystems, where LMDB does not use locks."]
-        const EnvCreateReadOnly    = ::ffi::MDB_RDONLY,
+        const EnvCreateReadOnly    = ffi::MDB_RDONLY,
         #[doc="Flush system buffers to disk only once per transaction,"]
         #[doc=" omit the metadata flush. Defer that until the system flushes"]
         #[doc=" files to disk, or next non-MDB_RDONLY commit or mdb_env_sync()."]
@@ -288,20 +287,20 @@ bitflags! {
         #[doc=" preserves the ACI (atomicity, consistency, isolation) but"]
         #[doc=" not D (durability) database property. This flag may be changed"]
         #[doc=" at any time using mdb_env_set_flags()."]
-        const EnvCreateNoMetaSync  = ::ffi::MDB_NOMETASYNC,
+        const EnvCreateNoMetaSync  = ffi::MDB_NOMETASYNC,
         #[doc="Use a writeable memory map unless MDB_RDONLY is set. This is"]
         #[doc="faster and uses fewer mallocs, but loses protection from"]
         #[doc="application bugs like wild pointer writes and other bad updates"]
         #[doc="into the database. Incompatible with nested"]
         #[doc="transactions. Processes with and without MDB_WRITEMAP on the"]
         #[doc="same environment do not cooperate well."]
-        const EnvCreateWriteMap    = ::ffi::MDB_WRITEMAP,
+        const EnvCreateWriteMap    = ffi::MDB_WRITEMAP,
         #[doc="When using MDB_WRITEMAP, use asynchronous flushes to disk. As"]
         #[doc="with MDB_NOSYNC, a system crash can then corrupt the database or"]
         #[doc="lose the last transactions. Calling mdb_env_sync() ensures"]
         #[doc="on-disk database integrity until next commit. This flag may be"]
         #[doc="changed at any time using mdb_env_set_flags()."]
-        const EnvCreataMapAsync    = ::ffi::MDB_MAPASYNC,
+        const EnvCreataMapAsync    = ffi::MDB_MAPASYNC,
         #[doc="Don't use Thread-Local Storage. Tie reader locktable slots to"]
         #[doc="ffi::MDB_txn objects instead of to threads. I.e. mdb_txn_reset()"]
         #[doc="keeps the slot reseved for the ffi::MDB_txn object. A thread may"]
@@ -311,20 +310,20 @@ bitflags! {
         #[doc="option. Such an application must also serialize the write"]
         #[doc="transactions in an OS thread, since LMDB's write locking is"]
         #[doc="unaware of the user threads."]
-        const EnvCreateNoTls       = ::ffi::MDB_NOTLS,
+        const EnvCreateNoTls       = ffi::MDB_NOTLS,
         #[doc="Don't do any locking. If concurrent access is anticipated, the"]
         #[doc="caller must manage all concurrency itself. For proper operation"]
         #[doc="the caller must enforce single-writer semantics, and must ensure"]
         #[doc="that no readers are using old transactions while a writer is"]
         #[doc="active. The simplest approach is to use an exclusive lock so"]
         #[doc="that no readers may be active at all when a writer begins. "]
-        const EnvCreateNoLock      = ::ffi::MDB_NOLOCK,
+        const EnvCreateNoLock      = ffi::MDB_NOLOCK,
         #[doc="Turn off readahead. Most operating systems perform readahead on"]
         #[doc="read requests by default. This option turns it off if the OS"]
         #[doc="supports it. Turning it off may help random read performance"]
         #[doc="when the DB is larger than RAM and system RAM is full. The"]
         #[doc="option is not implemented on Windows."]
-        const EnvCreateNoReadAhead = ::ffi::MDB_NORDAHEAD,
+        const EnvCreateNoReadAhead = ffi::MDB_NORDAHEAD,
         #[doc="Don't initialize malloc'd memory before writing to unused spaces"]
         #[doc="in the data file. By default, memory for pages written to the"]
         #[doc="data file is obtained using malloc. While these pages may be"]
@@ -344,27 +343,27 @@ bitflags! {
         #[doc="MDB_RESERVE is used; the caller is expected to overwrite all of"]
         #[doc="the memory that was reserved in that case. This flag may be"]
         #[doc="changed at any time using mdb_env_set_flags()."]
-        const EnvCreateNoMemInit   = ::ffi::MDB_NOMEMINIT
+        const EnvCreateNoMemInit   = ffi::MDB_NOMEMINIT
     }
 }
 
 bitflags! {
     #[doc = "A set of database flags"]
 
-    pub flags DbFlags: ::libc::c_uint {
+    pub flags DbFlags: c_uint {
         #[doc="Keys are strings to be compared in reverse order, from the"]
         #[doc=" end of the strings to the beginning. By default, Keys are"]
         #[doc=" treated as strings and compared from beginning to end."]
-        const DbReverseKey   = ::ffi::MDB_REVERSEKEY,
+        const DbReverseKey   = ffi::MDB_REVERSEKEY,
         #[doc="Duplicate keys may be used in the database. (Or, from another"]
         #[doc="perspective, keys may have multiple data items, stored in sorted"]
         #[doc="order.) By default keys must be unique and may have only a"]
         #[doc="single data item."]
-        const DbAllowDups    = ::ffi::MDB_DUPSORT,
+        const DbAllowDups    = ffi::MDB_DUPSORT,
         #[doc="Keys are binary integers in native byte order. Setting this"]
         #[doc="option requires all keys to be the same size, typically"]
         #[doc="sizeof(int) or sizeof(size_t)."]
-        const DbIntKey       = ::ffi::MDB_INTEGERKEY,
+        const DbIntKey       = ffi::MDB_INTEGERKEY,
         #[doc="This flag may only be used in combination with"]
         #[doc="ffi::MDB_DUPSORT. This option tells the library that the data"]
         #[doc="items for this database are all the same size, which allows"]
@@ -372,17 +371,17 @@ bitflags! {
         #[doc="items are the same size, the ffi::MDB_GET_MULTIPLE and"]
         #[doc="ffi::MDB_NEXT_MULTIPLE cursor operations may be used to retrieve"]
         #[doc="multiple items at once."]
-        const DbDupFixed     = ::ffi::MDB_DUPFIXED,
+        const DbDupFixed     = ffi::MDB_DUPFIXED,
         #[doc="This option specifies that duplicate data items are also"]
         #[doc="integers, and should be sorted as such."]
-        const DbAllowIntDups = ::ffi::MDB_INTEGERDUP,
+        const DbAllowIntDups = ffi::MDB_INTEGERDUP,
         #[doc="This option specifies that duplicate data items should be"]
         #[doc=" compared as strings in reverse order."]
-        const DbReversedDups = ::ffi::MDB_REVERSEDUP,
+        const DbReversedDups = ffi::MDB_REVERSEDUP,
         #[doc="Create the named database if it doesn't exist. This option"]
         #[doc=" is not allowed in a read-only transaction or a read-only"]
         #[doc=" environment."]
-        const DbCreate       = ::ffi::MDB_CREATE,
+        const DbCreate       = ffi::MDB_CREATE,
     }
 }
 
