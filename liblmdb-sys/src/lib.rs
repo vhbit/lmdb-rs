@@ -11,20 +11,19 @@ use libc::{c_int, c_uint, c_void, c_char, size_t};
 mod os {
     use libc;
 
-    
+
     pub type mdb_mode_t = libc::mode_t;
-    
+
     pub type mdb_filehandle_t = libc::c_int;
 }
 
 #[cfg(target_os = "windows")]
 mod os {
-    use libc::{c_int, c_void};
+    use libc;
 
-    
-    pub type mdb_mode_t = c_int;
-    
-    pub type mdb_filehandle_t = *const c_void;
+    pub type mdb_mode_t = libc::c_int;
+
+    pub type mdb_filehandle_t = libc::c_int;
 }
 
 pub type MDB_dbi = c_uint;

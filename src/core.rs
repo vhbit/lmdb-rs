@@ -40,7 +40,7 @@
 
 #![allow(non_upper_case_globals)]
 
-use libc::{self, c_int, c_uint, size_t, c_void};
+use libc::{c_int, c_uint, size_t, c_void};
 use std;
 use std::borrow::ToOwned;
 use std::cell::{UnsafeCell};
@@ -642,7 +642,7 @@ impl EnvBuilder {
             let c_path = try!(CString::new(path_str).map_err(|_| MdbError::InvalidPath));
 
             ffi::mdb_env_open(mem::transmute(env), c_path.as_ptr(), self.flags.bits(),
-                              perms as libc::mode_t)
+                              perms as ffi::mdb_mode_t)
         };
 
         drop(self);
