@@ -16,9 +16,25 @@ static TEST_ROOT_DIR: &'static str = "test-dbs";
 static NEXT_ID: AtomicUsize = ATOMIC_USIZE_INIT;
 static INIT_DIR_ONCE: Once = ONCE_INIT;
 
+fn global_root() -> PathBuf {
+     let mut path = env::current_exe().unwrap();
+     path.pop(); // chop off exe name
+     path.pop(); // chop off 'debug'
+
+     // If `cargo test` is run manually then our path looks like
+     // `target/debug/foo`, in which case our `path` is already pointing at
+     // `target`. If, however, `cargo test --target $target` is used then the
+     // output is `target/$target/debug/foo`, so our path is pointing at
+     // `target/$target`. Here we conditionally pop the `$target` name.
+     if path.file_name().and_then(|s| s.to_str()) != Some("target") {
+         path.pop();
+     }
+
+     path.join(TEST_ROOT_DIR)
+ }
+
 fn next_path() -> PathBuf {
-    let out_dir = PathBuf::from(&env::var("OUT_DIR").unwrap());
-    let root_dir = out_dir.join(TEST_ROOT_DIR);
+    let root_dir = global_root();
 
     INIT_DIR_ONCE.call_once(|| {
         if let Ok(root_meta) = fs::metadata(root_dir.clone()) {
