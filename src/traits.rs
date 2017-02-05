@@ -52,7 +52,7 @@ impl ToMdbValue for String {
 }
 
 impl<'a> ToMdbValue for &'a str {
-    fn to_mdb_value<'b, 's>(&'s self) -> MdbValue<'b> {
+    fn to_mdb_value<'b>(&'b self) -> MdbValue<'b> {
         unsafe {
             MdbValue::new(mem::transmute(self.as_ptr()),
                           self.len())
