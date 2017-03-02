@@ -746,6 +746,12 @@ impl Environment {
         lift_mdb!(unsafe { ffi::mdb_env_sync(self.env.0, if force {1} else {0})})
     }
 
+    /// Sets map size.
+    /// This can be called after [open](struct.EnvBuilder.html#method.open) if no transactions are active in this process.
+    pub fn set_mapsize(&self, map_size: usize) -> MdbResult<()> {
+        lift_mdb!(unsafe { ffi::mdb_env_set_mapsize(self.env.0, map_size as size_t)})
+    }
+
     /// This one sets only flags which are available for change even
     /// after opening, see also [get_flags](#method.get_flags) and [get_all_flags](#method.get_all_flags)
     pub fn set_flags(&mut self, flags: EnvFlags, turn_on: bool) -> MdbResult<()> {
