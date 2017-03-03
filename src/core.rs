@@ -986,12 +986,12 @@ impl<'a> NativeTransaction<'a> {
     fn commit(&mut self) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TransactionState::Normal);
         debug!("commit txn");
-        try_mdb!(unsafe { ffi::mdb_txn_commit(self.handle) } );
         self.state = if self.is_readonly() {
             TransactionState::Released
         } else {
             TransactionState::Invalid
         };
+        try_mdb!(unsafe { ffi::mdb_txn_commit(self.handle) } );
         Ok(())
     }
 
