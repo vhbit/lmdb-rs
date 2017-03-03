@@ -7,7 +7,7 @@ use std::thread;
 
 use libc::c_int;
 
-use core::{self, EnvBuilder, DbFlags, MdbValue, EnvNoMemInit, EnvNoMetaSync, KeyExists};
+use core::{self, EnvBuilder, DbFlags, MdbValue, EnvNoMemInit, EnvNoMetaSync, KeyExists, MdbError};
 use ffi::MDB_val;
 use traits::FromMdbValue;
 
@@ -202,6 +202,53 @@ fn test_insert_values() {
     assert!(db.get::<()>(&test_key1).is_err(), "Key should be deleted");
 
     assert!(db.insert(&test_key1, &test_data2).is_ok(), "Inserting should succeed");
+}
+
+#[test]
+fn test_resize_map() {
+    use ffi::MDB_MAP_FULL;
+    
+    let env = EnvBuilder::new()
+        .max_dbs(5)
+        .map_size(0x1000u64)
+        .open(&next_path(), USER_DIR)
+        .unwrap();
+
+    let db = env.get_default_db(DbFlags::empty()).unwrap();
+
+    let mut key_idx = 0u64;
+    let test_data: [u8; 0xFF] = [0x5A; 0xFF];
+
+    let mut write_closure = || {
+        let txn = env.new_transaction().unwrap();
+        {
+            let db = txn.bind(&db);
+            let test_key = format!("key_{}", key_idx);
+            try!(db.set(&test_key, &(&test_data[..])));
+        }
+        key_idx += 1;
+        txn.commit()
+    };
+    // write data until running into 'MDB_MAP_FULL' error
+    loop {
+        match write_closure() {
+            Err(MdbError::Other(MDB_MAP_FULL, _)) => { break; }
+            Err(_) => panic!("unexpected db error"),
+            _ => {} // continue
+        }
+    }
+
+    // env should be still ok and resizable
+    assert!(env.set_mapsize(0x100000usize).is_ok(), "Couldn't resize map");
+
+    // next write after resize should not fail
+    let txn = env.new_transaction().unwrap();
+    {
+        let db = txn.bind(&db);
+        let test_key = "different_key";
+        assert!(db.set(&test_key, &(&test_data[..])).is_ok(), "set after resize failed");
+    }
+    assert!(txn.commit().is_ok(), "Commit failed after resizing map");
 }
 
 #[test]
