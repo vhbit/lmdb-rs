@@ -386,6 +386,7 @@ bitflags! {
 }
 
 /// Database
+#[derive(Debug)]
 pub struct Database<'a> {
     handle: ffi::MDB_dbi,
     txn: &'a NativeTransaction<'a>,
@@ -552,7 +553,7 @@ impl<'a> Database<'a> {
 /// changed after opening. By default it tries to create
 /// corresponding dir if it doesn't exist, use `autocreate_dir()`
 /// to override that behavior
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct EnvBuilder {
     flags: EnvCreateFlags,
     max_readers: Option<usize>,
@@ -690,6 +691,7 @@ impl EnvBuilder {
     }
 }
 
+#[derive(Debug)]
 struct EnvHandle(*mut ffi::MDB_env);
 
 impl Drop for EnvHandle {
@@ -703,6 +705,7 @@ impl Drop for EnvHandle {
 }
 
 /// Represents LMDB Environment. Should be opened using `EnvBuilder`
+#[derive(Debug)]
 pub struct Environment {
     env: Arc<EnvHandle>,
     db_cache: Arc<Mutex<UnsafeCell<HashMap<String, ffi::MDB_dbi>>>>,
@@ -946,7 +949,7 @@ impl Clone for Environment {
 }
 
 #[allow(dead_code)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 /// A handle to a database
 ///
 /// It can be cached to avoid opening db on every access
@@ -967,6 +970,7 @@ enum TransactionState {
     Invalid,  // Invalid, no further operation possible
 }
 
+#[derive(Debug)]
 struct NativeTransaction<'a> {
     handle: *mut ffi::MDB_txn,
     env: &'a Environment,
@@ -1176,6 +1180,7 @@ impl<'a> Drop for NativeTransaction<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct Transaction<'a> {
     inner: NativeTransaction<'a>,
 }
@@ -1216,6 +1221,7 @@ impl<'a> Transaction<'a> {
 }
 
 
+#[derive(Debug)]
 pub struct ReadonlyTransaction<'a> {
     inner: NativeTransaction<'a>,
 }
@@ -1282,6 +1288,7 @@ impl IsLess for MdbResult<Ordering> {
     }
 }
 
+#[derive(Debug)]
 pub struct Cursor<'txn> {
     handle: *mut ffi::MDB_cursor,
     data_val: ffi::MDB_val,
@@ -1555,6 +1562,7 @@ impl<'txn> Drop for Cursor<'txn> {
     }
 }
 
+#[derive(Debug)]
 pub struct CursorItemAccessor<'c, 'k, K: 'k> {
     cursor: Cursor<'c>,
     key: &'k K,
@@ -1587,6 +1595,7 @@ impl<'k, 'c: 'k, K: ToMdbValue> CursorItemAccessor<'c, 'k, K> {
 }
 
 
+#[derive(Debug)]
 pub struct CursorValue<'cursor> {
     key: MdbValue<'cursor>,
     value: MdbValue<'cursor>,
@@ -1627,6 +1636,7 @@ pub trait IterateCursor {
 }
 
 
+#[derive(Debug)]
 pub struct CursorIterator<'c, I> {
     inner: I,
     has_data: bool,
@@ -1678,6 +1688,7 @@ impl<'c, I: IterateCursor + 'c> Iterator for CursorIterator<'c, I> {
     }
 }
 
+#[derive(Debug)]
 pub struct CursorKeyRangeIter<'a> {
     start_key: MdbValue<'a>,
     end_key: MdbValue<'a>,
@@ -1714,6 +1725,7 @@ impl<'iter> IterateCursor for CursorKeyRangeIter<'iter> {
     }
 }
 
+#[derive(Debug)]
 pub struct CursorFromKeyIter<'a> {
     start_key: MdbValue<'a>,
     marker: ::std::marker::PhantomData<&'a ()>,
@@ -1742,6 +1754,7 @@ impl<'iter> IterateCursor for CursorFromKeyIter<'iter> {
 }
 
 
+#[derive(Debug)]
 pub struct CursorToKeyIter<'a> {
     end_key: MdbValue<'a>,
     marker: ::std::marker::PhantomData<&'a ()>,
@@ -1774,6 +1787,7 @@ impl<'iter> IterateCursor for CursorToKeyIter<'iter> {
 }
 
 #[allow(missing_copy_implementations)]
+#[derive(Debug)]
 pub struct CursorIter;
 
 
@@ -1788,6 +1802,7 @@ impl<'iter> IterateCursor for CursorIter {
 }
 
 
+#[derive(Debug)]
 pub struct CursorItemIter<'a> {
     key: MdbValue<'a>,
     marker: ::std::marker::PhantomData<&'a ()>,
@@ -1823,7 +1838,7 @@ impl<'iter> IterateCursor for CursorItemIter<'iter> {
 }
 
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct MdbValue<'a> {
     value: MDB_val,
     marker: ::std::marker::PhantomData<&'a ()>,
