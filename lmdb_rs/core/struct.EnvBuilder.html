@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `EnvBuilder` struct in crate `lmdb_rs`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, EnvBuilder">
+
+    <title>lmdb_rs::core::EnvBuilder - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../normalize.css">
+    <link rel="stylesheet" type="text/css" href="../../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc struct">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'><a href='../index.html'>lmdb_rs</a>::<wbr><a href='index.html'>core</a></p><script>window.sidebarCurrent = {name: 'EnvBuilder', ty: 'struct', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content">
+<h1 class='fqn'><span class='in-band'>Struct <a href='../index.html'>lmdb_rs</a>::<wbr><a href='index.html'>core</a>::<wbr><a class="struct" href=''>EnvBuilder</a></span><span class='out-of-band'><span id='render-detail'>
+                   <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                       [<span class='inner'>&#x2212;</span>]
+                   </a>
+               </span><a class='srclink' href='../../src/lmdb_rs/core.rs.html#557-563' title='goto source code'>[src]</a></span></h1>
+<pre class='rust struct'>pub struct EnvBuilder { /* fields omitted */ }</pre><div class='docblock'><p>Constructs environment with settigs which couldn&#39;t be
+changed after opening. By default it tries to create
+corresponding dir if it doesn&#39;t exist, use <code>autocreate_dir()</code>
+to override that behavior</p>
+</div><h2 id='methods'>Methods</h2><h3 class='impl'><span class='in-band'><code>impl <a class="struct" href="../../lmdb_rs/core/struct.EnvBuilder.html" title="struct lmdb_rs::core::EnvBuilder">EnvBuilder</a></code></span><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/lmdb_rs/core.rs.html#565-692' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.new' class="method"><span id='new.v' class='invisible'><code>fn <a href='#method.new' class='fnname'>new</a>() -&gt; <a class="struct" href="../../lmdb_rs/core/struct.EnvBuilder.html" title="struct lmdb_rs::core::EnvBuilder">EnvBuilder</a></code></span></h4>
+<h4 id='method.flags' class="method"><span id='flags.v' class='invisible'><code>fn <a href='#method.flags' class='fnname'>flags</a>(self, flags: <a class="struct" href="../../lmdb_rs/core/struct.EnvCreateFlags.html" title="struct lmdb_rs::core::EnvCreateFlags">EnvCreateFlags</a>) -&gt; <a class="struct" href="../../lmdb_rs/core/struct.EnvBuilder.html" title="struct lmdb_rs::core::EnvBuilder">EnvBuilder</a></code></span></h4>
+<div class='docblock'><p>Sets environment flags</p>
+</div><h4 id='method.max_readers' class="method"><span id='max_readers.v' class='invisible'><code>fn <a href='#method.max_readers' class='fnname'>max_readers</a>(self, max_readers: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.usize.html">usize</a>) -&gt; <a class="struct" href="../../lmdb_rs/core/struct.EnvBuilder.html" title="struct lmdb_rs::core::EnvBuilder">EnvBuilder</a></code></span></h4>
+<div class='docblock'><p>Sets max concurrent readers operating on environment</p>
+</div><h4 id='method.max_dbs' class="method"><span id='max_dbs.v' class='invisible'><code>fn <a href='#method.max_dbs' class='fnname'>max_dbs</a>(self, max_dbs: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.usize.html">usize</a>) -&gt; <a class="struct" href="../../lmdb_rs/core/struct.EnvBuilder.html" title="struct lmdb_rs::core::EnvBuilder">EnvBuilder</a></code></span></h4>
+<div class='docblock'><p>Set max number of databases</p>
+</div><h4 id='method.map_size' class="method"><span id='map_size.v' class='invisible'><code>fn <a href='#method.map_size' class='fnname'>map_size</a>(self, map_size: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u64.html">u64</a>) -&gt; <a class="struct" href="../../lmdb_rs/core/struct.EnvBuilder.html" title="struct lmdb_rs::core::EnvBuilder">EnvBuilder</a></code></span></h4>
+<div class='docblock'><p>Sets max environment size, i.e. size in memory/disk of
+all data</p>
+</div><h4 id='method.autocreate_dir' class="method"><span id='autocreate_dir.v' class='invisible'><code>fn <a href='#method.autocreate_dir' class='fnname'>autocreate_dir</a>(self, autocreate_dir: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.bool.html">bool</a>) -&gt; <a class="struct" href="../../lmdb_rs/core/struct.EnvBuilder.html" title="struct lmdb_rs::core::EnvBuilder">EnvBuilder</a></code></span></h4>
+<div class='docblock'><p>Sets whetever <code>lmdb-rs</code> should try to autocreate dir with default
+permissions on opening (default is true)</p>
+</div><h4 id='method.open' class="method"><span id='open.v' class='invisible'><code>fn <a href='#method.open' class='fnname'>open</a>&lt;P:&nbsp;<a class="trait" href="https://doc.rust-lang.org/nightly/core/convert/trait.AsRef.html" title="trait core::convert::AsRef">AsRef</a>&lt;<a class="struct" href="https://doc.rust-lang.org/nightly/std/path/struct.Path.html" title="struct std::path::Path">Path</a>&gt;&gt;(self, path: P, perms: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u32.html">u32</a>) -&gt; <a class="type" href="../../lmdb_rs/core/type.MdbResult.html" title="type lmdb_rs::core::MdbResult">MdbResult</a>&lt;<a class="struct" href="../../lmdb_rs/core/struct.Environment.html" title="struct lmdb_rs::core::Environment">Environment</a>&gt;</code></span></h4>
+<div class='docblock'><p>Opens environment in specified path</p>
+</div></div><h2 id='implementations'>Trait Implementations</h2><h3 class='impl'><span class='in-band'><code>impl <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Copy.html" title="trait core::marker::Copy">Copy</a> for <a class="struct" href="../../lmdb_rs/core/struct.EnvBuilder.html" title="struct lmdb_rs::core::EnvBuilder">EnvBuilder</a></code></span><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/lmdb_rs/core.rs.html#556' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'></div><h3 class='impl'><span class='in-band'><code>impl <a class="trait" href="https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html" title="trait core::clone::Clone">Clone</a> for <a class="struct" href="../../lmdb_rs/core/struct.EnvBuilder.html" title="struct lmdb_rs::core::EnvBuilder">EnvBuilder</a></code></span><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/lmdb_rs/core.rs.html#556' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.clone' class="method"><span id='clone.v' class='invisible'><code>fn <a href='https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html#tymethod.clone' class='fnname'>clone</a>(&amp;self) -&gt; <a class="struct" href="../../lmdb_rs/core/struct.EnvBuilder.html" title="struct lmdb_rs::core::EnvBuilder">EnvBuilder</a></code></span></h4>
+<div class='docblock'><p>Returns a copy of the value. <a href="https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html#tymethod.clone">Read more</a></p>
+</div><h4 id='method.clone_from' class="method"><span id='clone_from.v' class='invisible'><code>fn <a href='https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html#method.clone_from' class='fnname'>clone_from</a>(&amp;mut self, source: &amp;Self)</code><div class='since' title='Stable since Rust version 1.0.0'>1.0.0</div></span></h4>
+<div class='docblock'><p>Performs copy-assignment from <code>source</code>. <a href="https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html#method.clone_from">Read more</a></p>
+</div></div><h3 class='impl'><span class='in-band'><code>impl <a class="trait" href="https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html" title="trait core::fmt::Debug">Debug</a> for <a class="struct" href="../../lmdb_rs/core/struct.EnvBuilder.html" title="struct lmdb_rs::core::EnvBuilder">EnvBuilder</a></code></span><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/lmdb_rs/core.rs.html#556' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.fmt' class="method"><span id='fmt.v' class='invisible'><code>fn <a href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html#tymethod.fmt' class='fnname'>fmt</a>(&amp;self, __arg_0: &amp;mut <a class="struct" href="https://doc.rust-lang.org/nightly/core/fmt/struct.Formatter.html" title="struct core::fmt::Formatter">Formatter</a>) -&gt; <a class="type" href="https://doc.rust-lang.org/nightly/core/fmt/type.Result.html" title="type core::fmt::Result">Result</a></code></span></h4>
+<div class='docblock'><p>Formats the value using the given formatter.</p>
+</div></div></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "lmdb_rs";
+    </script>
+    <script src="../../jquery.js"></script>
+    <script src="../../main.js"></script>
+    <script defer src="../../search-index.js"></script>
+</body>
+</html>

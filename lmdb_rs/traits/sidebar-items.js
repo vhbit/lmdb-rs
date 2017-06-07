@@ -1,0 +1,1 @@
+initSidebarItems({"trait":[["FromMdbValue","`FromMdbValue` is supposed to reconstruct a value from memory slice. It allows to use zero copy where it is required."],["ToMdbValue","`ToMdbValue` is supposed to convert a value to a memory slice which `lmdb` uses to prevent multiple copying data multiple times. May be unsafe."]]});

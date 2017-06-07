@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `core` mod in crate `lmdb_rs`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, core">
+
+    <title>lmdb_rs::core - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../normalize.css">
+    <link rel="stylesheet" type="text/css" href="../../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc mod">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'><a href='../index.html'>lmdb_rs</a></p><script>window.sidebarCurrent = {name: 'core', ty: 'mod', relpath: '../'};</script><script defer src="../sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content">
+<h1 class='fqn'><span class='in-band'>Module <a href='../index.html'>lmdb_rs</a>::<wbr><a class="mod" href=''>core</a></span><span class='out-of-band'><span id='render-detail'>
+                   <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                       [<span class='inner'>&#x2212;</span>]
+                   </a>
+               </span><a class='srclink' href='../../src/lmdb_rs/core.rs.html#1-1880' title='goto source code'>[src]</a></span></h1>
+<div class='docblock'><p>High level wrapper of LMDB APIs</p>
+
+<p>Requires knowledge of LMDB terminology</p>
+
+<h1 id='environment' class='section-header'><a href='#environment'>Environment</a></h1>
+<p>Environment is actually the center point of LMDB, it&#39;s a container
+of everything else. As some settings couldn&#39;t be adjusted after
+opening, <code>Environment</code> is constructed using <code>EnvBuilder</code>, which
+sets up maximum size, maximum count of named databases, maximum
+readers which could be used from different threads without locking
+and so on.</p>
+
+<h1 id='database' class='section-header'><a href='#database'>Database</a></h1>
+<p>Actual key-value store. The most crucial aspect is whether a database
+allows duplicates or not. It is specified on creation and couldn&#39;t be
+changed later. Entries for the same key are called <code>items</code>.</p>
+
+<p>There are a couple of optmizations to use, like marking
+keys or data as integer, allowing sorting using reverse key, marking
+keys/data as fixed size.</p>
+
+<h1 id='transaction' class='section-header'><a href='#transaction'>Transaction</a></h1>
+<p>Absolutely every db operation happens in a transaction. It could
+be a read-only transaction (reader), which is lockless and therefore
+cheap. Or it could be a read-write transaction, which is unique, i.e.
+there could be only one writer at a time.</p>
+
+<p>While readers are cheap and lockless, they work better being short-lived
+as in other case they may lock pages from being reused. Readers have
+a special API for marking as finished and renewing.</p>
+
+<p>It is perfectly fine to create nested transactions.</p>
+
+<h1 id='example' class='section-header'><a href='#example'>Example</a></h1></div><h2 id='reexports' class='section-header'><a href="#reexports">Reexports</a></h2>
+<table><tr><td><code>pub use MdbError::<a class="enum" href="../../lmdb_rs/core/enum.MdbError.html" title="enum lmdb_rs::core::MdbError">NotFound</a>;</code></td></tr><tr><td><code>pub use MdbError::<a class="enum" href="../../lmdb_rs/core/enum.MdbError.html" title="enum lmdb_rs::core::MdbError">KeyExists</a>;</code></td></tr><tr><td><code>pub use MdbError::<a class="enum" href="../../lmdb_rs/core/enum.MdbError.html" title="enum lmdb_rs::core::MdbError">Other</a>;</code></td></tr><tr><td><code>pub use MdbError::<a class="enum" href="../../lmdb_rs/core/enum.MdbError.html" title="enum lmdb_rs::core::MdbError">StateError</a>;</code></td></tr><tr><td><code>pub use MdbError::<a class="enum" href="../../lmdb_rs/core/enum.MdbError.html" title="enum lmdb_rs::core::MdbError">Corrupted</a>;</code></td></tr><tr><td><code>pub use MdbError::<a class="enum" href="../../lmdb_rs/core/enum.MdbError.html" title="enum lmdb_rs::core::MdbError">Panic</a>;</code></td></tr><tr><td><code>pub use MdbError::<a class="enum" href="../../lmdb_rs/core/enum.MdbError.html" title="enum lmdb_rs::core::MdbError">InvalidPath</a>;</code></td></tr><tr><td><code>pub use MdbError::<a class="enum" href="../../lmdb_rs/core/enum.MdbError.html" title="enum lmdb_rs::core::MdbError">TxnFull</a>;</code></td></tr><tr><td><code>pub use MdbError::<a class="enum" href="../../lmdb_rs/core/enum.MdbError.html" title="enum lmdb_rs::core::MdbError">CursorFull</a>;</code></td></tr><tr><td><code>pub use MdbError::<a class="enum" href="../../lmdb_rs/core/enum.MdbError.html" title="enum lmdb_rs::core::MdbError">PageFull</a>;</code></td></tr><tr><td><code>pub use MdbError::<a class="enum" href="../../lmdb_rs/core/enum.MdbError.html" title="enum lmdb_rs::core::MdbError">CacheError</a>;</code></td></tr></table><h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.Cursor.html"
+                                  title='struct lmdb_rs::core::Cursor'>Cursor</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.CursorFromKeyIter.html"
+                                  title='struct lmdb_rs::core::CursorFromKeyIter'>CursorFromKeyIter</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.CursorItemAccessor.html"
+                                  title='struct lmdb_rs::core::CursorItemAccessor'>CursorItemAccessor</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.CursorItemIter.html"
+                                  title='struct lmdb_rs::core::CursorItemIter'>CursorItemIter</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.CursorIter.html"
+                                  title='struct lmdb_rs::core::CursorIter'>CursorIter</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.CursorIterator.html"
+                                  title='struct lmdb_rs::core::CursorIterator'>CursorIterator</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.CursorKeyRangeIter.html"
+                                  title='struct lmdb_rs::core::CursorKeyRangeIter'>CursorKeyRangeIter</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.CursorToKeyIter.html"
+                                  title='struct lmdb_rs::core::CursorToKeyIter'>CursorToKeyIter</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.CursorValue.html"
+                                  title='struct lmdb_rs::core::CursorValue'>CursorValue</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.Database.html"
+                                  title='struct lmdb_rs::core::Database'>Database</a></td>
+                           <td class='docblock-short'>
+                                <p>Database</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.DbFlags.html"
+                                  title='struct lmdb_rs::core::DbFlags'>DbFlags</a></td>
+                           <td class='docblock-short'>
+                                <p>A set of database flags</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.DbHandle.html"
+                                  title='struct lmdb_rs::core::DbHandle'>DbHandle</a></td>
+                           <td class='docblock-short'>
+                                <p>A handle to a database</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.EnvBuilder.html"
+                                  title='struct lmdb_rs::core::EnvBuilder'>EnvBuilder</a></td>
+                           <td class='docblock-short'>
+                                <p>Constructs environment with settigs which couldn&#39;t be
+changed after opening. By default it tries to create
+corresponding dir if it doesn&#39;t exist, use <code>autocreate_dir()</code>
+to override that behavior</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.EnvCreateFlags.html"
+                                  title='struct lmdb_rs::core::EnvCreateFlags'>EnvCreateFlags</a></td>
+                           <td class='docblock-short'>
+                                <p>A set of all environment flags</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.EnvFlags.html"
+                                  title='struct lmdb_rs::core::EnvFlags'>EnvFlags</a></td>
+                           <td class='docblock-short'>
+                                <p>A set of environment flags which could be changed after opening</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.Environment.html"
+                                  title='struct lmdb_rs::core::Environment'>Environment</a></td>
+                           <td class='docblock-short'>
+                                <p>Represents LMDB Environment. Should be opened using <code>EnvBuilder</code></p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.MdbValue.html"
+                                  title='struct lmdb_rs::core::MdbValue'>MdbValue</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.ReadonlyTransaction.html"
+                                  title='struct lmdb_rs::core::ReadonlyTransaction'>ReadonlyTransaction</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.Transaction.html"
+                                  title='struct lmdb_rs::core::Transaction'>Transaction</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr></table><h2 id='enums' class='section-header'><a href="#enums">Enums</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class="enum" href="enum.MdbError.html"
+                                  title='enum lmdb_rs::core::MdbError'>MdbError</a></td>
+                           <td class='docblock-short'>
+                                <p>MdbError wraps information about LMDB error</p>
+                           </td>
+                       </tr></table><h2 id='constants' class='section-header'><a href="#constants">Constants</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class="constant" href="constant.DbAllowDups.html"
+                                  title='constant lmdb_rs::core::DbAllowDups'>DbAllowDups</a></td>
+                           <td class='docblock-short'>
+                                <p>Duplicate keys may be used in the database. (Or, from another
+perspective, keys may have multiple data items, stored in sorted
+order.) By default keys must be unique and may have only a
+single data item.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="constant" href="constant.DbAllowIntDups.html"
+                                  title='constant lmdb_rs::core::DbAllowIntDups'>DbAllowIntDups</a></td>
+                           <td class='docblock-short'>
+                                <p>This option specifies that duplicate data items are also
+integers, and should be sorted as such.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="constant" href="constant.DbCreate.html"
+                                  title='constant lmdb_rs::core::DbCreate'>DbCreate</a></td>
+                           <td class='docblock-short'>
+                                <p>Create the named database if it doesn&#39;t exist. This option
+is not allowed in a read-only transaction or a read-only
+environment.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="constant" href="constant.DbDupFixed.html"
+                                  title='constant lmdb_rs::core::DbDupFixed'>DbDupFixed</a></td>
+                           <td class='docblock-short'>
+                                <p>This flag may only be used in combination with
+ffi::MDB_DUPSORT. This option tells the library that the data
+items for this database are all the same size, which allows
+further optimizations in storage and retrieval. When all data
+items are the same size, the ffi::MDB_GET_MULTIPLE and
+ffi::MDB_NEXT_MULTIPLE cursor operations may be used to retrieve
+multiple items at once.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="constant" href="constant.DbIntKey.html"
+                                  title='constant lmdb_rs::core::DbIntKey'>DbIntKey</a></td>
+                           <td class='docblock-short'>
+                                <p>Keys are binary integers in native byte order. Setting this
+option requires all keys to be the same size, typically
+sizeof(int) or sizeof(size_t).</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="constant" href="constant.DbReverseKey.html"
+                                  title='constant lmdb_rs::core::DbReverseKey'>DbReverseKey</a></td>
+                           <td class='docblock-short'>
+                                <p>Keys are strings to be compared in reverse order, from the
+end of the strings to the beginning. By default, Keys are
+treated as strings and compared from beginning to end.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="constant" href="constant.DbReversedDups.html"
+                                  title='constant lmdb_rs::core::DbReversedDups'>DbReversedDups</a></td>
+                           <td class='docblock-short'>
+                                <p>This option specifies that duplicate data items should be
+compared as strings in reverse order.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="constant" href="constant.EnvCreataMapAsync.html"
+                                  title='constant lmdb_rs::core::EnvCreataMapAsync'>EnvCreataMapAsync</a></td>
+                           <td class='docblock-short'>
+                                <p>When using MDB_WRITEMAP, use asynchronous flushes to disk. As
+with MDB_NOSYNC, a system crash can then corrupt the database or
+lose the last transactions. Calling mdb_env_sync() ensures
+on-disk database integrity until next commit. This flag may be
+changed at any time using mdb_env_set_flags().</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="constant" href="constant.EnvCreateFixedMap.html"
+                                  title='constant lmdb_rs::core::EnvCreateFixedMap'>EnvCreateFixedMap</a></td>
+                           <td class='docblock-short'>
+                                <p>Use a fixed address for the mmap region. This flag must be
+ specified when creating the environment, and is stored persistently
+ in the environment. If successful, the memory map will always reside
+ at the same virtual address and pointers used to reference data items
+ in the database will be constant across multiple invocations. This 
+option may not always work, depending on how the operating system has
+ allocated memory to shared libraries and other uses. The feature is highly experimental.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="constant" href="constant.EnvCreateNoLock.html"
+                                  title='constant lmdb_rs::core::EnvCreateNoLock'>EnvCreateNoLock</a></td>
+                           <td class='docblock-short'>
+                                <p>Don&#39;t do any locking. If concurrent access is anticipated, the
+caller must manage all concurrency itself. For proper operation
+the caller must enforce single-writer semantics, and must ensure
+that no readers are using old transactions while a writer is
+active. The simplest approach is to use an exclusive lock so
+that no readers may be active at all when a writer begins. </p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="constant" href="constant.EnvCreateNoMemInit.html"
+                                  title='constant lmdb_rs::core::EnvCreateNoMemInit'>EnvCreateNoMemInit</a></td>
+                           <td class='docblock-short'>
+                                <p>Don&#39;t initialize malloc&#39;d memory before writing to unused spaces
+in the data file. By default, memory for pages written to the
+data file is obtained using malloc. While these pages may be
+reused in subsequent transactions, freshly malloc&#39;d pages will
+be initialized to zeroes before use. This avoids persisting
+leftover data from other code (that used the heap and
+subsequently freed the memory) into the data file. Note that
+many other system libraries may allocate and free memory from
+the heap for arbitrary uses. E.g., stdio may use the heap for
+file I/O buffers. This initialization step has a modest
+performance cost so some applications may want to disable it
+using this flag. This option can be a problem for applications
+which handle sensitive data like passwords, and it makes memory
+checkers like Valgrind noisy. This flag is not needed with
+MDB_WRITEMAP, which writes directly to the mmap instead of using
+malloc for pages. The initialization is also skipped if
+MDB_RESERVE is used; the caller is expected to overwrite all of
+the memory that was reserved in that case. This flag may be
+changed at any time using mdb_env_set_flags().</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="constant" href="constant.EnvCreateNoMetaSync.html"
+                                  title='constant lmdb_rs::core::EnvCreateNoMetaSync'>EnvCreateNoMetaSync</a></td>
+                           <td class='docblock-short'>
+                                <p>Flush system buffers to disk only once per transaction,
+omit the metadata flush. Defer that until the system flushes
+files to disk, or next non-MDB_RDONLY commit or mdb_env_sync().
+This optimization maintains database integrity, but a system
+crash may undo the last committed transaction. I.e. it
+preserves the ACI (atomicity, consistency, isolation) but
+not D (durability) database property. This flag may be changed
+at any time using mdb_env_set_flags().</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="constant" href="constant.EnvCreateNoReadAhead.html"
+                                  title='constant lmdb_rs::core::EnvCreateNoReadAhead'>EnvCreateNoReadAhead</a></td>
+                           <td class='docblock-short'>
+                                <p>Turn off readahead. Most operating systems perform readahead on
+read requests by default. This option turns it off if the OS
+supports it. Turning it off may help random read performance
+when the DB is larger than RAM and system RAM is full. The
+option is not implemented on Windows.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="constant" href="constant.EnvCreateNoSubDir.html"
+                                  title='constant lmdb_rs::core::EnvCreateNoSubDir'>EnvCreateNoSubDir</a></td>
+                           <td class='docblock-short'>
+                                <p>By default, LMDB creates its environment in a directory whose
+pathname is given in path, and creates its data and lock files
+under that directory. With this option, path is used as-is
+for the database main data file. The database lock file is
+the path with &quot;-lock&quot; appended.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="constant" href="constant.EnvCreateNoSync.html"
+                                  title='constant lmdb_rs::core::EnvCreateNoSync'>EnvCreateNoSync</a></td>
+                           <td class='docblock-short'>
+                                <p>Don&#39;t flush system buffers to disk when committing a
+transaction. This optimization means a system crash can corrupt
+the database or lose the last transactions if buffers are not
+yet flushed to disk. The risk is governed by how often the
+system flushes dirty buffers to disk and how often
+mdb_env_sync() is called. However, if the filesystem preserves
+write order and the MDB_WRITEMAP flag is not used, transactions
+exhibit ACI (atomicity, consistency, isolation) properties and
+only lose D (durability). I.e. database integrity is
+maintained, but a system crash may undo the final
+transactions. Note that (MDB_NOSYNC | MDB_WRITEMAP) leaves
+the system with no hint for when to write transactions to
+disk, unless mdb_env_sync() is called.
+(MDB_MAPASYNC | MDB_WRITEMAP) may be preferable. This flag
+may be changed at any time using mdb_env_set_flags().</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="constant" href="constant.EnvCreateNoTls.html"
+                                  title='constant lmdb_rs::core::EnvCreateNoTls'>EnvCreateNoTls</a></td>
+                           <td class='docblock-short'>
+                                <p>Don&#39;t use Thread-Local Storage. Tie reader locktable slots to
+ffi::MDB_txn objects instead of to threads. I.e. mdb_txn_reset()
+keeps the slot reseved for the ffi::MDB_txn object. A thread may
+use parallel read-only transactions. A read-only transaction may
+span threads if the user synchronizes its use. Applications that
+multiplex many user threads over individual OS threads need this
+option. Such an application must also serialize the write
+transactions in an OS thread, since LMDB&#39;s write locking is
+unaware of the user threads.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="constant" href="constant.EnvCreateReadOnly.html"
+                                  title='constant lmdb_rs::core::EnvCreateReadOnly'>EnvCreateReadOnly</a></td>
+                           <td class='docblock-short'>
+                                <p>Open the environment in read-only mode. No write operations
+will be allowed. LMDB will still modify the lock file - except
+on read-only filesystems, where LMDB does not use locks.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="constant" href="constant.EnvCreateWriteMap.html"
+                                  title='constant lmdb_rs::core::EnvCreateWriteMap'>EnvCreateWriteMap</a></td>
+                           <td class='docblock-short'>
+                                <p>Use a writeable memory map unless MDB_RDONLY is set. This is
+faster and uses fewer mallocs, but loses protection from
+application bugs like wild pointer writes and other bad updates
+into the database. Incompatible with nested
+transactions. Processes with and without MDB_WRITEMAP on the
+same environment do not cooperate well.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="constant" href="constant.EnvMapAsync.html"
+                                  title='constant lmdb_rs::core::EnvMapAsync'>EnvMapAsync</a></td>
+                           <td class='docblock-short'>
+                                <p>When using MDB_WRITEMAP, use asynchronous flushes to
+disk. As with MDB_NOSYNC, a system crash can then corrupt the
+database or lose the last transactions. Calling
+mdb_env_sync() ensures on-disk database integrity until next
+commit. This flag may be changed at any time using
+mdb_env_set_flags().</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="constant" href="constant.EnvNoMemInit.html"
+                                  title='constant lmdb_rs::core::EnvNoMemInit'>EnvNoMemInit</a></td>
+                           <td class='docblock-short'>
+                                <p>Don&#39;t initialize malloc&#39;d memory before writing to
+unused spaces in the data file. By default, memory for pages
+written to the data file is obtained using malloc. While
+these pages may be reused in subsequent transactions, freshly
+malloc&#39;d pages will be initialized to zeroes before use. This
+avoids persisting leftover data from other code (that used
+the heap and subsequently freed the memory) into the data
+file. Note that many other system libraries may allocate and
+free memory from the heap for arbitrary uses. E.g., stdio may
+use the heap for file I/O buffers. This initialization step
+has a modest performance cost so some applications may want
+to disable it using this flag. This option can be a problem
+for applications which handle sensitive data like passwords,
+and it makes memory checkers like Valgrind noisy. This flag
+is not needed with MDB_WRITEMAP, which writes directly to the
+mmap instead of using malloc for pages. The initialization is
+also skipped if MDB_RESERVE is used; the caller is expected
+to overwrite all of the memory that was reserved in that
+case. This flag may be changed at any time using
+mdb_env_set_flags().</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="constant" href="constant.EnvNoMetaSync.html"
+                                  title='constant lmdb_rs::core::EnvNoMetaSync'>EnvNoMetaSync</a></td>
+                           <td class='docblock-short'>
+                                <p>Flush system buffers to disk only once per transaction,
+omit the metadata flush. Defer that until the system flushes
+files to disk, or next non-MDB_RDONLY commit or
+mdb_env_sync(). This optimization maintains database
+integrity, but a system crash may undo the last committed
+transaction. I.e. it preserves the ACI (atomicity,
+consistency, isolation) but not D (durability) database
+property. This flag may be changed at any time using
+mdb_env_set_flags().</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="constant" href="constant.EnvNoSync.html"
+                                  title='constant lmdb_rs::core::EnvNoSync'>EnvNoSync</a></td>
+                           <td class='docblock-short'>
+                                <p>Don&#39;t flush system buffers to disk when committing a
+transaction. This optimization means a system crash can
+corrupt the database or lose the last transactions if buffers
+are not yet flushed to disk. The risk is governed by how
+often the system flushes dirty buffers to disk and how often
+mdb_env_sync() is called. However, if the filesystem
+preserves write order and the MDB_WRITEMAP flag is not used,
+transactions exhibit ACI (atomicity, consistency, isolation)
+properties and only lose D (durability). I.e. database
+integrity is maintained, but a system crash may undo the
+final transactions. Note that (MDB_NOSYNC | MDB_WRITEMAP)
+leaves the system with no hint for when to write transactions
+to disk, unless mdb_env_sync() is called. (MDB_MAPASYNC |
+MDB_WRITEMAP) may be preferable. This flag may be changed at
+any time using mdb_env_set_flags().</p>
+                           </td>
+                       </tr></table><h2 id='traits' class='section-header'><a href="#traits">Traits</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class="trait" href="trait.IterateCursor.html"
+                                  title='trait lmdb_rs::core::IterateCursor'>IterateCursor</a></td>
+                           <td class='docblock-short'>
+                                <p>Allows the cration of custom cursor iteration behaviours.</p>
+                           </td>
+                       </tr></table><h2 id='types' class='section-header'><a href="#types">Type Definitions</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class="type" href="type.MdbResult.html"
+                                  title='type lmdb_rs::core::MdbResult'>MdbResult</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr></table></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "lmdb_rs";
+    </script>
+    <script src="../../jquery.js"></script>
+    <script src="../../main.js"></script>
+    <script defer src="../../search-index.js"></script>
+</body>
+</html>

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `Database` struct in crate `lmdb_rs`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, Database">
+
+    <title>lmdb_rs::core::Database - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../normalize.css">
+    <link rel="stylesheet" type="text/css" href="../../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc struct">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'><a href='../index.html'>lmdb_rs</a>::<wbr><a href='index.html'>core</a></p><script>window.sidebarCurrent = {name: 'Database', ty: 'struct', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content">
+<h1 class='fqn'><span class='in-band'>Struct <a href='../index.html'>lmdb_rs</a>::<wbr><a href='index.html'>core</a>::<wbr><a class="struct" href=''>Database</a></span><span class='out-of-band'><span id='render-detail'>
+                   <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                       [<span class='inner'>&#x2212;</span>]
+                   </a>
+               </span><a class='srclink' href='../../src/lmdb_rs/core.rs.html#390-393' title='goto source code'>[src]</a></span></h1>
+<pre class='rust struct'>pub struct Database&lt;'a&gt; { /* fields omitted */ }</pre><div class='docblock'><p>Database</p>
+</div><h2 id='methods'>Methods</h2><h3 class='impl'><span class='in-band'><code>impl&lt;'a&gt; <a class="struct" href="../../lmdb_rs/core/struct.Database.html" title="struct lmdb_rs::core::Database">Database</a>&lt;'a&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/lmdb_rs/core.rs.html#398-549' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.stat' class="method"><span id='stat.v' class='invisible'><code>fn <a href='#method.stat' class='fnname'>stat</a>(&amp;'a self) -&gt; <a class="type" href="../../lmdb_rs/core/type.MdbResult.html" title="type lmdb_rs::core::MdbResult">MdbResult</a>&lt;<a class="struct" href="../../lmdb_rs/struct.MDB_stat.html" title="struct lmdb_rs::MDB_stat">MDB_stat</a>&gt;</code></span></h4>
+<div class='docblock'><p>Retrieves current db&#39;s statistics.</p>
+</div><h4 id='method.get' class="method"><span id='get.v' class='invisible'><code>fn <a href='#method.get' class='fnname'>get</a>&lt;V:&nbsp;<a class="trait" href="../../lmdb_rs/traits/trait.FromMdbValue.html" title="trait lmdb_rs::traits::FromMdbValue">FromMdbValue</a> + 'a&gt;(&amp;'a self, key: &amp;<a class="trait" href="../../lmdb_rs/traits/trait.ToMdbValue.html" title="trait lmdb_rs::traits::ToMdbValue">ToMdbValue</a>) -&gt; <a class="type" href="../../lmdb_rs/core/type.MdbResult.html" title="type lmdb_rs::core::MdbResult">MdbResult</a>&lt;V&gt;</code></span></h4>
+<div class='docblock'><p>Retrieves a value by key. In case of DbAllowDups it will be the first value</p>
+</div><h4 id='method.set' class="method"><span id='set.v' class='invisible'><code>fn <a href='#method.set' class='fnname'>set</a>(&amp;self, key: &amp;<a class="trait" href="../../lmdb_rs/traits/trait.ToMdbValue.html" title="trait lmdb_rs::traits::ToMdbValue">ToMdbValue</a>, value: &amp;<a class="trait" href="../../lmdb_rs/traits/trait.ToMdbValue.html" title="trait lmdb_rs::traits::ToMdbValue">ToMdbValue</a>) -&gt; <a class="type" href="../../lmdb_rs/core/type.MdbResult.html" title="type lmdb_rs::core::MdbResult">MdbResult</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">()</a>&gt;</code></span></h4>
+<div class='docblock'><p>Sets value for key. In case of DbAllowDups it will add a new item</p>
+</div><h4 id='method.append' class="method"><span id='append.v' class='invisible'><code>fn <a href='#method.append' class='fnname'>append</a>&lt;K:&nbsp;<a class="trait" href="../../lmdb_rs/traits/trait.ToMdbValue.html" title="trait lmdb_rs::traits::ToMdbValue">ToMdbValue</a>, V:&nbsp;<a class="trait" href="../../lmdb_rs/traits/trait.ToMdbValue.html" title="trait lmdb_rs::traits::ToMdbValue">ToMdbValue</a>&gt;(&amp;self,<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; key: &amp;K,<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; value: &amp;V)<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; -&gt; <a class="type" href="../../lmdb_rs/core/type.MdbResult.html" title="type lmdb_rs::core::MdbResult">MdbResult</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">()</a>&gt;</code></span></h4>
+<div class='docblock'><p>Appends new key-value pair to database, starting a new page instead of splitting an
+existing one if necessary. Requires that key be &gt;= all existing keys in the database
+(or will return KeyExists error).</p>
+</div><h4 id='method.append_duplicate' class="method"><span id='append_duplicate.v' class='invisible'><code>fn <a href='#method.append_duplicate' class='fnname'>append_duplicate</a>&lt;K:&nbsp;<a class="trait" href="../../lmdb_rs/traits/trait.ToMdbValue.html" title="trait lmdb_rs::traits::ToMdbValue">ToMdbValue</a>, V:&nbsp;<a class="trait" href="../../lmdb_rs/traits/trait.ToMdbValue.html" title="trait lmdb_rs::traits::ToMdbValue">ToMdbValue</a>&gt;(&amp;self,<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; key: &amp;K,<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; value: &amp;V)<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; -&gt; <a class="type" href="../../lmdb_rs/core/type.MdbResult.html" title="type lmdb_rs::core::MdbResult">MdbResult</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">()</a>&gt;</code></span></h4>
+<div class='docblock'><p>Appends new value for the given key (requires DbAllowDups), starting a new page instead
+of splitting an existing one if necessary. Requires that value be &gt;= all existing values
+for the given key (or will return KeyExists error).</p>
+</div><h4 id='method.insert' class="method"><span id='insert.v' class='invisible'><code>fn <a href='#method.insert' class='fnname'>insert</a>(&amp;self, key: &amp;<a class="trait" href="../../lmdb_rs/traits/trait.ToMdbValue.html" title="trait lmdb_rs::traits::ToMdbValue">ToMdbValue</a>, value: &amp;<a class="trait" href="../../lmdb_rs/traits/trait.ToMdbValue.html" title="trait lmdb_rs::traits::ToMdbValue">ToMdbValue</a>) -&gt; <a class="type" href="../../lmdb_rs/core/type.MdbResult.html" title="type lmdb_rs::core::MdbResult">MdbResult</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">()</a>&gt;</code></span></h4>
+<div class='docblock'><p>Set value for key. Fails if key already exists, even when duplicates are allowed.</p>
+</div><h4 id='method.del' class="method"><span id='del.v' class='invisible'><code>fn <a href='#method.del' class='fnname'>del</a>(&amp;self, key: &amp;<a class="trait" href="../../lmdb_rs/traits/trait.ToMdbValue.html" title="trait lmdb_rs::traits::ToMdbValue">ToMdbValue</a>) -&gt; <a class="type" href="../../lmdb_rs/core/type.MdbResult.html" title="type lmdb_rs::core::MdbResult">MdbResult</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">()</a>&gt;</code></span></h4>
+<div class='docblock'><p>Deletes value for key.</p>
+</div><h4 id='method.del_item' class="method"><span id='del_item.v' class='invisible'><code>fn <a href='#method.del_item' class='fnname'>del_item</a>(&amp;self, key: &amp;<a class="trait" href="../../lmdb_rs/traits/trait.ToMdbValue.html" title="trait lmdb_rs::traits::ToMdbValue">ToMdbValue</a>, data: &amp;<a class="trait" href="../../lmdb_rs/traits/trait.ToMdbValue.html" title="trait lmdb_rs::traits::ToMdbValue">ToMdbValue</a>) -&gt; <a class="type" href="../../lmdb_rs/core/type.MdbResult.html" title="type lmdb_rs::core::MdbResult">MdbResult</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">()</a>&gt;</code></span></h4>
+<div class='docblock'><p>Should be used only with DbAllowDups. Deletes corresponding (key, value)</p>
+</div><h4 id='method.new_cursor' class="method"><span id='new_cursor.v' class='invisible'><code>fn <a href='#method.new_cursor' class='fnname'>new_cursor</a>(&amp;'a self) -&gt; <a class="type" href="../../lmdb_rs/core/type.MdbResult.html" title="type lmdb_rs::core::MdbResult">MdbResult</a>&lt;<a class="struct" href="../../lmdb_rs/core/struct.Cursor.html" title="struct lmdb_rs::core::Cursor">Cursor</a>&lt;'a&gt;&gt;</code></span></h4>
+<div class='docblock'><p>Returns a new cursor</p>
+</div><h4 id='method.del_db' class="method"><span id='del_db.v' class='invisible'><code>fn <a href='#method.del_db' class='fnname'>del_db</a>(self) -&gt; <a class="type" href="../../lmdb_rs/core/type.MdbResult.html" title="type lmdb_rs::core::MdbResult">MdbResult</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">()</a>&gt;</code></span></h4>
+<div class='docblock'><p>Deletes current db, also moves it out</p>
+</div><h4 id='method.clear' class="method"><span id='clear.v' class='invisible'><code>fn <a href='#method.clear' class='fnname'>clear</a>(&amp;self) -&gt; <a class="type" href="../../lmdb_rs/core/type.MdbResult.html" title="type lmdb_rs::core::MdbResult">MdbResult</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">()</a>&gt;</code></span></h4>
+<div class='docblock'><p>Removes all key/values from db</p>
+</div><h4 id='method.iter' class="method"><span id='iter.v' class='invisible'><code>fn <a href='#method.iter' class='fnname'>iter</a>(&amp;'a self) -&gt; <a class="type" href="../../lmdb_rs/core/type.MdbResult.html" title="type lmdb_rs::core::MdbResult">MdbResult</a>&lt;<a class="struct" href="../../lmdb_rs/core/struct.CursorIterator.html" title="struct lmdb_rs::core::CursorIterator">CursorIterator</a>&lt;'a, <a class="struct" href="../../lmdb_rs/core/struct.CursorIter.html" title="struct lmdb_rs::core::CursorIter">CursorIter</a>&gt;&gt;</code></span></h4>
+<div class='docblock'><p>Returns an iterator for all values in database</p>
+</div><h4 id='method.keyrange_from' class="method"><span id='keyrange_from.v' class='invisible'><code>fn <a href='#method.keyrange_from' class='fnname'>keyrange_from</a>&lt;'c, K:&nbsp;<a class="trait" href="../../lmdb_rs/traits/trait.ToMdbValue.html" title="trait lmdb_rs::traits::ToMdbValue">ToMdbValue</a> + 'c&gt;(&amp;'c self,<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; start_key: &amp;'c K)<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; -&gt; <a class="type" href="../../lmdb_rs/core/type.MdbResult.html" title="type lmdb_rs::core::MdbResult">MdbResult</a>&lt;<a class="struct" href="../../lmdb_rs/core/struct.CursorIterator.html" title="struct lmdb_rs::core::CursorIterator">CursorIterator</a>&lt;'c, <a class="struct" href="../../lmdb_rs/core/struct.CursorFromKeyIter.html" title="struct lmdb_rs::core::CursorFromKeyIter">CursorFromKeyIter</a>&gt;&gt;</code></span></h4>
+<div class='docblock'><p>Returns an iterator through keys starting with start_key (&gt;=), start_key is included</p>
+</div><h4 id='method.keyrange_to' class="method"><span id='keyrange_to.v' class='invisible'><code>fn <a href='#method.keyrange_to' class='fnname'>keyrange_to</a>&lt;'c, K:&nbsp;<a class="trait" href="../../lmdb_rs/traits/trait.ToMdbValue.html" title="trait lmdb_rs::traits::ToMdbValue">ToMdbValue</a> + 'c&gt;(&amp;'c self,<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; end_key: &amp;'c K)<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; -&gt; <a class="type" href="../../lmdb_rs/core/type.MdbResult.html" title="type lmdb_rs::core::MdbResult">MdbResult</a>&lt;<a class="struct" href="../../lmdb_rs/core/struct.CursorIterator.html" title="struct lmdb_rs::core::CursorIterator">CursorIterator</a>&lt;'c, <a class="struct" href="../../lmdb_rs/core/struct.CursorToKeyIter.html" title="struct lmdb_rs::core::CursorToKeyIter">CursorToKeyIter</a>&gt;&gt;</code></span></h4>
+<div class='docblock'><p>Returns an iterator through keys less than end_key, end_key is not included</p>
+</div><h4 id='method.keyrange_from_to' class="method"><span id='keyrange_from_to.v' class='invisible'><code>fn <a href='#method.keyrange_from_to' class='fnname'>keyrange_from_to</a>&lt;'c, K:&nbsp;<a class="trait" href="../../lmdb_rs/traits/trait.ToMdbValue.html" title="trait lmdb_rs::traits::ToMdbValue">ToMdbValue</a> + 'c&gt;(&amp;'c self,<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; start_key: &amp;'c K,<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; end_key: &amp;'c K)<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; -&gt; <a class="type" href="../../lmdb_rs/core/type.MdbResult.html" title="type lmdb_rs::core::MdbResult">MdbResult</a>&lt;<a class="struct" href="../../lmdb_rs/core/struct.CursorIterator.html" title="struct lmdb_rs::core::CursorIterator">CursorIterator</a>&lt;'c, <a class="struct" href="../../lmdb_rs/core/struct.CursorKeyRangeIter.html" title="struct lmdb_rs::core::CursorKeyRangeIter">CursorKeyRangeIter</a>&gt;&gt;</code></span></h4>
+<div class='docblock'><p>Returns an iterator through keys <code>start_key &lt;= x &lt; end_key</code>. This is, start_key is
+included in the iteration, while end_key is kept excluded.</p>
+</div><h4 id='method.keyrange' class="method"><span id='keyrange.v' class='invisible'><code>fn <a href='#method.keyrange' class='fnname'>keyrange</a>&lt;'c, K:&nbsp;<a class="trait" href="../../lmdb_rs/traits/trait.ToMdbValue.html" title="trait lmdb_rs::traits::ToMdbValue">ToMdbValue</a> + 'c&gt;(&amp;'c self,<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; start_key: &amp;'c K,<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; end_key: &amp;'c K)<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; -&gt; <a class="type" href="../../lmdb_rs/core/type.MdbResult.html" title="type lmdb_rs::core::MdbResult">MdbResult</a>&lt;<a class="struct" href="../../lmdb_rs/core/struct.CursorIterator.html" title="struct lmdb_rs::core::CursorIterator">CursorIterator</a>&lt;'c, <a class="struct" href="../../lmdb_rs/core/struct.CursorKeyRangeIter.html" title="struct lmdb_rs::core::CursorKeyRangeIter">CursorKeyRangeIter</a>&gt;&gt;</code></span></h4>
+<div class='docblock'><p>Returns an iterator for values between start_key and end_key (included).
+Currently it works only for unique keys (i.e. it will skip
+multiple items when DB created with ffi::MDB_DUPSORT).
+Iterator is valid while cursor is valid</p>
+</div><h4 id='method.item_iter' class="method"><span id='item_iter.v' class='invisible'><code>fn <a href='#method.item_iter' class='fnname'>item_iter</a>&lt;'c, 'db: 'c, K:&nbsp;<a class="trait" href="../../lmdb_rs/traits/trait.ToMdbValue.html" title="trait lmdb_rs::traits::ToMdbValue">ToMdbValue</a>&gt;(&amp;'db self,<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; key: &amp;'c K)<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; -&gt; <a class="type" href="../../lmdb_rs/core/type.MdbResult.html" title="type lmdb_rs::core::MdbResult">MdbResult</a>&lt;<a class="struct" href="../../lmdb_rs/core/struct.CursorIterator.html" title="struct lmdb_rs::core::CursorIterator">CursorIterator</a>&lt;'c, <a class="struct" href="../../lmdb_rs/core/struct.CursorItemIter.html" title="struct lmdb_rs::core::CursorItemIter">CursorItemIter</a>&lt;'c&gt;&gt;&gt;</code></span></h4>
+<div class='docblock'><p>Returns an iterator for all items (i.e. values with same key)</p>
+</div><h4 id='method.set_compare' class="method"><span id='set_compare.v' class='invisible'><code>fn <a href='#method.set_compare' class='fnname'>set_compare</a>(&amp;self,<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; cmp_fn: extern fn(_: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.pointer.html">*const </a><a class="struct" href="../../lmdb_rs/struct.MDB_val.html" title="struct lmdb_rs::MDB_val">MDB_val</a>, _: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.pointer.html">*const </a><a class="struct" href="../../lmdb_rs/struct.MDB_val.html" title="struct lmdb_rs::MDB_val">MDB_val</a>) -&gt; <a class="type" href="../../lmdb_rs/type.c_int.html" title="type lmdb_rs::c_int">c_int</a>)<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; -&gt; <a class="type" href="../../lmdb_rs/core/type.MdbResult.html" title="type lmdb_rs::core::MdbResult">MdbResult</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">()</a>&gt;</code></span></h4>
+<div class='docblock'><p>Sets the key compare function for this database.</p>
+
+<p>Warning: This function must be called before any data access functions
+are used, otherwise data corruption may occur. The same comparison
+function must be used by every program accessing the database, every
+time the database is used.</p>
+
+<p>If not called, keys are compared lexically, with shorter keys collating
+before longer keys.</p>
+
+<p>Setting lasts for the lifetime of the underlying db handle.</p>
+</div><h4 id='method.set_dupsort' class="method"><span id='set_dupsort.v' class='invisible'><code>fn <a href='#method.set_dupsort' class='fnname'>set_dupsort</a>(&amp;self,<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; cmp_fn: extern fn(_: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.pointer.html">*const </a><a class="struct" href="../../lmdb_rs/struct.MDB_val.html" title="struct lmdb_rs::MDB_val">MDB_val</a>, _: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.pointer.html">*const </a><a class="struct" href="../../lmdb_rs/struct.MDB_val.html" title="struct lmdb_rs::MDB_val">MDB_val</a>) -&gt; <a class="type" href="../../lmdb_rs/type.c_int.html" title="type lmdb_rs::c_int">c_int</a>)<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; -&gt; <a class="type" href="../../lmdb_rs/core/type.MdbResult.html" title="type lmdb_rs::core::MdbResult">MdbResult</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">()</a>&gt;</code></span></h4>
+<div class='docblock'><p>Sets the value comparison function for values of the same key in this database.</p>
+
+<p>Warning: This function must be called before any data access functions
+are used, otherwise data corruption may occur. The same dupsort
+function must be used by every program accessing the database, every
+time the database is used.</p>
+
+<p>If not called, values are compared lexically, with shorter values collating
+before longer values.</p>
+
+<p>Only used when DbAllowDups is true.
+Setting lasts for the lifetime of the underlying db handle.</p>
+</div></div><h2 id='implementations'>Trait Implementations</h2><h3 class='impl'><span class='in-band'><code>impl&lt;'a&gt; <a class="trait" href="https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html" title="trait core::fmt::Debug">Debug</a> for <a class="struct" href="../../lmdb_rs/core/struct.Database.html" title="struct lmdb_rs::core::Database">Database</a>&lt;'a&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/lmdb_rs/core.rs.html#389' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.fmt' class="method"><span id='fmt.v' class='invisible'><code>fn <a href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html#tymethod.fmt' class='fnname'>fmt</a>(&amp;self, __arg_0: &amp;mut <a class="struct" href="https://doc.rust-lang.org/nightly/core/fmt/struct.Formatter.html" title="struct core::fmt::Formatter">Formatter</a>) -&gt; <a class="type" href="https://doc.rust-lang.org/nightly/core/fmt/type.Result.html" title="type core::fmt::Result">Result</a></code></span></h4>
+<div class='docblock'><p>Formats the value using the given formatter.</p>
+</div></div></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "lmdb_rs";
+    </script>
+    <script src="../../jquery.js"></script>
+    <script src="../../main.js"></script>
+    <script defer src="../../search-index.js"></script>
+</body>
+</html>
