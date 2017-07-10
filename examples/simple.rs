@@ -8,7 +8,7 @@ fn main() {
     let db_handle = env.get_default_db(DbFlags::empty()).unwrap();
     let txn = env.new_transaction().unwrap();
     {
-        let db = txn.bind(&db_handle); // get a database bound to this transaction
+        let mut db = txn.bind(&db_handle); // get a database bound to this transaction
 
         let pairs = vec![("Albert", "Einstein",),
                          ("Joe", "Smith",),
