@@ -411,36 +411,36 @@ impl<'a> Database<'a> {
     }
 
     /// Sets value for key. In case of DbAllowDups it will add a new item
-    pub fn set(&self, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
+    pub fn set(&mut self, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
         self.txn.set(self.handle, key, value)
     }
 
     /// Appends new key-value pair to database, starting a new page instead of splitting an
     /// existing one if necessary. Requires that key be >= all existing keys in the database
     /// (or will return KeyExists error).
-    pub fn append<K: ToMdbValue, V: ToMdbValue>(&self, key: &K, value: &V) -> MdbResult<()> {
+    pub fn append<K: ToMdbValue, V: ToMdbValue>(&mut self, key: &K, value: &V) -> MdbResult<()> {
         self.txn.append(self.handle, key, value)
     }
 
     /// Appends new value for the given key (requires DbAllowDups), starting a new page instead
     /// of splitting an existing one if necessary. Requires that value be >= all existing values
     /// for the given key (or will return KeyExists error).
-    pub fn append_duplicate<K: ToMdbValue, V: ToMdbValue>(&self, key: &K, value: &V) -> MdbResult<()> {
+    pub fn append_duplicate<K: ToMdbValue, V: ToMdbValue>(&mut self, key: &K, value: &V) -> MdbResult<()> {
         self.txn.append_duplicate(self.handle, key, value)
     }
 
     /// Set value for key. Fails if key already exists, even when duplicates are allowed.
-    pub fn insert(&self, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
+    pub fn insert(&mut self, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
         self.txn.insert(self.handle, key, value)
     }
 
     /// Deletes value for key.
-    pub fn del(&self, key: &ToMdbValue) -> MdbResult<()> {
+    pub fn del(&mut self, key: &ToMdbValue) -> MdbResult<()> {
         self.txn.del(self.handle, key)
     }
 
     /// Should be used only with DbAllowDups. Deletes corresponding (key, value)
-    pub fn del_item(&self, key: &ToMdbValue, data: &ToMdbValue) -> MdbResult<()> {
+    pub fn del_item(&mut self, key: &ToMdbValue, data: &ToMdbValue) -> MdbResult<()> {
         self.txn.del_item(self.handle, key, data)
     }
 
@@ -455,7 +455,7 @@ impl<'a> Database<'a> {
     }
 
     /// Removes all key/values from db
-    pub fn clear(&self) -> MdbResult<()> {
+    pub fn clear(&mut self) -> MdbResult<()> {
         self.txn.clear_db(self.handle)
     }
 
