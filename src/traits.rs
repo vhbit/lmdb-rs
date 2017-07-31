@@ -59,6 +59,7 @@ impl<'a> ToMdbValue for &'a str {
         }
     }
 }
+
 impl ToMdbValue for str {
     fn to_mdb_value<'a>(&'a self) -> MdbValue<'a> {
         unsafe {
@@ -69,6 +70,15 @@ impl ToMdbValue for str {
 }
 
 impl<'a> ToMdbValue for &'a [u8] {
+    fn to_mdb_value<'b>(&'b self) -> MdbValue<'b> {
+        unsafe {
+            MdbValue::new(std::mem::transmute(self.as_ptr()),
+                          self.len())
+        }
+    }
+}
+
+impl ToMdbValue for [u8] {
     fn to_mdb_value<'b>(&'b self) -> MdbValue<'b> {
         unsafe {
             MdbValue::new(std::mem::transmute(self.as_ptr()),
