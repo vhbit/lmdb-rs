@@ -7,7 +7,7 @@ use std::thread;
 
 use libc::c_int;
 
-use core::{self, EnvBuilder, DbFlags, MdbValue, EnvNoMemInit, EnvNoMetaSync, KeyExists, MdbError};
+use core::{self, EnvBuilder, DbFlags, MdbValue, EnvFlags, KeyExists, MdbError};
 use ffi::MDB_val;
 use traits::FromMdbValue;
 
@@ -59,7 +59,7 @@ fn test_environment() {
 
     env.sync(true).unwrap();
 
-    let test_flags = EnvNoMemInit | EnvNoMetaSync;
+    let test_flags = EnvFlags::EnvNoMemInit | EnvFlags::EnvNoMetaSync;
 
     env.set_flags(test_flags, true).unwrap();
     let new_flags = env.get_flags().unwrap();
@@ -114,7 +114,7 @@ fn test_multiple_values() {
         .open(&next_path(), USER_DIR)
         .unwrap();
 
-    let db = env.get_default_db(core::DbAllowDups).unwrap();
+    let db = env.get_default_db(core::DbFlags::DbAllowDups).unwrap();
     let txn = env.new_transaction().unwrap();
     let db = txn.bind(&db);
 
@@ -148,7 +148,7 @@ fn test_append_duplicate() {
         .open(&next_path(), USER_DIR)
         .unwrap();
 
-    let db = env.get_default_db(core::DbAllowDups).unwrap();
+    let db = env.get_default_db(core::DbFlags::DbAllowDups).unwrap();
     let txn = env.new_transaction().unwrap();
     let db = txn.bind(&db);
 
@@ -298,7 +298,7 @@ fn test_cursors() {
         .open(&next_path(), USER_DIR)
         .unwrap();
 
-    let db = env.get_default_db(core::DbAllowDups).unwrap();
+    let db = env.get_default_db(core::DbFlags::DbAllowDups).unwrap();
     let txn = env.new_transaction().unwrap();
     let db = txn.bind(&db);
 
@@ -347,7 +347,7 @@ fn test_cursor_item_manip() {
         .open(&next_path(), USER_DIR)
         .unwrap();
 
-    let db = env.get_default_db(core::DbAllowDups | core::DbAllowIntDups).unwrap();
+    let db = env.get_default_db(core::DbFlags::DbAllowDups | core::DbFlags::DbAllowIntDups).unwrap();
     let txn = env.new_transaction().unwrap();
     let db = txn.bind(&db);
 
@@ -390,7 +390,7 @@ fn test_item_iter() {
         .open(&next_path(), USER_DIR)
         .unwrap();
 
-    let db = env.get_default_db(core::DbAllowDups).unwrap();
+    let db = env.get_default_db(core::DbFlags::DbAllowDups).unwrap();
     let txn = env.new_transaction().unwrap();
     let db = txn.bind(&db);
 
@@ -443,7 +443,7 @@ fn test_cursor_in_txns() {
         .unwrap();
 
     {
-        let db = env.create_db("test1", core::DbAllowDups | core::DbAllowIntDups).unwrap();
+        let db = env.create_db("test1", core::DbFlags::DbAllowDups | core::DbFlags::DbAllowIntDups).unwrap();
         let txn = env.new_transaction().unwrap();
         {
             let db = txn.bind(&db);
@@ -455,7 +455,7 @@ fn test_cursor_in_txns() {
     }
 
     {
-        let db = env.create_db("test1", core::DbAllowDups | core::DbAllowIntDups).unwrap();
+        let db = env.create_db("test1", core::DbFlags::DbAllowDups | core::DbFlags::DbAllowIntDups).unwrap();
         let txn = env.new_transaction().unwrap();
         {
             let db = txn.bind(&db);
@@ -498,7 +498,7 @@ fn test_multithread_env() {
 #[test]
 fn test_keyrange_to() {
     let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
-    let db = env.get_default_db(core::DbIntKey).unwrap();
+    let db = env.get_default_db(core::DbFlags::DbIntKey).unwrap();
     let keys:   Vec<u64> = vec![1, 2, 3];
     let values: Vec<u64> = vec![5, 6, 7];
 
@@ -533,7 +533,7 @@ fn test_keyrange_to() {
 #[test]
 fn test_keyrange_to_init_cursor() {
     let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
-    let db = env.get_default_db(core::DbIntKey).unwrap();
+    let db = env.get_default_db(core::DbFlags::DbIntKey).unwrap();
     let recs: Vec<(u64, u64)> = vec![(10, 50), (11, 60), (12, 70)];
 
     let txn = env.new_transaction().unwrap();
@@ -561,7 +561,7 @@ fn test_keyrange_to_init_cursor() {
 #[test]
 fn test_keyrange_from() {
     let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
-    let db = env.get_default_db(core::DbIntKey).unwrap();
+    let db = env.get_default_db(core::DbFlags::DbIntKey).unwrap();
     let keys:   Vec<u64> = vec![1, 2, 3];
     let values: Vec<u64> = vec![5, 6, 7];
 
@@ -595,7 +595,7 @@ fn test_keyrange_from() {
 #[test]
 fn test_keyrange_from_init_cursor() {
     let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
-    let db = env.get_default_db(core::DbIntKey).unwrap();
+    let db = env.get_default_db(core::DbFlags::DbIntKey).unwrap();
     let recs: Vec<(u64, u64)> = vec![(10, 50), (11, 60), (12, 70)];
 
     let txn = env.new_transaction().unwrap();
@@ -623,7 +623,7 @@ fn test_keyrange_from_init_cursor() {
 #[test]
 fn test_keyrange() {
     let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
-    let db = env.get_default_db(core::DbAllowDups | core::DbIntKey).unwrap();
+    let db = env.get_default_db(core::DbFlags::DbAllowDups | core::DbFlags::DbIntKey).unwrap();
     let keys:   Vec<u64> = vec![ 1,  2,  3,  4,  5,  6];
     let values: Vec<u64> = vec![10, 11, 12, 13, 14, 15];
 
@@ -659,7 +659,7 @@ fn test_keyrange() {
 #[test]
 fn test_keyrange_init_cursor() {
     let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
-    let db = env.get_default_db(core::DbAllowDups | core::DbIntKey).unwrap();
+    let db = env.get_default_db(core::DbFlags::DbAllowDups | core::DbFlags::DbIntKey).unwrap();
     let keys:   Vec<u64> = vec![ 1,  2,  3,  4,  5,  6];
     let values: Vec<u64> = vec![10, 11, 12, 13, 14, 15];
 
@@ -704,7 +704,7 @@ fn test_keyrange_init_cursor() {
 #[test]
 fn test_keyrange_from_to() {
     let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
-    let db = env.get_default_db(core::DbAllowDups | core::DbIntKey).unwrap();
+    let db = env.get_default_db(core::DbFlags::DbAllowDups | core::DbFlags::DbIntKey).unwrap();
     let recs: Vec<(u64, u64)> = vec![(10, 11), (20, 21), (30, 31), (40, 41), (50, 51)];
 
     let txn = env.new_transaction().unwrap();
@@ -740,7 +740,7 @@ fn test_readonly_env() {
     let path = next_path();
     {
         let rw_env = EnvBuilder::new().open(&path, USER_DIR).unwrap();
-        let dbh = rw_env.get_default_db(core::DbIntKey).unwrap();
+        let dbh = rw_env.get_default_db(core::DbFlags::DbIntKey).unwrap();
         let tx = rw_env.new_transaction().unwrap();
         {
             let db = tx.bind(&dbh);
@@ -754,9 +754,9 @@ fn test_readonly_env() {
     // ~ now re-open the previously created database in read-only mode
     // and iterate the key/value pairs
     let ro_env = EnvBuilder::new()
-        .flags(core::EnvCreateReadOnly)
+        .flags(core::EnvCreateFlags::EnvCreateReadOnly)
         .open(&path, USER_DIR).unwrap();
-    let dbh = ro_env.get_default_db(core::DbIntKey).unwrap();
+    let dbh = ro_env.get_default_db(core::DbFlags::DbIntKey).unwrap();
     assert!(ro_env.new_transaction().is_err());
     let mut tx = ro_env.get_reader().unwrap();
     {
@@ -825,7 +825,7 @@ fn test_compare() {
 #[test]
 fn test_dupsort() {
     let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
-    let db_handle = env.get_default_db(core::DbAllowDups).unwrap();
+    let db_handle = env.get_default_db(core::DbFlags::DbAllowDups).unwrap();
     let txn = env.new_transaction().unwrap();
     let key: i32 = 0;
     {
@@ -865,7 +865,7 @@ fn test_conversion_to_vecu8() {
 
     let path = next_path();
     let env = EnvBuilder::new().open(&path, USER_DIR).unwrap();
-    let db = env.get_default_db(core::DbIntKey).unwrap();
+    let db = env.get_default_db(core::DbFlags::DbIntKey).unwrap();
 
     // ~ add our test record
     {
@@ -898,7 +898,7 @@ fn test_conversion_to_string() {
 
     let path = next_path();
     let env = EnvBuilder::new().open(&path, USER_DIR).unwrap();
-    let db = env.get_default_db(core::DbIntKey).unwrap();
+    let db = env.get_default_db(core::DbFlags::DbIntKey).unwrap();
 
     // ~ add our test record
     {
