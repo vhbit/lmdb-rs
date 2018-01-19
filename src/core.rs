@@ -97,19 +97,6 @@ macro_rules! assert_state_eq {
             }})
 }
 
-macro_rules! assert_state_not {
-    ($log:ident, $cur:expr, $exp:expr) =>
-        ({
-            let c = $cur;
-            let e = $exp;
-            if c != e {
-                ()
-            } else {
-                let msg = format!("{} shouldn't be in {:?}", stringify!($log), e);
-                return Err(StateError(msg))
-            }})
-}
-
 /// MdbError wraps information about LMDB error
 #[derive(Debug)]
 pub enum MdbError {
