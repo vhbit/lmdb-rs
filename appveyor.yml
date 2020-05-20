@@ -2,8 +2,8 @@ environment:
   matrix:
     - TARGET: nightly-x86_64-pc-windows-msvc
     - TARGET: nightly-i686-pc-windows-msvc
-    - TARGET: 1.10.0-x86_64-pc-windows-msvc
-    - TARGET: 1.10.0-i686-pc-windows-msvc
+    - TARGET: stable-x86_64-pc-windows-msvc
+    - TARGET: stable-i686-pc-windows-msvc
     #- TARGET: nightly-i686-pc-windows-gnu
 
 install:
