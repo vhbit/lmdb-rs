@@ -15,6 +15,7 @@ pub use core::{Database, DbFlags, DbHandle};
 pub use core::{Transaction, ReadonlyTransaction, MdbError, MdbValue};
 pub use core::{Cursor, CursorValue, CursorIter, CursorKeyRangeIter};
 pub use traits::{FromMdbValue, ToMdbValue};
+pub use utils::{sort, sort_reverse};
 
 pub mod core;
 pub mod traits;
