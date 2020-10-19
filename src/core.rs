@@ -385,19 +385,43 @@ bitflags! {
     }
 }
 
+/// `Access` designates a type as specifying access (e.g., read-only vs
+/// read-write).
+///
+/// The purpose of the `Access` trait is to allow the `Transaction` and
+/// `Database` types to be generic with regard to read-only vs read-write
+/// access.
+///
+pub trait Access {}
+
+/// `ReadOnly` is a marker type for specifying read-only access to something.
+#[derive(Debug)]
+pub struct ReadOnly;
+
+impl Access for ReadOnly {}
+
+/// `ReadWrite` is a marker type for specifying read-write access to something.
+#[derive(Debug)]
+pub struct ReadWrite;
+
+impl Access for ReadWrite {}
+
 /// Database
 #[derive(Debug)]
-pub struct Database<'a> {
+pub struct Database<'a, A: Access> {
     handle: ffi::MDB_dbi,
     txn: &'a NativeTransaction<'a>,
+    _access: std::marker::PhantomData<A>,
 }
 
-// FIXME: provide different interfaces for read-only/read-write databases
+pub type ReadOnlyDatabase<'a> = Database<'a, ReadOnly>;
+pub type ReadWriteDatabase<'a> = Database<'a, ReadWrite>;
+
 // FIXME: provide different interfaces for simple KV and storage with duplicates
 
-impl<'a> Database<'a> {
-    fn new_with_handle(handle: ffi::MDB_dbi, txn: &'a NativeTransaction<'a>) -> Database<'a> {
-        Database { handle: handle, txn: txn }
+impl<'a, A: Access> Database<'a, A> {
+    fn new_with_handle(handle: ffi::MDB_dbi, txn: &'a NativeTransaction<'a>) -> Database<'a, A> {
+        Database { handle: handle, txn: txn, _access: std::marker::PhantomData, }
     }
 
     /// Retrieves current db's statistics.
@@ -409,7 +433,9 @@ impl<'a> Database<'a> {
     pub fn get<V: FromMdbValue + 'a>(&'a self, key: &ToMdbValue) -> MdbResult<V> {
         self.txn.get(self.handle, key)
     }
+}
 
+impl<'a> Database<'a, ReadWrite> {
     /// Sets value for key. In case of DbAllowDups it will add a new item
     pub fn set(&self, key: &ToMdbValue, value: &ToMdbValue) -> MdbResult<()> {
         self.txn.set(self.handle, key, value)
@@ -443,12 +469,16 @@ impl<'a> Database<'a> {
     pub fn del_item(&self, key: &ToMdbValue, data: &ToMdbValue) -> MdbResult<()> {
         self.txn.del_item(self.handle, key, data)
     }
+}
 
+impl<'a, A: Access> Database<'a, A> {
     /// Returns a new cursor
     pub fn new_cursor(&'a self) -> MdbResult<Cursor<'a>> {
         self.txn.new_cursor(self.handle)
     }
+}
 
+impl<'a> Database<'a, ReadWrite> {
     /// Deletes current db, also moves it out
     pub fn del_db(self) -> MdbResult<()> {
         self.txn.del_db(self)
@@ -458,7 +488,9 @@ impl<'a> Database<'a> {
     pub fn clear(&self) -> MdbResult<()> {
         self.txn.clear_db(self.handle)
     }
+}
 
+impl<'a, A: Access> Database<'a, A> {
     /// Returns an iterator for all values in database
     pub fn iter(&'a self) -> MdbResult<CursorIterator<'a, CursorIter>> {
         self.txn.new_cursor(self.handle)
@@ -826,7 +858,7 @@ impl Environment {
     /// Creates a new read-write transaction
     ///
     /// Use `get_reader` to get much faster lock-free alternative
-    pub fn new_transaction(&self) -> MdbResult<Transaction> {
+    pub fn new_transaction(&self) -> MdbResult<ReadWriteTransaction> {
         if self.is_readonly {
             return Err(MdbError::StateError("Error: creating read-write transaction in read-only environment".to_owned()))
         }
@@ -835,9 +867,9 @@ impl Environment {
     }
 
     /// Creates a readonly transaction
-    pub fn get_reader(&self) -> MdbResult<ReadonlyTransaction> {
+    pub fn get_reader(&self) -> MdbResult<ReadOnlyTransaction> {
         self.create_transaction(None, ffi::MDB_RDONLY)
-            .and_then(|txn| Ok(ReadonlyTransaction::new_with_native(txn)))
+            .and_then(|txn| Ok(ReadOnlyTransaction::new_with_native(txn)))
     }
 
     fn _open_db(&self, db_name: & str, flags: DbFlags, force_creation: bool) -> MdbResult<ffi::MDB_dbi> {
@@ -1137,7 +1169,7 @@ impl<'a> NativeTransaction<'a> {
     }
 
     /// Deletes provided database completely
-    fn del_db(&self, db: Database) -> MdbResult<()> {
+    fn del_db(&self, db: Database<ReadWrite>) -> MdbResult<()> {
         assert_state_eq!(txn, self.state, TransactionState::Normal);
         unsafe {
             self.env.drop_db_from_cache(db.handle);
@@ -1181,65 +1213,33 @@ impl<'a> Drop for NativeTransaction<'a> {
 }
 
 #[derive(Debug)]
-pub struct Transaction<'a> {
+pub struct Transaction<'a, A: Access> {
     inner: NativeTransaction<'a>,
+    _access: std::marker::PhantomData<A>,
 }
 
-impl<'a> Transaction<'a> {
-    fn new_with_native(txn: NativeTransaction<'a>) -> Transaction<'a> {
+pub type ReadOnlyTransaction<'a> = Transaction<'a, ReadOnly>;
+pub type ReadWriteTransaction<'a> = Transaction<'a, ReadWrite>;
+
+impl<'a, A: Access> Transaction<'a, A> {
+    fn new_with_native(txn: NativeTransaction<'a>) -> Self {
         Transaction {
-            inner: txn
+            inner: txn,
+            _access: std::marker::PhantomData,
         }
     }
 
-    pub fn new_child(&self) -> MdbResult<Transaction> {
-        self.inner.new_child(0)
-            .and_then(|txn| Ok(Transaction::new_with_native(txn)))
-    }
-
-    pub fn new_ro_child(&self) -> MdbResult<ReadonlyTransaction> {
+    pub fn new_ro_child(&self) -> MdbResult<ReadOnlyTransaction> {
         self.inner.new_child(ffi::MDB_RDONLY)
-            .and_then(|txn| Ok(ReadonlyTransaction::new_with_native(txn)))
+            .and_then(|txn| Ok(ReadOnlyTransaction::new_with_native(txn)))
     }
 
-    /// Commits transaction, moves it out
-    pub fn commit(self) -> MdbResult<()> {
-        //self.inner.commit()
-        let mut t = self;
-        t.inner.commit()
-    }
-
-    /// Aborts transaction, moves it out
-    pub fn abort(self) {
-        let mut t = self;
-        t.inner.abort();
-    }
-
-    pub fn bind(&self, db_handle: &DbHandle) -> Database {
+    pub fn bind(&self, db_handle: &DbHandle) -> Database<A> {
         Database::new_with_handle(db_handle.handle, &self.inner)
     }
 }
 
-
-#[derive(Debug)]
-pub struct ReadonlyTransaction<'a> {
-    inner: NativeTransaction<'a>,
-}
-
-
-impl<'a> ReadonlyTransaction<'a> {
-    fn new_with_native(txn: NativeTransaction<'a>) -> ReadonlyTransaction<'a> {
-        ReadonlyTransaction {
-            inner: txn,
-        }
-    }
-
-    pub fn new_ro_child(&self) -> MdbResult<ReadonlyTransaction> {
-        self.inner.new_child(ffi::MDB_RDONLY)
-            .and_then(|txn| Ok(ReadonlyTransaction::new_with_native(txn)))
-
-    }
-
+impl<'a> Transaction<'a, ReadOnly> {
     /// Aborts transaction. But readonly transaction could be
     /// reused later by calling `renew`
     pub fn abort(&mut self) {
@@ -1257,9 +1257,25 @@ impl<'a> ReadonlyTransaction<'a> {
     pub fn renew(&mut self) -> MdbResult<()> {
         self.inner.renew()
     }
+}
 
-    pub fn bind(&self, db_handle: &DbHandle) -> Database {
-        Database::new_with_handle(db_handle.handle, &self.inner)
+impl<'a> Transaction<'a, ReadWrite> {
+    pub fn new_child(&self) -> MdbResult<Transaction<ReadWrite>> {
+        self.inner.new_child(0)
+            .and_then(|txn| Ok(Transaction::new_with_native(txn)))
+    }
+
+    /// Commits transaction, moves it out
+    pub fn commit(self) -> MdbResult<()> {
+        //self.inner.commit()
+        let mut t = self;
+        t.inner.commit()
+    }
+
+    /// Aborts transaction, moves it out
+    pub fn abort(self) {
+        let mut t = self;
+        t.inner.abort();
     }
 }
 

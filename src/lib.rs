@@ -11,8 +11,8 @@ extern crate liblmdb_sys as ffi;
 pub use libc::c_int;
 pub use ffi::{mdb_filehandle_t, MDB_stat, MDB_envinfo, MDB_val};
 pub use core::{EnvBuilder, Environment, EnvFlags, EnvCreateFlags};
-pub use core::{Database, DbFlags, DbHandle};
-pub use core::{Transaction, ReadonlyTransaction, MdbError, MdbValue};
+pub use core::{Database, ReadOnlyDatabase, ReadWriteDatabase, DbFlags, DbHandle};
+pub use core::{Transaction, ReadOnlyTransaction, ReadWriteTransaction, MdbError, MdbValue};
 pub use core::{Cursor, CursorValue, CursorIter, CursorKeyRangeIter};
 pub use traits::{FromMdbValue, ToMdbValue};
 
