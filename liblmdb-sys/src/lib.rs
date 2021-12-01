@@ -1,7 +1,5 @@
 #![allow(dead_code, non_camel_case_types)]
 
-extern crate libc;
-
 pub use self::os::{mdb_mode_t, mdb_filehandle_t};
 use libc::{c_int, c_uint, c_void, c_char, size_t};
 

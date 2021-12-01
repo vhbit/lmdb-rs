@@ -12,18 +12,16 @@
 //! It would be extremely helpful to create `compile-fail` tests to ensure
 //! this, but unfortunately there is no way yet.
 
-
+use crate::core::MdbValue;
+use liblmdb_sys::MDB_val;
 use std::{self, mem, slice};
-
-use core::MdbValue;
-use ffi::MDB_val;
 
 /// `ToMdbValue` is supposed to convert a value to a memory
 /// slice which `lmdb` uses to prevent multiple copying data
 /// multiple times. May be unsafe.
 
 pub trait ToMdbValue {
-    fn to_mdb_value<'a>(&'a self) -> MdbValue<'a>;
+    fn to_mdb_value(&self) -> MdbValue<'_>;
 }
 
 /// `FromMdbValue` is supposed to reconstruct a value from
@@ -35,10 +33,8 @@ pub trait FromMdbValue {
 }
 
 impl ToMdbValue for Vec<u8> {
-    fn to_mdb_value<'a>(&'a self) -> MdbValue<'a> {
-        unsafe {
-            MdbValue::new(std::mem::transmute(self.as_ptr()), self.len())
-        }
+    fn to_mdb_value(&self) -> MdbValue<'_> {
+        unsafe { MdbValue::new(std::mem::transmute(self.as_ptr()), self.len()) }
     }
 }
 
@@ -52,37 +48,28 @@ impl ToMdbValue for String {
 }
 
 impl<'a> ToMdbValue for &'a str {
-    fn to_mdb_value<'b>(&'b self) -> MdbValue<'b> {
-        unsafe {
-            MdbValue::new(mem::transmute(self.as_ptr()),
-                          self.len())
-        }
+    fn to_mdb_value(&self) -> MdbValue<'_> {
+        unsafe { MdbValue::new(mem::transmute(self.as_ptr()), self.len()) }
     }
 }
 
 impl<'a> ToMdbValue for &'a [u8] {
-    fn to_mdb_value<'b>(&'b self) -> MdbValue<'b> {
-        unsafe {
-            MdbValue::new(std::mem::transmute(self.as_ptr()),
-                          self.len())
-        }
+    fn to_mdb_value(&self) -> MdbValue<'_> {
+        unsafe { MdbValue::new(std::mem::transmute(self.as_ptr()), self.len()) }
     }
 }
 
 impl ToMdbValue for MDB_val {
-    fn to_mdb_value<'a>(&'a self) -> MdbValue<'a> {
-        unsafe {
-            MdbValue::from_raw(self)
-        }
+    fn to_mdb_value(&self) -> MdbValue<'_> {
+        unsafe { MdbValue::from_raw(self) }
     }
 }
 
 impl<'a> ToMdbValue for MdbValue<'a> {
-    fn to_mdb_value<'b>(&'b self) -> MdbValue<'b> {
+    fn to_mdb_value(&self) -> MdbValue<'_> {
         *self
     }
 }
-
 
 impl FromMdbValue for String {
     fn from_mdb_value(value: &MdbValue) -> String {
@@ -104,28 +91,23 @@ impl FromMdbValue for Vec<u8> {
 }
 
 impl FromMdbValue for () {
-    fn from_mdb_value(_: &MdbValue) {
-    }
+    fn from_mdb_value(_: &MdbValue) {}
 }
 
 impl<'b> FromMdbValue for &'b str {
     fn from_mdb_value(value: &MdbValue) -> &'b str {
-        unsafe {
-            std::mem::transmute(slice::from_raw_parts(value.get_ref(), value.get_size()))
-        }
+        unsafe { std::mem::transmute(slice::from_raw_parts(value.get_ref(), value.get_size())) }
     }
 }
 
 impl<'b> FromMdbValue for &'b [u8] {
     fn from_mdb_value(value: &MdbValue) -> &'b [u8] {
-        unsafe {
-            std::mem::transmute(slice::from_raw_parts(value.get_ref(), value.get_size()))
-        }
+        unsafe { std::mem::transmute(slice::from_raw_parts(value.get_ref(), value.get_size())) }
     }
 }
 
 macro_rules! mdb_for_primitive {
-    ($t:ty) => (
+    ($t:ty) => {
         impl ToMdbValue for $t {
             fn to_mdb_value<'a>(&'a self) -> MdbValue<'a> {
                 MdbValue::new_from_sized(self)
@@ -140,8 +122,7 @@ macro_rules! mdb_for_primitive {
                 }
             }
         }
-
-        )
+    };
 }
 
 mdb_for_primitive!(u8);

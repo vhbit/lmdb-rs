@@ -1,5 +1,3 @@
-extern crate cc;
-
 fn main() {
     let target = std::env::var("TARGET").unwrap();
 
