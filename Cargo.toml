@@ -1,6 +1,6 @@
 [package]
 name = "lmdb-rs"
-version = "0.7.6"
+version = "0.8.0"
 authors = ["Valerii Hiora <valerii.hiora@gmail.com>"]
 license = "MIT"
 description = "LMDB bindings"
@@ -13,12 +13,13 @@ exclude = [
         ".travis.yml",
         "up_doc.sh",
 ]
+edition = "2018"
 
 [dependencies.liblmdb-sys]
 path = "liblmdb-sys"
 version = "0.2.2"
 
 [dependencies]
-log = "0.3"
+log = "0.4"
 libc = "0.2"
-bitflags = "0.7"
+bitflags = "1.3"

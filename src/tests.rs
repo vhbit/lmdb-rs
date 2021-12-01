@@ -1,37 +1,37 @@
+use crate::core::{DbFlags, EnvBuilder, EnvFlags, KeyExists, MdbError, MdbValue};
+use crate::traits::FromMdbValue;
+use libc::c_int;
+use liblmdb_sys::MDB_val;
 use std::env;
 use std::fs::{self};
-use std::path::{PathBuf};
-use std::sync::atomic::{AtomicUsize, ATOMIC_USIZE_INIT, Ordering};
-use std::sync::{Once, ONCE_INIT};
+use std::path::PathBuf;
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Once,
+};
 use std::thread;
 
-use libc::c_int;
-
-use core::{self, EnvBuilder, DbFlags, MdbValue, EnvNoMemInit, EnvNoMetaSync, KeyExists, MdbError};
-use ffi::MDB_val;
-use traits::FromMdbValue;
-
 const USER_DIR: u32 = 0o777;
-static TEST_ROOT_DIR: &'static str = "test-dbs";
-static NEXT_ID: AtomicUsize = ATOMIC_USIZE_INIT;
-static INIT_DIR_ONCE: Once = ONCE_INIT;
+static TEST_ROOT_DIR: &str = "test-dbs";
+static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
+static INIT_DIR_ONCE: Once = Once::new();
 
 fn global_root() -> PathBuf {
-     let mut path = env::current_exe().unwrap();
-     path.pop(); // chop off exe name
-     path.pop(); // chop off 'debug'
+    let mut path = env::current_exe().unwrap();
+    path.pop(); // chop off exe name
+    path.pop(); // chop off 'debug'
 
-     // If `cargo test` is run manually then our path looks like
-     // `target/debug/foo`, in which case our `path` is already pointing at
-     // `target`. If, however, `cargo test --target $target` is used then the
-     // output is `target/$target/debug/foo`, so our path is pointing at
-     // `target/$target`. Here we conditionally pop the `$target` name.
-     if path.file_name().and_then(|s| s.to_str()) != Some("target") {
-         path.pop();
-     }
+    // If `cargo test` is run manually then our path looks like
+    // `target/debug/foo`, in which case our `path` is already pointing at
+    // `target`. If, however, `cargo test --target $target` is used then the
+    // output is `target/$target/debug/foo`, so our path is pointing at
+    // `target/$target`. Here we conditionally pop the `$target` name.
+    if path.file_name().and_then(|s| s.to_str()) != Some("target") {
+        path.pop();
+    }
 
-     path.join(TEST_ROOT_DIR)
- }
+    path.join(TEST_ROOT_DIR)
+}
 
 fn next_path() -> PathBuf {
     let root_dir = global_root();
@@ -55,15 +55,19 @@ fn next_path() -> PathBuf {
 fn test_environment() {
     let mut env = EnvBuilder::new()
         .max_readers(33)
-        .open(&next_path(), USER_DIR).unwrap();
+        .open(&next_path(), USER_DIR)
+        .unwrap();
 
     env.sync(true).unwrap();
 
-    let test_flags = EnvNoMemInit | EnvNoMetaSync;
+    let test_flags = EnvFlags::NoMemInit | EnvFlags::NoMetaSync;
 
     env.set_flags(test_flags, true).unwrap();
     let new_flags = env.get_flags().unwrap();
-    assert!((new_flags & test_flags) == test_flags, "Get flags != set flags");
+    assert!(
+        (new_flags & test_flags) == test_flags,
+        "Get flags != set flags"
+    );
 
     let db = env.get_default_db(DbFlags::empty()).unwrap();
     let txn = env.new_transaction().unwrap();
@@ -114,7 +118,7 @@ fn test_multiple_values() {
         .open(&next_path(), USER_DIR)
         .unwrap();
 
-    let db = env.get_default_db(core::DbAllowDups).unwrap();
+    let db = env.get_default_db(DbFlags::AllowDups).unwrap();
     let txn = env.new_transaction().unwrap();
     let db = txn.bind(&db);
 
@@ -138,7 +142,10 @@ fn test_multiple_values() {
     assert!(v == test_data2, "It should return second value");
     assert!(db.del(&test_key1).is_ok());
 
-    assert!(db.get::<()>(&test_key1).is_err(), "Key shouldn't exist anymore!");
+    assert!(
+        db.get::<()>(&test_key1).is_err(),
+        "Key shouldn't exist anymore!"
+    );
 }
 
 #[test]
@@ -148,7 +155,7 @@ fn test_append_duplicate() {
         .open(&next_path(), USER_DIR)
         .unwrap();
 
-    let db = env.get_default_db(core::DbAllowDups).unwrap();
+    let db = env.get_default_db(DbFlags::AllowDups).unwrap();
     let txn = env.new_transaction().unwrap();
     let db = txn.bind(&db);
 
@@ -171,7 +178,7 @@ fn test_append_duplicate() {
 
     match db.append_duplicate(&test_key1, &test_data1).err().unwrap() {
         KeyExists => (),
-        _ => panic!("Expected KeyExists error")
+        _ => panic!("Expected KeyExists error"),
     }
 }
 
@@ -196,18 +203,24 @@ fn test_insert_values() {
     let v = db.get::<&str>(&test_key1).unwrap();
     assert!(v == test_data1, "Data written differs from data read");
 
-    assert!(db.insert(&test_key1, &test_data2).is_err(), "Inserting should fail if key exists");
+    assert!(
+        db.insert(&test_key1, &test_data2).is_err(),
+        "Inserting should fail if key exists"
+    );
 
     assert!(db.del(&test_key1).is_ok());
     assert!(db.get::<()>(&test_key1).is_err(), "Key should be deleted");
 
-    assert!(db.insert(&test_key1, &test_data2).is_ok(), "Inserting should succeed");
+    assert!(
+        db.insert(&test_key1, &test_data2).is_ok(),
+        "Inserting should succeed"
+    );
 }
 
 #[test]
 fn test_resize_map() {
-    use ffi::MDB_MAP_FULL;
-    
+    use liblmdb_sys::MDB_MAP_FULL;
+
     let env = EnvBuilder::new()
         .max_dbs(5)
         .map_size(0x1000u64)
@@ -224,7 +237,8 @@ fn test_resize_map() {
         {
             let db = txn.bind(&db);
             let test_key = format!("key_{}", key_idx);
-            try!(db.set(&test_key, &(&test_data[..])));
+
+            db.set(&test_key, &(&test_data[..]))?;
         }
         key_idx += 1;
         txn.commit()
@@ -232,21 +246,29 @@ fn test_resize_map() {
     // write data until running into 'MDB_MAP_FULL' error
     loop {
         match write_closure() {
-            Err(MdbError::Other(MDB_MAP_FULL, _)) => { break; }
+            Err(MdbError::Other(MDB_MAP_FULL, _)) => {
+                break;
+            }
             Err(_) => panic!("unexpected db error"),
             _ => {} // continue
         }
     }
 
     // env should be still ok and resizable
-    assert!(env.set_mapsize(0x100000usize).is_ok(), "Couldn't resize map");
+    assert!(
+        env.set_mapsize(0x100000usize).is_ok(),
+        "Couldn't resize map"
+    );
 
     // next write after resize should not fail
     let txn = env.new_transaction().unwrap();
     {
         let db = txn.bind(&db);
         let test_key = "different_key";
-        assert!(db.set(&test_key, &(&test_data[..])).is_ok(), "set after resize failed");
+        assert!(
+            db.set(&test_key, &(&test_data[..])).is_ok(),
+            "set after resize failed"
+        );
     }
     assert!(txn.commit().is_ok(), "Commit failed after resizing map");
 }
@@ -262,10 +284,17 @@ fn test_stat() {
     let dss = [
         // ~ keep the "default db" dataset here at the beginning (see
         // the assertion at the end of this test)
-        ("", vec![("default", "db"), ("has", "some"), ("extras", "prepared")]),
+        (
+            "",
+            vec![("default", "db"), ("has", "some"), ("extras", "prepared")],
+        ),
         ("db1", vec![("foo", "bar"), ("quux", "qak")]),
-        ("db2", vec![("a", "abc"), ("b", "bcd"), ("c", "cde"), ("d", "def")]),
-        ("db3", vec![("hip", "hop")])];
+        (
+            "db2",
+            vec![("a", "abc"), ("b", "bcd"), ("c", "cde"), ("d", "def")],
+        ),
+        ("db3", vec![("hip", "hop")]),
+    ];
 
     // ~ create each db, populate it, and assert db.stat() for each seperately
     for &(name, ref ds) in &dss {
@@ -290,7 +319,6 @@ fn test_stat() {
     assert_eq!(dss[0].1.len() + dss[1..].len(), stat.ms_entries);
 }
 
-
 #[test]
 fn test_cursors() {
     let env = EnvBuilder::new()
@@ -298,13 +326,13 @@ fn test_cursors() {
         .open(&next_path(), USER_DIR)
         .unwrap();
 
-    let db = env.get_default_db(core::DbAllowDups).unwrap();
+    let db = env.get_default_db(DbFlags::AllowDups).unwrap();
     let txn = env.new_transaction().unwrap();
     let db = txn.bind(&db);
 
     let test_key1 = "key1";
     let test_key2 = "key2";
-    let test_values: Vec<&str> = vec!("value1", "value2", "value3", "value4");
+    let test_values: Vec<&str> = vec!["value1", "value2", "value3", "value4"];
 
     assert!(db.get::<()>(&test_key1).is_err(), "Key shouldn't exist yet");
 
@@ -339,7 +367,6 @@ fn test_cursors() {
     assert!(cursor.to_key(&test_key2).is_ok());
 }
 
-
 #[test]
 fn test_cursor_item_manip() {
     let env = EnvBuilder::new()
@@ -347,7 +374,9 @@ fn test_cursor_item_manip() {
         .open(&next_path(), USER_DIR)
         .unwrap();
 
-    let db = env.get_default_db(core::DbAllowDups | core::DbAllowIntDups).unwrap();
+    let db = env
+        .get_default_db(DbFlags::AllowDups | DbFlags::AllowIntDups)
+        .unwrap();
     let txn = env.new_transaction().unwrap();
     let db = txn.bind(&db);
 
@@ -358,7 +387,9 @@ fn test_cursor_item_manip() {
     let mut cursor = db.new_cursor().unwrap();
     assert!(cursor.to_key(&test_key1).is_ok());
 
-    let values: Vec<u64> = db.item_iter(&test_key1).unwrap()
+    let values: Vec<u64> = db
+        .item_iter(&test_key1)
+        .unwrap()
         .map(|cv| cv.get_value::<u64>())
         .collect();
     assert_eq!(values, vec![3u64]);
@@ -366,13 +397,17 @@ fn test_cursor_item_manip() {
     assert!(cursor.add_item(&4u64).is_ok());
     assert!(cursor.add_item(&5u64).is_ok());
 
-    let values: Vec<u64> = db.item_iter(&test_key1).unwrap()
+    let values: Vec<u64> = db
+        .item_iter(&test_key1)
+        .unwrap()
         .map(|cv| cv.get_value::<u64>())
         .collect();
     assert_eq!(values, vec![3u64, 4, 5]);
 
     assert!(cursor.replace(&6u64).is_ok());
-    let values: Vec<u64> = db.item_iter(&test_key1).unwrap()
+    let values: Vec<u64> = db
+        .item_iter(&test_key1)
+        .unwrap()
         .map(|cv| cv.get_value::<u64>())
         .collect();
 
@@ -390,7 +425,7 @@ fn test_item_iter() {
         .open(&next_path(), USER_DIR)
         .unwrap();
 
-    let db = env.get_default_db(core::DbAllowDups).unwrap();
+    let db = env.get_default_db(DbFlags::AllowDups).unwrap();
     let txn = env.new_transaction().unwrap();
     let db = txn.bind(&db);
 
@@ -413,8 +448,8 @@ fn test_item_iter() {
     assert_eq!(as_slices(&values), vec![test_data1]);
 
     let iter = db.item_iter(&test_key3).unwrap();
-    let values: Vec<String> = iter.map(|cv| cv.get_value::<String>()).collect();
-    assert_eq!(values.len(), 0);
+
+    assert_eq!(iter.map(|cv| cv.get_value::<String>()).count(), 0);
 }
 
 #[test]
@@ -443,7 +478,9 @@ fn test_cursor_in_txns() {
         .unwrap();
 
     {
-        let db = env.create_db("test1", core::DbAllowDups | core::DbAllowIntDups).unwrap();
+        let db = env
+            .create_db("test1", DbFlags::AllowDups | DbFlags::AllowIntDups)
+            .unwrap();
         let txn = env.new_transaction().unwrap();
         {
             let db = txn.bind(&db);
@@ -455,7 +492,9 @@ fn test_cursor_in_txns() {
     }
 
     {
-        let db = env.create_db("test1", core::DbAllowDups | core::DbAllowIntDups).unwrap();
+        let db = env
+            .create_db("test1", DbFlags::AllowDups | DbFlags::AllowIntDups)
+            .unwrap();
         let txn = env.new_transaction().unwrap();
         {
             let db = txn.bind(&db);
@@ -486,7 +525,8 @@ fn test_multithread_env() {
             assert!(db.set(&key, &value).is_ok());
         }
         assert!(txn.commit().is_ok());
-    }).join();
+    })
+    .join();
 
     let db = env.create_db("test1", DbFlags::empty()).unwrap();
     let txn = env.get_reader().unwrap();
@@ -498,8 +538,8 @@ fn test_multithread_env() {
 #[test]
 fn test_keyrange_to() {
     let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
-    let db = env.get_default_db(core::DbIntKey).unwrap();
-    let keys:   Vec<u64> = vec![1, 2, 3];
+    let db = env.get_default_db(DbFlags::IntKey).unwrap();
+    let keys: Vec<u64> = vec![1, 2, 3];
     let values: Vec<u64> = vec![5, 6, 7];
 
     // to avoid problems caused by updates
@@ -533,7 +573,7 @@ fn test_keyrange_to() {
 #[test]
 fn test_keyrange_to_init_cursor() {
     let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
-    let db = env.get_default_db(core::DbIntKey).unwrap();
+    let db = env.get_default_db(DbFlags::IntKey).unwrap();
     let recs: Vec<(u64, u64)> = vec![(10, 50), (11, 60), (12, 70)];
 
     let txn = env.new_transaction().unwrap();
@@ -561,8 +601,8 @@ fn test_keyrange_to_init_cursor() {
 #[test]
 fn test_keyrange_from() {
     let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
-    let db = env.get_default_db(core::DbIntKey).unwrap();
-    let keys:   Vec<u64> = vec![1, 2, 3];
+    let db = env.get_default_db(DbFlags::IntKey).unwrap();
+    let keys: Vec<u64> = vec![1, 2, 3];
     let values: Vec<u64> = vec![5, 6, 7];
 
     // to avoid problems caused by updates
@@ -595,7 +635,7 @@ fn test_keyrange_from() {
 #[test]
 fn test_keyrange_from_init_cursor() {
     let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
-    let db = env.get_default_db(core::DbIntKey).unwrap();
+    let db = env.get_default_db(DbFlags::IntKey).unwrap();
     let recs: Vec<(u64, u64)> = vec![(10, 50), (11, 60), (12, 70)];
 
     let txn = env.new_transaction().unwrap();
@@ -612,7 +652,7 @@ fn test_keyrange_from_init_cursor() {
         let db = txn.bind(&db);
 
         // last key is excluded
-        let lower_bound = recs[recs.len()-1].0 + 1;
+        let lower_bound = recs[recs.len() - 1].0 + 1;
         let iter = db.keyrange_from(&lower_bound).unwrap();
 
         let res: Vec<_> = iter.map(|cv| cv.get_value::<u64>()).collect();
@@ -623,8 +663,10 @@ fn test_keyrange_from_init_cursor() {
 #[test]
 fn test_keyrange() {
     let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
-    let db = env.get_default_db(core::DbAllowDups | core::DbIntKey).unwrap();
-    let keys:   Vec<u64> = vec![ 1,  2,  3,  4,  5,  6];
+    let db = env
+        .get_default_db(DbFlags::AllowDups | DbFlags::IntKey)
+        .unwrap();
+    let keys: Vec<u64> = vec![1, 2, 3, 4, 5, 6];
     let values: Vec<u64> = vec![10, 11, 12, 13, 14, 15];
 
     // to avoid problems caused by updates
@@ -649,8 +691,8 @@ fn test_keyrange() {
 
         let res: Vec<_> = iter.map(|cv| cv.get_value::<u64>()).collect();
 
-         //  +1 as Rust slices do not include end
-        assert_eq!(res, &values[start_idx.. end_idx + 1]);
+        //  +1 as Rust slices do not include end
+        assert_eq!(res, &values[start_idx..end_idx + 1]);
     }
 }
 
@@ -659,8 +701,10 @@ fn test_keyrange() {
 #[test]
 fn test_keyrange_init_cursor() {
     let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
-    let db = env.get_default_db(core::DbAllowDups | core::DbIntKey).unwrap();
-    let keys:   Vec<u64> = vec![ 1,  2,  3,  4,  5,  6];
+    let db = env
+        .get_default_db(DbFlags::AllowDups | DbFlags::IntKey)
+        .unwrap();
+    let keys: Vec<u64> = vec![1, 2, 3, 4, 5, 6];
     let values: Vec<u64> = vec![10, 11, 12, 13, 14, 15];
 
     // to avoid problems caused by updates
@@ -696,15 +740,16 @@ fn test_keyrange_init_cursor() {
         let end_key = 20;
         let iter = db.keyrange(&start_key, &end_key).unwrap();
 
-        let res: Vec<_> = iter.map(|cv| cv.get_value::<u64>()).collect();
-        assert!(res.is_empty());
+        assert!(iter.map(|cv| cv.get_value::<u64>()).next().is_none());
     }
 }
 
 #[test]
 fn test_keyrange_from_to() {
     let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
-    let db = env.get_default_db(core::DbAllowDups | core::DbIntKey).unwrap();
+    let db = env
+        .get_default_db(DbFlags::AllowDups | DbFlags::IntKey)
+        .unwrap();
     let recs: Vec<(u64, u64)> = vec![(10, 11), (20, 21), (30, 31), (40, 41), (50, 51)];
 
     let txn = env.new_transaction().unwrap();
@@ -722,25 +767,27 @@ fn test_keyrange_from_to() {
 
         let start_idx = 1;
         let end_idx = 3;
-        let iter = db.keyrange_from_to(&recs[start_idx].0, &recs[end_idx].0).unwrap();
+        let iter = db
+            .keyrange_from_to(&recs[start_idx].0, &recs[end_idx].0)
+            .unwrap();
 
         let res: Vec<_> = iter.map(|cv| cv.get_value::<u64>()).collect();
         // ~ end_key must be excluded here
-        let exp: Vec<_> = recs[start_idx .. end_idx].iter().map(|x| x.1).collect();
+        let exp: Vec<_> = recs[start_idx..end_idx].iter().map(|x| x.1).collect();
         assert_eq!(res, exp);
     }
 }
 
 #[test]
 fn test_readonly_env() {
-    let recs: Vec<(u32,u32)> = vec![(10, 11), (11, 12), (12, 13), (13,14)];
+    let recs: Vec<(u32, u32)> = vec![(10, 11), (11, 12), (12, 13), (13, 14)];
 
     // ~ first create a new read-write environment with its default
     // database containing a few entries
     let path = next_path();
     {
         let rw_env = EnvBuilder::new().open(&path, USER_DIR).unwrap();
-        let dbh = rw_env.get_default_db(core::DbIntKey).unwrap();
+        let dbh = rw_env.get_default_db(DbFlags::IntKey).unwrap();
         let tx = rw_env.new_transaction().unwrap();
         {
             let db = tx.bind(&dbh);
@@ -754,14 +801,15 @@ fn test_readonly_env() {
     // ~ now re-open the previously created database in read-only mode
     // and iterate the key/value pairs
     let ro_env = EnvBuilder::new()
-        .flags(core::EnvCreateReadOnly)
-        .open(&path, USER_DIR).unwrap();
-    let dbh = ro_env.get_default_db(core::DbIntKey).unwrap();
+        .flags(crate::core::EnvCreateFlags::ReadOnly)
+        .open(&path, USER_DIR)
+        .unwrap();
+    let dbh = ro_env.get_default_db(DbFlags::IntKey).unwrap();
     assert!(ro_env.new_transaction().is_err());
     let mut tx = ro_env.get_reader().unwrap();
     {
         let db = tx.bind(&dbh);
-        let kvs: Vec<(u32,u32)> = db.iter().unwrap().map(|c| c.get()).collect();
+        let kvs: Vec<(u32, u32)> = db.iter().unwrap().map(|c| c.get()).collect();
         assert_eq!(recs, kvs);
     }
     tx.abort();
@@ -825,7 +873,7 @@ fn test_compare() {
 #[test]
 fn test_dupsort() {
     let env = EnvBuilder::new().open(&next_path(), USER_DIR).unwrap();
-    let db_handle = env.get_default_db(core::DbAllowDups).unwrap();
+    let db_handle = env.get_default_db(DbFlags::AllowDups).unwrap();
     let txn = env.new_transaction().unwrap();
     let key: i32 = 0;
     {
@@ -852,7 +900,11 @@ fn test_dupsort() {
     let txn = env.new_transaction().unwrap();
     {
         let db = txn.bind(&db_handle);
-        let vals: Vec<_> = db.item_iter(&key).unwrap().map(|cv| cv.get_value::<i32>()).collect();
+        let vals: Vec<_> = db
+            .item_iter(&key)
+            .unwrap()
+            .map(|cv| cv.get_value::<i32>())
+            .collect();
         assert_eq!(vals, [5, 3, 2, 4]);
     }
     assert!(txn.commit().is_ok());
@@ -861,11 +913,11 @@ fn test_dupsort() {
 // ~ see #29
 #[test]
 fn test_conversion_to_vecu8() {
-    let rec: (u32, Vec<u8>) = (10, vec![1,2,3,4,5]);
+    let rec: (u32, Vec<u8>) = (10, vec![1, 2, 3, 4, 5]);
 
     let path = next_path();
     let env = EnvBuilder::new().open(&path, USER_DIR).unwrap();
-    let db = env.get_default_db(core::DbIntKey).unwrap();
+    let db = env.get_default_db(DbFlags::IntKey).unwrap();
 
     // ~ add our test record
     {
@@ -898,7 +950,7 @@ fn test_conversion_to_string() {
 
     let path = next_path();
     let env = EnvBuilder::new().open(&path, USER_DIR).unwrap();
-    let db = env.get_default_db(core::DbIntKey).unwrap();
+    let db = env.get_default_db(DbFlags::IntKey).unwrap();
 
     // ~ add our test record
     {

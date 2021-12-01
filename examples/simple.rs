@@ -1,6 +1,4 @@
-extern crate lmdb_rs as lmdb;
-
-use lmdb::{EnvBuilder, DbFlags};
+use lmdb_rs::{DbFlags, EnvBuilder};
 
 fn main() {
     let env = EnvBuilder::new().open("test-lmdb", 0o777).unwrap();
@@ -10,9 +8,11 @@ fn main() {
     {
         let db = txn.bind(&db_handle); // get a database bound to this transaction
 
-        let pairs = vec![("Albert", "Einstein",),
-                         ("Joe", "Smith",),
-                         ("Jack", "Daniels")];
+        let pairs = vec![
+            ("Albert", "Einstein"),
+            ("Joe", "Smith"),
+            ("Jack", "Daniels"),
+        ];
 
         for &(name, surname) in pairs.iter() {
             db.set(&surname, &name).unwrap();
@@ -24,7 +24,7 @@ fn main() {
     // the client to handle the error
     match txn.commit() {
         Err(_) => panic!("failed to commit!"),
-        Ok(_) => ()
+        Ok(_) => (),
     }
 
     let reader = env.get_reader().unwrap();
