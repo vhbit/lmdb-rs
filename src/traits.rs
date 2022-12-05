@@ -151,6 +151,7 @@ mdb_for_primitive!(i16);
 mdb_for_primitive!(u32);
 mdb_for_primitive!(i32);
 mdb_for_primitive!(u64);
+mdb_for_primitive!(u128);
 mdb_for_primitive!(i64);
 mdb_for_primitive!(f32);
 mdb_for_primitive!(f64);
